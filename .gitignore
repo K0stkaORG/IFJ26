@@ -1,0 +1,6 @@
+# Folder with build artifacts
+build
+
+# Final built binary
+ifj26
+ifj26.exe
