@@ -1,0 +1,23 @@
+{
+	"line_ending": "enforce_lf",
+	"lsp": {
+		"clangd": {
+			"binary": {
+				"arguments": ["--clang-tidy", "--background-index"],
+			},
+		},
+	},
+	"file_types": {
+		"C": ["h"],
+	},
+	"languages": {
+		"C": {
+			"tab_size": 2,
+			"language_servers": ["clangd", "..."],
+			"formatter": "language_server",
+			"format_on_save": "on",
+			"show_wrap_guides": true,
+			"wrap_guides": [80],
+		},
+	},
+}
