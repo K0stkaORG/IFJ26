@@ -1,0 +1,37 @@
+[
+  {
+    "label": "Build (release)",
+    "command": "make",
+    "args": ["all"],
+  },
+  {
+    "label": "Build (debug)",
+    "command": "make",
+    "args": ["debug"],
+  },
+  {
+    "label": "Test (unit)",
+    "command": "make",
+    "args": ["test-unit"],
+  },
+  {
+    "label": "Test (end-to-end)",
+    "command": "make",
+    "args": ["test-e2e"],
+  },
+  {
+    "label": "Test (all)",
+    "command": "make",
+    "args": ["test"],
+  },
+  {
+    "label": "Benchmark",
+    "command": "make",
+    "args": ["benchmark"],
+  },
+  {
+    "label": "Clean",
+    "command": "make",
+    "args": ["clean"],
+  },
+]
