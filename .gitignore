@@ -4,3 +4,6 @@ build
 # Final built binary
 ifj26
 ifj26.exe
+
+# Python bytecode from test runners
+__pycache__/
