@@ -1,2 +1,16 @@
 CompileFlags:
     Add: [-std=c17, -Wall, -Wextra, -pedantic, -xc]
+---
+If:
+    PathMatch: tests/unit/.*
+CompileFlags:
+    Add:
+        [
+            -I../../tests/vendor,
+            -I../../tests/vendor/snow_win,
+            -I../../src,
+            -DSNOW_ENABLED,
+            -DSNOW_USE_FORK=0,
+            -DSNOW_USE_FNMATCH=0,
+            -std=gnu17,
+        ]
