@@ -1,6 +1,12 @@
+# Flags for the IFJ26 compiler source files
+If:
+    PathMatch: src/.*
 CompileFlags:
-    Add: [-std=c17, -Wall, -Wextra, -pedantic, -xc]
+    # -Wno-empty-translation-unit added due to a false positive warning
+    Add: [-std=c17, -Wall, -Wextra, -pedantic, -Wno-empty-translation-unit]
+
 ---
+# Flags for the IFJ26 compiler test files
 If:
     PathMatch: tests/unit/.*
 CompileFlags:
@@ -14,3 +20,17 @@ CompileFlags:
             -DSNOW_USE_FNMATCH=0,
             -std=gnu17,
         ]
+
+---
+# Flags for .c files
+If:
+    PathMatch: .*\.c
+CompileFlags:
+    Add: [-xc]
+
+---
+# Flags for .h files
+If:
+    PathMatch: .*\.h
+CompileFlags:
+    Add: [-xc-header]
