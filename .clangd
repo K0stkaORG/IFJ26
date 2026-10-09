@@ -19,6 +19,9 @@ CompileFlags:
             -DSNOW_USE_FORK=0,
             -DSNOW_USE_FNMATCH=0,
             -std=gnu17,
+            -Wall,
+            -Wextra,
+            -pedantic,
         ]
 
 ---
