@@ -73,4 +73,60 @@ typedef struct {
  */
 void ctx_init(Ctx* ctx);
 
+/**
+ * @brief Records an error and prints its diagnostic to stderr.
+ *
+ * Stores code if no error has been recorded. Also replaces
+ * E_SEMANTIC_OTHER_ERROR with a specific semantic code (3–7).
+ *
+ * @param[in,out] ctx Non-null pointer to an initialized context.
+ * @param[in] code Error code to report; must not be E_OK.
+ * @param[in] format Format string for the diagnostic message.
+ * @param[in] ... Arguments for the format string.
+ */
+void throw_error_helper(Ctx* ctx, ExitCode code, const char* format, ...);
+
+/**
+ * @brief Reports an error and returns from the calling function.
+ *
+ * Calls throw_error_helper() with the caller's ctx variable, then executes a
+ * return without a value
+ *
+ * @param[in] code Error code to report; must not be E_OK.
+ * @param[in] ... Diagnostic message format string and arguments.
+ *
+ * @pre A variable named ctx holds a valid pointer to an initialized Ctx.
+ * @pre The calling function returns void.
+ * @warning Any required cleanup must occur before invoking this macro.
+ */
+#define THROW(code, ...)                        \
+  do {                                          \
+    throw_error_helper(ctx, code, __VA_ARGS__); \
+                                                \
+    return;                                     \
+  } while (0)
+
+/**
+ * @brief Executes an expression and propagates any error code from ctx.
+ *
+ * If the expression fails (ctx->exit_code != E_OK), the error is propagated by
+ * returning early from the calling function.
+ *
+ * @param[in] expr The expression to execute.
+ *
+ * @pre A variable named ctx holds a valid pointer to an initialized Ctx.
+ * @pre The calling function returns void.
+ * @warning Any required cleanup must occur before invoking this macro.
+ * @note The expression executes even if ctx already contains an error. After
+ * execution, the macro returns if ctx->exit_code is not E_OK.
+ */
+#define TRY(expr)                                      \
+  do {                                                 \
+    expr;                                              \
+                                                       \
+    /*If the expression fails, propagate the error. */ \
+    if (ctx->exit_code != E_OK)                        \
+      return;                                          \
+  } while (0)
+
 #endif
