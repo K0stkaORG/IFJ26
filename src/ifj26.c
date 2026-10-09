@@ -11,11 +11,15 @@
  * errors, shared memory context and orchestrates the compilation process.
  */
 
+#include "ctx.h"  // Shared memory and error context
+
 /**
  * @brief Entrypoint of the IFJ26 compiler
  */
 int main(void) {
-  // Step 1: Initialize shared memory context
+  // Initialize shared memory and error context
+  Ctx context;
+  ctx_init(&context);
 
   // Step 2: Process input
 
@@ -23,11 +27,13 @@ int main(void) {
 
   // Step 4: Parser
 
-  // Step 5: Optimizer
+  // Step 5: Lowering to IR
 
-  // Step 6: Generate IFJ26Code
+  // Step 6: Optimizer
 
-  // Step 7: Output and cleanup
+  // Step 7: Generate IFJ26Code
+
+  // Step 8: Output and cleanup
 
   return 0;
 }
