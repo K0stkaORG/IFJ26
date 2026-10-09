@@ -13,4 +13,6 @@
 
 #include "ctx.h"
 
-void ctx_init(Ctx* ctx) {}
+void ctx_init(Ctx* ctx) {
+  ctx->exit_code = E_OK;
+}
