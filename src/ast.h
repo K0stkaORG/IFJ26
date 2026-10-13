@@ -1,6 +1,17 @@
+/**
+ * @file ast.h
+ * Project: IFJ26
+ *
+ * @author Lukáš Pollák (xpollal00)
+ * @date 13. 10. 2026
+ *
+ * @brief Header file for the Abstract Syntax Tree (AST).
+ */
+
 #ifndef AST_H
 #define AST_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 typedef struct AstNode AstNode;
@@ -35,41 +46,175 @@ typedef enum {
   AST_NODE_TYPE,
 } AstNodeType;
 
-typedef enum {
-  AST_OK = 0,
-  AST_ERROR_ARGUMENT,
-  AST_ERROR_ALLOCATION,
-  AST_ERROR_TYPE,
-} AstStatus;
+typedef union {
+  char char_value;
+  int int_value;
+  double float_value;
+  bool boolean_value;
+  const char* string_value;
+} AstNodeValue;
 
-AstNode* ast_node_create(void);
+// === AST_NODE===
+
+/**
+ * @brief Initializes AST node
+ *
+ * @param node pointer to a uninitialized AST node variable
+ */
+void ast_node_create(AstNode** node);
+
+/**
+ * @brief Frees AST node
+ *
+ * @param node pointer to a AST node
+ */
 void ast_node_destroy(AstNode* node);
-AstStatus ast_node_set_type(AstNode* node, AstNodeType type);
+
+/**
+ * @brief Sets type for given node
+ *
+ * @param node pointer to a AST node
+ * @param type type to set for given node
+ */
+void ast_node_set_type(AstNode* node, AstNodeType type);
+
+/**
+ * @brief Sets value for given node
+ *
+ * @param node pointer to a AST node
+ * @param value value to set for given node
+ */
+void ast_node_set_value(AstNode* node, AstNodeValue value);
+
+/**
+ * @brief Returns node type
+ *
+ * @param node pointer to a AST node
+ * @return node type
+ */
 AstNodeType ast_node_get_type(const AstNode* node);
 
-AstStatus ast_node_set_char(AstNode* node, char value);
-AstStatus ast_node_get_char(const AstNode* node, char* value);
-AstStatus ast_node_set_int(AstNode* node, int value);
-AstStatus ast_node_get_int(const AstNode* node, int* value);
-AstStatus ast_node_set_float(AstNode* node, double value);
-AstStatus ast_node_get_float(const AstNode* node, double* value);
-AstStatus ast_node_set_string(AstNode* node, const char* value);
-AstStatus ast_node_get_string(const AstNode* node, const char** value);
+/**
+ * @brief Returns node value
+ *
+ * @param node pointer to a AST node
+ * @return node value
+ */
+AstNodeValue ast_node_get_value(const AstNode* node);
 
+/**
+ * @brief Returns number of node children
+ *
+ * @param node pointer to a AST node
+ * @return number of node children
+ */
 size_t ast_node_child_count(const AstNode* node);
-AstNode* ast_node_get_child(AstNode* node, size_t index);
-AstNode* ast_node_get_parent(AstNode* node);
-AstStatus ast_node_append_child(AstNode* parent, AstNode* child);
-AstStatus ast_node_insert_child(AstNode* parent, size_t index, AstNode* child);
-AstStatus ast_node_detach_child(AstNode* parent, size_t index, AstNode** child);
 
-Ast* ast_create(void);
+/**
+ * @brief Returns child of given node
+ *
+ * @param node pointer to a AST node
+ * @param index index of child
+ * @param child pointer to a variable to store child node
+ */
+void ast_node_get_child(AstNode* node, size_t index, AstNode** child);
+
+/**
+ * @brief Returns parent of given node
+ *
+ * @param node pointer to a AST node
+ * @param parent pointer to a variable to store parent node
+ */
+void ast_node_get_parent(AstNode* node, AstNode** parent);
+
+/**
+ * @brief Appends child to given parent node
+ *
+ * @param parent pointer to a parent AST node
+ * @param child pointer to a AST node to append
+ */
+void ast_node_append_child(AstNode* parent, AstNode* child);
+
+/**
+ * @brief Inserts child at given index in parent node
+ *
+ * @param parent pointer to a parent AST node
+ * @param index index to insert child at
+ * @param child pointer to a AST node to insert
+ */
+void ast_node_insert_child(AstNode* parent, size_t index, AstNode* child);
+
+/**
+ * @brief Detaches child at given index from parent node
+ *
+ * @param parent pointer to a parent AST node
+ * @param index index of child to detach
+ * @param child pointer to a variable to store detached child node
+ */
+void ast_node_detach_child(AstNode* parent, size_t index, AstNode** child);
+
+// === AST ===
+
+/**
+ * @brief Initializes AST
+ *
+ * @param ast pointer to a uninitialized AST variable
+ */
+void ast_create(Ast** ast);
+
+/**
+ * @brief Frees AST
+ *
+ * @param ast pointer to a AST
+ */
 void ast_destroy(Ast* ast);
+
+/**
+ * @brief Clears AST
+ *
+ * @param ast pointer to a AST
+ */
 void ast_clear(Ast* ast);
-AstNode* ast_get_root(Ast* ast);
-AstStatus ast_set_root(Ast* ast, AstNode* root);
-AstStatus ast_detach_root(Ast* ast, AstNode** root);
-AstStatus ast_remove_node(Ast* ast, AstNode* node);
-AstStatus ast_replace_node(Ast* ast, AstNode* old_node, AstNode* new_node);
+
+/**
+ * @brief Returns AST root node
+ *
+ * @param ast pointer to a AST
+ * @param root pointer to a variable to store root node
+ */
+void ast_get_root(Ast* ast, AstNode** root);
+
+/**
+ * @brief Sets root node for given AST
+ *
+ * @param ast pointer to a AST
+ * @param root pointer to a AST node to set as root
+ */
+void ast_set_root(Ast* ast, AstNode* root);
+
+/**
+ * @brief Detaches root node from given AST
+ *
+ * @param ast pointer to a AST
+ * @param root pointer to a variable to store detached root node
+ */
+void ast_detach_root(Ast* ast, AstNode** root);
+
+/**
+ * @brief Removes node from given AST
+ *
+ * @param ast pointer to a AST
+ * @param node pointer to a AST node to remove
+ */
+void ast_remove_node(Ast* ast, AstNode* node);
+
+/**
+ * @brief Replaces node in given AST
+ *
+ * @param ast pointer to a AST
+ * @param old_node pointer to a AST node to replace
+ * @param new_node pointer to a replacement AST node
+ */
+void ast_replace_node(Ast* ast, AstNode* old_node, AstNode* new_node);
 
 #endif
