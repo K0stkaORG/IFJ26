@@ -19,9 +19,11 @@ typedef struct Symtable {
 
 typedef struct SymtableData SymtableData;
 
-Symtable* symtable_create(void);
+typedef struct SymtableResult SymtableResult;
+
+void symtable_create(Symtable* table);
 void symtable_destroy(Symtable* table);
 void symtable_insert(Symtable* table, SymtableData data);
-SymtableData symtable_lookup(Symtable* table);  // + lookup key
+SymtableResult symtable_lookup(Symtable* table);  // + lookup key
 
 #endif

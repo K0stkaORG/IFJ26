@@ -25,7 +25,7 @@ typedef struct Bst {
   BstNode* root;
 } Bst;
 
-Bst* bst_create(void);
+void bst_create(Bst* tree);
 void bst_insert(Bst* tree, const char* key, void* data);
 void* bst_search(Bst* tree, const char* key);
 void bst_destroy(Bst* tree);
