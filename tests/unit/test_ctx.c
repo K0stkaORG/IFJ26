@@ -13,64 +13,61 @@
 
 #include "ctx.h"
 
-#include <stdbool.h>
+#include <stdbool.h>  // bool, true, false
+#include <stdlib.h>   // malloc, free
 
-/**
- * @brief Dummy function, that does not throw any error
- */
+#define TEST_PATTERN "123456789"
+#define TEST_PATTERN_PREFIX "12345"
+
 static void function_without_error(void) {}
 
-/**
- * @brief Dummy function, that throws E_SEMANTIC_OTHER_ERROR
- *
- * @param[in,out] ctx Pointer to the context
- */
 static void function_with_generic_error(Ctx* ctx) {
   THROW(E_SEMANTIC_OTHER_ERROR, "test error");
 }
 
-/**
- * @brief Dummy function, that throws E_SEMANTIC_UNDEFINED_ERROR
- *
- * @param[in,out] ctx Pointer to the context
- */
 static void function_with_specific_error(Ctx* ctx) {
   THROW(E_SEMANTIC_UNDEFINED_ERROR, "test error");
 }
 
-/**
- * @brief Dummy function, that calls function_with_generic_error inside a TRY
- * block
- *
- * @param[in,out] ctx Pointer to the context
- */
 static void function_with_failing_try(Ctx* ctx) {
   TRY(function_with_generic_error(ctx));
 
   fail("should not reach here");
 }
 
-/**
- * @brief Dummy function, that calls function_with_failing_try inside a TRY
- * block
- *
- * @param[in,out] ctx Pointer to the context
- */
 static void function_with_nested_failing_try(Ctx* ctx) {
   TRY(function_with_failing_try(ctx));
 }
 
-/**
- * @brief Dummy function, that calls function_without_error inside a TRY block
- *
- * @param[in,out] ctx Pointer to the context
- * @param[out] reached Pointer to a boolean flag, that is set to true if the
- * function reaches the end
- */
 static void function_with_passing_try(Ctx* ctx, bool* reached) {
   TRY(function_without_error());
 
   *reached = true;
+}
+
+static void attempt_ctx_malloc(Ctx* ctx, bool* reached) {
+  ctx->buffer = TRY_MALLOC(sizeof(char) * 10);
+
+  *reached = true;
+}
+
+static void attempt_ctx_realloc(Ctx* ctx, bool* reached, int size) {
+  TRY_REALLOC(ctx->buffer, sizeof(char) * size);
+
+  *reached = true;
+}
+
+static void allocate_buffer_helper(Ctx* ctx) {
+  ctx->buffer = malloc(sizeof(char) * 10);
+
+  // Check for unsuccessful allocation, as that would void the test result
+  assertneq(ctx->buffer, NULL,
+            "Failed to allocate memory required to conduct the unit test");
+
+  for (int i = 0; i < 9; i++)
+    ctx->buffer[i] = TEST_PATTERN[i];
+
+  ctx->buffer[9] = '\0';
 }
 
 describe(ctx) {
@@ -81,10 +78,32 @@ describe(ctx) {
     ctx_init(ctx);
 
     asserteq(ctx->exit_code, E_OK);
+    asserteq(ctx->flags.forceMallocFail, false);
+    asserteq(ctx->buffer, NULL);
   }
 
   before_each() {
     ctx_init(ctx);
+  }
+
+  if ("correctly frees without any allocated memory") {
+    ctx_free(ctx);
+
+    asserteq(ctx->buffer, NULL);
+  }
+
+  it("correctly frees with allocated memory") {
+    allocate_buffer_helper(ctx);
+
+    ctx_free(ctx);
+
+    asserteq(ctx->buffer, NULL);
+
+    // Leaks will be detected by the test runner
+  }
+
+  after_each() {
+    ctx_free(ctx);
   }
 
   subdesc(THROW) {
@@ -129,6 +148,94 @@ describe(ctx) {
 
       assert(reached);
       asserteq(ctx->exit_code, E_OK);
+    }
+  }
+
+  subdesc(TRY_MALLOC) {
+    it("allocates memory correctly") {
+      bool reached = false;
+      attempt_ctx_malloc(ctx, &reached);
+
+      assert(reached);
+      asserteq(ctx->exit_code, E_OK);
+      assert(ctx->buffer != NULL);
+    }
+
+    it("throws on allocation failure") {
+      ctx->flags.forceMallocFail = true;
+
+      bool reached = false;
+      attempt_ctx_malloc(ctx, &reached);
+
+      assert(!reached);
+      asserteq(ctx->exit_code, E_INTERNAL_ERROR);
+      asserteq(ctx->buffer, NULL);
+    }
+  }
+
+  subdesc(TRY_REALLOC) {
+    it("reallocates memory correctly (increasing size)") {
+      allocate_buffer_helper(ctx);
+
+      bool reached = false;
+      attempt_ctx_realloc(ctx, &reached, 20);
+
+      assert(reached);
+      asserteq(ctx->exit_code, E_OK);
+      asserteq_str(ctx->buffer, TEST_PATTERN);
+
+      ctx->buffer[19] = '0';
+      assert(ctx->buffer[19] == '0');
+    }
+
+    it("reallocates memory correctly (decreasing size)") {
+      allocate_buffer_helper(ctx);
+
+      bool reached = false;
+      attempt_ctx_realloc(ctx, &reached, 5);
+
+      assert(reached);
+      asserteq(ctx->exit_code, E_OK);
+
+      for (int i = 0; i < 5; i++)
+        assert(ctx->buffer[i] == TEST_PATTERN[i]);
+    }
+
+    it("throws on reallocation failure") {
+      allocate_buffer_helper(ctx);
+
+      ctx->flags.forceMallocFail = true;
+
+      bool reached = false;
+      attempt_ctx_realloc(ctx, &reached, 20);
+
+      assert(!reached);
+      asserteq(ctx->exit_code, E_INTERNAL_ERROR);
+    }
+
+    it("keeps buffer contents after failure") {
+      allocate_buffer_helper(ctx);
+
+      char* oldBuffer = ctx->buffer;
+
+      ctx->flags.forceMallocFail = true;
+
+      bool reached = false;
+      attempt_ctx_realloc(ctx, &reached, 20);
+
+      assert(!reached);
+      asserteq(ctx->exit_code, E_INTERNAL_ERROR);
+      asserteq_str(ctx->buffer, TEST_PATTERN);
+      asserteq_ptr(ctx->buffer, oldBuffer);
+    }
+
+    it("does not realloc NULL pointer") {
+      bool reached = false;
+      attempt_ctx_realloc(ctx, &reached, 20);
+
+      assert(!reached);
+      asserteq(ctx->exit_code, E_INTERNAL_ERROR);
+      asserteq_ptr(ctx->buffer, NULL);
     }
   }
 }
