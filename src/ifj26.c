@@ -34,6 +34,7 @@ int main(void) {
   // Step 7: Generate IFJ26Code
 
   // Step 8: Output and cleanup
+  ctx_free(&context);
 
   return 0;
 }

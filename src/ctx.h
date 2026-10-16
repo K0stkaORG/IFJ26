@@ -15,6 +15,9 @@
 #ifndef CTX_H
 #define CTX_H
 
+#include <stdbool.h>  // bool
+#include <stddef.h>   // size_t
+
 /**
  * @brief Exit codes for the IFJ26 compiler
  */
@@ -59,11 +62,25 @@ typedef enum {
 } ExitCode;
 
 /**
+ * @brief Flags for the IFJ26 compiler
+ */
+typedef struct {
+  // Whether to force malloc to fail in unit tests
+  bool forceMallocFail;
+} Flags;
+
+/**
  * @brief Shared memory and error context for the IFJ26 compiler
  */
 typedef struct {
   // Exit code of the program
   ExitCode exit_code;
+
+  // Flags for the compiler
+  Flags flags;
+
+  // Dummy temporary buffer
+  char* buffer;
 } Ctx;
 
 /**
@@ -74,17 +91,117 @@ typedef struct {
 void ctx_init(Ctx* ctx);
 
 /**
- * @brief Records an error and prints its diagnostic to stderr.
+ * @brief Frees context-owned memory and sets owned pointers to NULL.
+ *
+ * Preserves the error code. Repeated calls are safe after initialization.
+ *
+ * @param[in,out] ctx Non-null pointer to an initialized context.
+ */
+void ctx_free(Ctx* ctx);
+
+/**
+ * @brief Allocates uninitialized memory and reports allocation failure.
+ *
+ * @param[in,out] ctx Non-null pointer to an initialized context.
+ * @param[in] size Number of bytes to allocate
+ * @param[in] file Non-null source file name of the allocation call.
+ * @param[in] line Source line number of the allocation call.
+ *
+ * @return Allocated memory, or NULL after setting E_INTERNAL_ERROR and printing
+ * a diagnostic on failure.
+ */
+void* ctx_malloc_helper(Ctx* ctx, size_t size, const char* file, int line);
+
+/**
+ * @brief Allocates memory into and returns on failure.
+ *
+ * On failure, sets E_INTERNAL_ERROR, prints a diagnostic, and returns from the
+ * calling function.
+ *
+ * @param[in] size Number of bytes to allocate
+ *
+ * @pre A variable named ctx points to an initialized Ctx.
+ * @pre The calling function returns void.
+ * @warning Does not behave as one expression. For example:
+ *  if(condition)
+ *    ptr = TRY_MALLOC()
+ *  else
+ *    ptr = TRY_MALLOC()
+ *
+ *  wont work as expected.
+ */
+#define TRY_MALLOC(size)                              \
+  ctx_malloc_helper(ctx, (size), __FILE__, __LINE__); \
+                                                      \
+  if (ctx->exit_code != E_OK)                         \
+    return;
+
+/**
+ * @brief Helper function for reallocating memory
+ *
+ * If the reallocation fails, the error code is stored in ctx->exit_code and the
+ * original pointer is returned.
+ *
+ * @param[in,out] ctx Non-null pointer to an initialized context.
+ * @param[in,out] ptr Pointer to the memory to reallocate.
+ * @param[in] size Number of bytes to allocate
+ * @param[in] file Non-null source file name of the allocation call.
+ * @param[in] line Source line number of the allocation call.
+ *
+ * @pre The pointer must be non-null.
+ * @pre The size must be positive.
+ */
+void* ctx_realloc_helper(Ctx* ctx,
+                         void* ptr,
+                         size_t size,
+                         const char* file,
+                         int line);
+
+/**
+ * @brief Reallocates memory and handles errors
+ *
+ * If the reallocation fails, the error code is stored in ctx->exit_code
+ * and the calling function is terminated. Value of the pointer is not changed.
+ *
+ * @param[in,out] ptr Pointer to the memory to reallocate
+ * @param[in] size Number of bytes to allocate
+ *
+ * @pre The pointer must be non-null.
+ * @pre The size must be positive.
+ * @pre A variable named ctx points to an initialized Ctx.
+ * @pre The calling function returns void.
+ */
+#define TRY_REALLOC(ptr, size)                                          \
+  do {                                                                  \
+    if ((ptr) == NULL)                                                  \
+      THROW(E_INTERNAL_ERROR, "Attempted realloc on NULL pointer");     \
+                                                                        \
+    (ptr) = ctx_realloc_helper(ctx, (ptr), (size), __FILE__, __LINE__); \
+                                                                        \
+    if (ctx->exit_code != E_OK)                                         \
+      return;                                                           \
+  } while (0);
+
+/**
+ * @brief Records an error and prints its diagnostic and source location to
+ * stderr.
  *
  * Stores code if no error has been recorded. Also replaces
  * E_SEMANTIC_OTHER_ERROR with a specific semantic code (3–7).
  *
  * @param[in,out] ctx Non-null pointer to an initialized context.
  * @param[in] code Error code to report; must not be E_OK.
+ * @param[in] file Non-null source file name of the error-reporting call.
+ * @param[in] line Source line number of the error-reporting call.
  * @param[in] format Format string for the diagnostic message.
  * @param[in] ... Arguments for the format string.
  */
-void throw_error_helper(Ctx* ctx, ExitCode code, const char* format, ...);
+void throw_error_helper(Ctx* ctx,
+                        ExitCode code,
+                        const char* file,
+                        int line,
+                        const char* format,
+                        ...);
 
 /**
  * @brief Reports an error and returns from the calling function.
@@ -99,11 +216,11 @@ void throw_error_helper(Ctx* ctx, ExitCode code, const char* format, ...);
  * @pre The calling function returns void.
  * @warning Any required cleanup must occur before invoking this macro.
  */
-#define THROW(code, ...)                        \
-  do {                                          \
-    throw_error_helper(ctx, code, __VA_ARGS__); \
-                                                \
-    return;                                     \
+#define THROW(code, ...)                                            \
+  do {                                                              \
+    throw_error_helper(ctx, code, __FILE__, __LINE__, __VA_ARGS__); \
+                                                                    \
+    return;                                                         \
   } while (0)
 
 /**
