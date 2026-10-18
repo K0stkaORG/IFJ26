@@ -11,6 +11,8 @@
 #ifndef BST_H
 #define BST_H
 
+#include "ctx.h"
+
 typedef struct BstNode BstNode;
 struct BstNode {
   char* key;
@@ -26,7 +28,7 @@ typedef struct Bst {
 } Bst;
 
 void bst_init(Bst* tree);
-void bst_insert(Bst* tree, const char* key, void* data);
+void bst_insert(Ctx* ctx, Bst* tree, const char* key, void* data);
 void* bst_search(Bst* tree, const char* key);
 void bst_destroy(Bst* tree);
 
