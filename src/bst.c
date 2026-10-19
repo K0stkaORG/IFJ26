@@ -244,6 +244,8 @@ void* bst_search(Bst* tree, const char* key) {
  * @param tree Pointer to the tree
  * @param key Key of the node
  * @param data Data stored in the node
+ * @pre Key is allocated on stack. If on heap, caller must free.
+ * @pre Data are allocated on heap.
  */
 void bst_insert(Ctx* ctx, Bst* tree, const char* key, void* data) {
   if (tree == NULL || key == NULL)
