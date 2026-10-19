@@ -172,7 +172,7 @@ static void bst_node_destroy_subtree(BstNode* node) {
  * @param origin_node Pointer to the origin node to be destroyed
  */
 static void bst_node_move_data(BstNode* target_node, BstNode* origin_node) {
-  if (target_node->data != NULL)
+  if (target_node->data != NULL && target_node->data != origin_node->data)
     free(target_node->data);
   target_node->data = origin_node->data;
   if (origin_node->key != NULL)
