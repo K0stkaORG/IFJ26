@@ -13,6 +13,9 @@
 
 #include "ctx.h"
 
+/**
+ * @brief Node of the BST
+ */
 typedef struct BstNode BstNode;
 struct BstNode {
   char* key;
@@ -23,6 +26,9 @@ struct BstNode {
   int balance;
 };
 
+/**
+ * @brief Height-balanced BST defined by its root
+ */
 typedef struct Bst {
   BstNode* root;
 } Bst;

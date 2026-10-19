@@ -147,6 +147,7 @@ static BstNode* bst_subtree_insert_node(BstNode* tree_root, BstNode* new_node) {
 /**
  * @brief Initialize a new BST
  * @param tree Pointer to the tree to initialize
+ * @pre Tree must be allocated
  */
 void bst_init(Bst* tree) {
   tree->root = NULL;
