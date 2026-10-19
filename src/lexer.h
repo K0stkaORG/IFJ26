@@ -82,4 +82,23 @@ typedef enum {
   EOF_TOKEN
 } TokenType;
 
+/**
+ * @brief Union defining the value of a token
+ */
+typedef union {
+  int integer;
+  double decimal;
+  char* text;
+} TokenValue;
+
+/**
+ * @brief structure defining the tokens
+ */
+typedef struct {
+  TokenType type;
+  TokenValue value;
+  int line;
+  int column;
+} Token;
+
 #endif /* IFJ26_LEXER_H */
