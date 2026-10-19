@@ -222,7 +222,7 @@ void bst_init(Bst* tree) {
  * @return Pointer to the data if found, or NULL
  */
 void* bst_search(Bst* tree, const char* key) {
-  if (tree == NULL)
+  if (tree == NULL || key == NULL)
     return NULL;
 
   BstNode* current_node = tree->root;
