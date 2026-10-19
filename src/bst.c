@@ -90,6 +90,67 @@ static void bst_node_update_metadata(BstNode* node) {
 }
 
 /**
+ * @brief Rotate critical node's subtree left.
+ * @param node Pointer to the critical node
+ * @return Pointer to the root of rotated subtree
+ */
+static BstNode* bst_rotate_left(BstNode* node) {
+  BstNode* x = node->child_right;
+  node->child_right = x->child_left;
+  x->child_left = node;
+
+  bst_node_update_metadata(node);
+  bst_node_update_metadata(x);
+  return x;
+}
+
+/**
+ * @brief Rotate critical node's subtree right.
+ * @param node Pointer to the critical node
+ * @return Pointer to the root of rotated subtree
+ */
+static BstNode* bst_rotate_right(BstNode* node) {
+  BstNode* x = node->child_left;
+  node->child_left = x->child_right;
+  x->child_right = node;
+
+  bst_node_update_metadata(node);
+  bst_node_update_metadata(x);
+  return x;
+}
+
+/**
+ * @brief Check balance around critical node and if unbalanced, perform
+ * rotations
+ * @param node Pointer to the critical node
+ * @return Pointer to the modified critical node
+ */
+static BstNode* bst_node_repair_balance(BstNode* node) {
+  if (bst_node_get_balance(node) == -2) {
+    // LL
+    if (bst_node_get_balance(node->child_left) <= 0) {
+      node = bst_rotate_right(node);
+    }
+    // LR
+    else if (bst_node_get_balance(node->child_left) == 1) {
+      node->child_left = bst_rotate_left(node->child_left);
+      node = bst_rotate_right(node);
+    }
+  } else if (bst_node_get_balance(node) == 2) {
+    // RR
+    if (bst_node_get_balance(node->child_right) >= 0) {
+      node = bst_rotate_left(node);
+    }
+    // RL
+    else if (bst_node_get_balance(node->child_right) == -1) {
+      node->child_right = bst_rotate_right(node->child_right);
+      node = bst_rotate_left(node);
+    }
+  }
+  return node;
+}
+
+/**
  * @brief Destructs a BST subtree defined by root node
  * @param node Pointer to the root node
  */
@@ -140,7 +201,8 @@ static BstNode* bst_subtree_insert_node(BstNode* tree_root, BstNode* new_node) {
   }
 
   bst_node_update_metadata(tree_root);
-  // TODO rotations
+  tree_root = bst_node_repair_balance(tree_root);
+
   return tree_root;
 }
 
