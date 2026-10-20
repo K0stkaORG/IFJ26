@@ -13,12 +13,14 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include "ctx.h"
 
 typedef struct AstNode AstNode;
 typedef struct Ast Ast;
 
 typedef enum {
   AST_NODE_INVALID = -1,
+  AST_NODE_NONE,
 
   AST_NODE_IMPORT,
   AST_NODE_DEF,
@@ -59,16 +61,18 @@ typedef union {
 /**
  * @brief Initializes AST node
  *
+ * @param ctx pointer to an initialized shared allocation and error context
  * @param node pointer to a uninitialized AST node variable
  */
-void ast_node_create(AstNode** node);
+void ast_node_create(Ctx* ctx, AstNode** node);
 
 /**
  * @brief Frees AST node
  *
+ * @param ctx pointer to an initialized shared allocation and error context
  * @param node pointer to a AST node
  */
-void ast_node_destroy(AstNode* node);
+void ast_node_destroy(Ctx* ctx, AstNode* node);
 
 /**
  * @brief Sets type for given node
@@ -130,19 +134,24 @@ void ast_node_get_parent(AstNode* node, AstNode** parent);
 /**
  * @brief Appends child to given parent node
  *
+ * @param ctx pointer to an initialized shared allocation and error context
  * @param parent pointer to a parent AST node
  * @param child pointer to a AST node to append
  */
-void ast_node_append_child(AstNode* parent, AstNode* child);
+void ast_node_append_child(Ctx* ctx, AstNode* parent, AstNode* child);
 
 /**
  * @brief Inserts child at given index in parent node
  *
+ * @param ctx pointer to an initialized shared allocation and error context
  * @param parent pointer to a parent AST node
  * @param index index to insert child at
  * @param child pointer to a AST node to insert
  */
-void ast_node_insert_child(AstNode* parent, size_t index, AstNode* child);
+void ast_node_insert_child(Ctx* ctx,
+                           AstNode* parent,
+                           size_t index,
+                           AstNode* child);
 
 /**
  * @brief Detaches child at given index from parent node
@@ -158,9 +167,10 @@ void ast_node_detach_child(AstNode* parent, size_t index, AstNode** child);
 /**
  * @brief Initializes AST
  *
+ * @param ctx pointer to an initialized shared allocation and error context
  * @param ast pointer to a uninitialized AST variable
  */
-void ast_create(Ast** ast);
+void ast_create(Ctx* ctx, Ast** ast);
 
 /**
  * @brief Frees AST
