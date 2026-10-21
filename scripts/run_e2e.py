@@ -70,9 +70,7 @@ def _crash_name(returncode):
         except ValueError:
             return f"signal {-returncode}"
     if returncode >= 0xC0000000:
-        return _WIN_FATAL.get(
-            returncode, f"NTSTATUS 0x{returncode:08X}"
-        )
+        return _WIN_FATAL.get(returncode, f"NTSTATUS 0x{returncode:08X}")
     return None
 
 
@@ -99,7 +97,9 @@ VALGRIND_FLAGS = [
     "--error-exitcode=100",
 ]
 VALGRIND_ERROR_EXIT = 100
-LEAK_RE = re.compile(r"(definitely|indirectly|possibly|still reachable) lost: ([\d,]+) bytes")
+LEAK_RE = re.compile(
+    r"(definitely|indirectly|possibly|still reachable) lost: ([\d,]+) bytes"
+)
 FRAME_RE = re.compile(r"==\d+==\s+(?:at|by) 0x[0-9A-Fa-f]+: (\S+) \(([^()]+)\)")
 # Valgrind frames that never point at user code.
 _NON_USER_FILES = ("vg_replace_malloc.c", "snow.h")
@@ -148,9 +148,7 @@ def read_case(case_dir):
 def text_diff(expected, actual, limit=DIFF_CONTEXT_LINES):
     exp_lines = expected.decode("utf-8", errors="replace").splitlines()
     act_lines = actual.decode("utf-8", errors="replace").splitlines()
-    diff = difflib.unified_diff(
-        exp_lines, act_lines, "expected", "actual", lineterm=""
-    )
+    diff = difflib.unified_diff(exp_lines, act_lines, "expected", "actual", lineterm="")
     lines = list(diff)[:limit]
     if not lines:
         return ""
@@ -276,19 +274,21 @@ def run_one(name, case_dir, compiler, use_valgrind, timeout, log_dir):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run compiler e2e cases.")
     parser.add_argument(
-        "--exclude", action="append", default=[],
+        "--exclude",
+        action="append",
+        default=[],
         help="skip this case name (repeatable)",
     )
     parser.add_argument(
-        "--only", action="append", default=[],
+        "--only",
+        action="append",
+        default=[],
         help="run only this case name (repeatable)",
     )
     parser.add_argument(
         "--valgrind", dest="valgrind", action="store_true", default=True
     )
-    parser.add_argument(
-        "--no-valgrind", dest="valgrind", action="store_false"
-    )
+    parser.add_argument("--no-valgrind", dest="valgrind", action="store_false")
     parser.add_argument("--timeout", type=int, default=10)
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -320,11 +320,19 @@ def main(argv=None):
     with tempfile.TemporaryDirectory(prefix="e2e_valgrind_") as log_dir:
         for name, case_dir in cases:
             result = run_one(
-                name, case_dir, compiler, use_valgrind,
-                args.timeout, log_dir,
+                name,
+                case_dir,
+                compiler,
+                use_valgrind,
+                args.timeout,
+                log_dir,
             )
             results.append(result)
-            print("{} {} ({})".format(_tag(result["status"]), result["name"], result["info"]))
+            print(
+                "{} {} ({})".format(
+                    _tag(result["status"]), result["name"], result["info"]
+                )
+            )
             if result["diff"]:
                 _print_diff(result["diff"])
 
