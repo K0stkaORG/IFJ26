@@ -119,6 +119,7 @@ describe(bst) {
     const char* key_a = "a";
     const char* key_b = "b";
     const char* key_c = "c";
+    const char* key_aa = "aa";
     Ctx context;
     Ctx* ctx = &context;
     int* data1;
@@ -168,6 +169,25 @@ describe(bst) {
       asserteq_ptr(bst_search(&tree, "d"), NULL);
       asserteq_str(tree.root->key, key_a);
       asserteq_str(tree.root->child_right->key, key_b);
+      asserteq_ptr(tree.root->child_left, NULL);
+    }
+
+    it("inserts a, aa (shared prefix) and verifies search for a, aa, aaa") {
+      data1 = TRY_MALLOC(sizeof(int));
+      *data1 = 1;
+      data2 = TRY_MALLOC(sizeof(int));
+      *data2 = 2;
+
+      bst_insert(ctx, &tree, key_a, data1);
+      bst_insert(ctx, &tree, key_aa, data2);
+
+      asserteq_ptr(bst_search(&tree, key_a), data1);
+      asserteq(*(int*)bst_search(&tree, key_a), 1);
+      asserteq_ptr(bst_search(&tree, key_aa), data2);
+      asserteq(*(int*)bst_search(&tree, key_aa), 2);
+      asserteq_ptr(bst_search(&tree, "aaa"), NULL);
+      asserteq_str(tree.root->key, key_a);
+      asserteq_str(tree.root->child_right->key, key_aa);
       asserteq_ptr(tree.root->child_left, NULL);
     }
 
@@ -310,6 +330,39 @@ describe(bst) {
 
       asserteq_ptr(bst_search(&tree, key_a), data2);
       asserteq(*(int*)bst_search(&tree, key_a), 2);
+      asserteq_str(tree.root->key, key_a);
+      asserteq_ptr(tree.root->child_left, NULL);
+      asserteq_ptr(tree.root->child_right, NULL);
+    }
+
+    it("inserts already existing node with same data") {
+      data1 = TRY_MALLOC(sizeof(int));
+      *data1 = 1;
+
+      bst_insert(ctx, &tree, key_a, data1);
+      bst_insert(ctx, &tree, key_a, data1);
+
+      asserteq_ptr(bst_search(&tree, key_a), data1);
+      asserteq(*(int*)bst_search(&tree, key_a), 1);
+      asserteq_str(tree.root->key, key_a);
+      asserteq_ptr(tree.root->child_left, NULL);
+      asserteq_ptr(tree.root->child_right, NULL);
+    }
+
+    it("updates data for an existing key multiple times") {
+      data1 = TRY_MALLOC(sizeof(int));
+      *data1 = 1;
+      data2 = TRY_MALLOC(sizeof(int));
+      *data2 = 2;
+      data3 = TRY_MALLOC(sizeof(int));
+      *data3 = 3;
+
+      bst_insert(ctx, &tree, key_a, data1);
+      bst_insert(ctx, &tree, key_a, data2);
+      bst_insert(ctx, &tree, key_a, data3);
+
+      asserteq_ptr(bst_search(&tree, key_a), data3);
+      asserteq(*(int*)bst_search(&tree, key_a), 3);
       asserteq_str(tree.root->key, key_a);
       asserteq_ptr(tree.root->child_left, NULL);
       asserteq_ptr(tree.root->child_right, NULL);
