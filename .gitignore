@@ -7,3 +7,6 @@ ifj26.exe
 
 # Python bytecode from test runners
 __pycache__/
+.scala-build/
+.metals/
+.bsp/
