@@ -77,6 +77,7 @@ void ast_node_destroy(Ctx* ctx, AstNode* node);
 /**
  * @brief Sets type for given node
  *
+ * @pre Node pointer is not NULL!
  * @param node pointer to a AST node
  * @param type type to set for given node
  */
@@ -85,6 +86,7 @@ void ast_node_set_type(AstNode* node, AstNodeType type);
 /**
  * @brief Sets value for given node
  *
+ * @pre Node pointer is not NULL!
  * @param node pointer to a AST node
  * @param value value to set for given node
  */
@@ -93,6 +95,7 @@ void ast_node_set_value(AstNode* node, AstNodeValue value);
 /**
  * @brief Returns node type
  *
+ * @pre Node pointer is not NULL!
  * @param node pointer to a AST node
  * @return node type
  */
@@ -101,6 +104,7 @@ AstNodeType ast_node_get_type(const AstNode* node);
 /**
  * @brief Returns node value
  *
+ * @pre Node pointer is not NULL!
  * @param node pointer to a AST node
  * @return node value
  */
@@ -109,6 +113,7 @@ AstNodeValue ast_node_get_value(const AstNode* node);
 /**
  * @brief Returns number of node children
  *
+ * @pre Node pointer is not NULL!
  * @param node pointer to a AST node
  * @return number of node children
  */

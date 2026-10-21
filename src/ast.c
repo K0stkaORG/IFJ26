@@ -1,5 +1,6 @@
 #include "ast.h"
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include "ctx.h"
 
@@ -37,4 +38,24 @@ void ast_node_destroy(Ctx* ctx, AstNode* node) {
   free(node->child_nodes);
   free(node);
   return;
+}
+
+void ast_node_set_type(AstNode* node, AstNodeType type) {
+  node->type = type;
+}
+
+void ast_node_set_value(AstNode* node, AstNodeValue value) {
+  node->value = value;
+}
+
+AstNodeType ast_node_get_type(const AstNode* node) {
+  return node->type;
+}
+
+AstNodeValue ast_node_get_value(const AstNode* node) {
+  return node->value;
+}
+
+size_t ast_node_child_count(const AstNode* node) {
+  return node->child_size;
 }
