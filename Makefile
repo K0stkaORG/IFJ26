@@ -82,7 +82,7 @@ BIN_NAME := ifj26$(EXE)
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 
 # Release build binary, objects and dependencies
-RELEASE_BIN := $(RELEASE_BUILD_DIR)/$(BIN_NAME)
+RELEASE_BIN := $(BIN_NAME)
 RELEASE_OBJS := $(patsubst $(SRC_DIR)/%.c,$(RELEASE_BUILD_DIR)/%.o,$(SRCS))
 RELEASE_DEPS := $(RELEASE_OBJS:.o=.d)
 
