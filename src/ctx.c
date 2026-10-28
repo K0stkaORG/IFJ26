@@ -20,7 +20,7 @@
 void ctx_init(Ctx* ctx) {
   ctx->exit_code = E_OK;
 
-  ctx->flags.forceMallocFail = false;
+  ctx->flags.forceNthMallocFail = 0;
 
   ctx->buffer = NULL;
 }
@@ -30,11 +30,25 @@ void ctx_free(Ctx* ctx) {
   ctx->buffer = NULL;
 }
 
+/**
+ * @brief Returns whether the next malloc should fail and updates the context
+ *
+ * @param[in,out] ctx The context to check
+ * @return Whether the next malloc should fail
+ */
+static bool should_fail_malloc(Ctx* ctx) {
+  if (ctx->flags.forceNthMallocFail == 0)
+    return false;
+
+  ctx->flags.forceNthMallocFail--;
+  return ctx->flags.forceNthMallocFail == 0;
+}
+
 void* ctx_malloc_helper(Ctx* ctx, size_t size, const char* file, int line) {
   void* ptr;
 
   // If malloc should fail, force a NULL pointer
-  if (ctx->flags.forceMallocFail)
+  if (should_fail_malloc(ctx))
     ptr = NULL;
 
   // Otherwise, attempt to allocate memory
@@ -59,7 +73,7 @@ void* ctx_realloc_helper(Ctx* ctx,
   void* newPtr;
 
   // If malloc should fail, force a NULL pointer
-  if (ctx->flags.forceMallocFail)
+  if (should_fail_malloc(ctx))
     newPtr = NULL;
 
   // Otherwise, attempt to reallocate memory
