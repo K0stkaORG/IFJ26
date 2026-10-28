@@ -13,21 +13,72 @@
 
 #include "ctx.h"
 
+#include <errno.h>   // errno, ERANGE
+#include <limits.h>  // INT_MAX
+#include <setjmp.h>  // longjmp
 #include <stdarg.h>  // va_list, va_start, va_end
-#include <stdio.h>   // fprintf, vfprintf, stderr
-#include <stdlib.h>  // malloc
+#include <stdio.h>   // fprintf, size_t, vfprintf, stderr
+#include <stdlib.h>  // malloc, realloc, strtol
+#include <string.h>  // strcmp
 
-void ctx_init(Ctx* ctx) {
+void ctx_init(Ctx* ctx, Flags flags) {
+  // Default exit code
   ctx->exit_code = E_OK;
 
-  ctx->flags.forceNthMallocFail = 0;
-
-  ctx->buffer = NULL;
+  // Flags
+  ctx->flags = flags;
 }
 
-void ctx_free(Ctx* ctx) {
-  free(ctx->buffer);
-  ctx->buffer = NULL;
+bool parse_cli_args(int argc, char* argv[], Flags* flags) {
+  *flags = DEFAULT_FLAGS;
+
+  int current = 1;
+  // For all CLI arguments
+  while (current < argc) {
+    // Handle --debugForceNthMallocFail
+    if (strcmp(argv[current], "--debugForceNthMallocFail") == 0) {
+      // Check that there is a value for the flag
+      if (current + 1 >= argc)
+        return false;
+
+      // Parse the value of the flag
+      errno = 0;
+      char* end = NULL;
+      long value = strtol(argv[current + 1], &end, 10);
+
+      // Check that the value is a valid, positive integer
+      if (errno == ERANGE || *end != '\0' || value < 1)
+        return false;
+
+      flags->forceNthMallocFail = (int)value;
+
+      // Consume both arguments
+      current += 2;
+      continue;
+    }
+
+    // Handle --verbose
+    if (strcmp(argv[current], "--verbose") == 0) {
+      flags->verbose = true;
+
+      // Consume the argument
+      current += 1;
+      continue;
+    }
+
+    // Unrecognized argument
+    return false;
+  }
+
+  // All arguments were parsed successfully
+  return true;
+}
+
+ExitCode ctx_free(Ctx* ctx) {
+  // Free allocated memory
+
+  // Return the exit code
+  return ctx->exit_code;
 }
 
 /**
@@ -44,11 +95,16 @@ static bool should_fail_malloc(Ctx* ctx) {
   return ctx->flags.forceNthMallocFail == 0;
 }
 
-void* ctx_malloc_helper(Ctx* ctx, size_t size, const char* file, int line) {
+void* ctx_malloc_helper(Ctx* ctx,
+                        size_t size,
+                        const char* file,
+                        int line,
+                        bool shouldJump) {
   void* ptr;
 
   // If malloc should fail, force a NULL pointer
-  if (should_fail_malloc(ctx))
+  bool forcedFailure = should_fail_malloc(ctx);
+  if (forcedFailure)
     ptr = NULL;
 
   // Otherwise, attempt to allocate memory
@@ -60,8 +116,15 @@ void* ctx_malloc_helper(Ctx* ctx, size_t size, const char* file, int line) {
     return ptr;
 
   // Otherwise throw an error
-  throw_error_helper(ctx, E_INTERNAL_ERROR, file, line,
-                     "Failed to allocate %zu B of memory", size);
+  if (forcedFailure)
+    throw_error_helper(
+        ctx, E_INTERNAL_ERROR, file, line, shouldJump,
+        "Failed to allocate %zu B of memory (forced allocation failure)", size);
+  else
+    throw_error_helper(ctx, E_INTERNAL_ERROR, file, line, shouldJump,
+                       "Failed to allocate %zu B of memory", size);
+
+  // If should not jump, return NULL
   return NULL;
 }
 
@@ -73,7 +136,8 @@ void* ctx_realloc_helper(Ctx* ctx,
   void* newPtr;
 
   // If malloc should fail, force a NULL pointer
-  if (should_fail_malloc(ctx))
+  bool forcedFailure = should_fail_malloc(ctx);
+  if (forcedFailure)
     newPtr = NULL;
 
   // Otherwise, attempt to reallocate memory
@@ -84,28 +148,54 @@ void* ctx_realloc_helper(Ctx* ctx,
   if (newPtr != NULL)
     return newPtr;
 
-  // Otherwise, throw an error and return the original pointer
-  throw_error_helper(ctx, E_INTERNAL_ERROR, file, line,
-                     "Failed to reallocate %zu B of memory", size);
-  return ptr;
+  // Otherwise, throw an error and long jump to the error target
+  if (forcedFailure)
+    throw_error_helper(
+        ctx, E_INTERNAL_ERROR, file, line, true,
+        "Failed to reallocate %zu B of memory (forced allocation failure)",
+        size);
+  else
+    throw_error_helper(ctx, E_INTERNAL_ERROR, file, line, true,
+                       "Failed to reallocate %zu B of memory", size);
+
+  return ptr;  // unreachable
 }
 
 void throw_error_helper(Ctx* ctx,
                         ExitCode code,
                         const char* file,
                         int line,
+                        bool shouldJump,
                         const char* format,
                         ...) {
-  /* If the code is more specific than the current one, replace it */
-  if (ctx->exit_code == E_OK || (ctx->exit_code == E_SEMANTIC_OTHER_ERROR &&
-                                 (code) >= E_SEMANTIC_UNDEFINED_ERROR &&
-                                 (code) <= E_SEMANTIC_REWRITE_ERROR))
-    ctx->exit_code = code;
+  // Update the exit code
+  ctx->exit_code = code;
 
-  /* Print the error message to stderr regardless */
+  // Print the error message to stderr
   va_list args;
   va_start(args, format);
   vfprintf(stderr, format, args);
   fprintf(stderr, "\n    thrown at %s:%d, code: %d\n", file, line, code);
+  va_end(args);
+
+  // Jump to the error target
+  if (shouldJump)
+    longjmp(ctx->error_target, 1);
+}
+
+void debug_print_helper(Ctx* ctx,
+                        const char* file,
+                        int line,
+                        const char* format,
+                        ...) {
+  // Check if debug printing is enabled
+  if (!ctx->flags.verbose)
+    return;
+
+  // Print the debug message to stderr
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  fprintf(stderr, "\n    source: %s:%d\n", file, line);
   va_end(args);
 }
