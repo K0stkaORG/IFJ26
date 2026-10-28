@@ -65,8 +65,8 @@ typedef enum {
  * @brief Flags for the IFJ26 compiler
  */
 typedef struct {
-  // Whether to force malloc to fail in unit tests
-  bool forceMallocFail;
+  // Forces the nth malloc to fail (0 = ignore)
+  int forceNthMallocFail;
 } Flags;
 
 /**

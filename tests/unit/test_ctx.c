@@ -78,7 +78,7 @@ describe(ctx) {
     ctx_init(ctx);
 
     asserteq(ctx->exit_code, E_OK);
-    asserteq(ctx->flags.forceMallocFail, false);
+    asserteq(ctx->flags.forceNthMallocFail, 0);
     asserteq(ctx->buffer, NULL);
   }
 
@@ -162,7 +162,7 @@ describe(ctx) {
     }
 
     it("throws on allocation failure") {
-      ctx->flags.forceMallocFail = true;
+      ctx->flags.forceNthMallocFail = 1;
 
       bool reached = false;
       attempt_ctx_malloc(ctx, &reached);
@@ -204,7 +204,7 @@ describe(ctx) {
     it("throws on reallocation failure") {
       allocate_buffer_helper(ctx);
 
-      ctx->flags.forceMallocFail = true;
+      ctx->flags.forceNthMallocFail = 1;
 
       bool reached = false;
       attempt_ctx_realloc(ctx, &reached, 20);
@@ -218,7 +218,7 @@ describe(ctx) {
 
       char* oldBuffer = ctx->buffer;
 
-      ctx->flags.forceMallocFail = true;
+      ctx->flags.forceNthMallocFail = 1;
 
       bool reached = false;
       attempt_ctx_realloc(ctx, &reached, 20);
