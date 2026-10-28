@@ -175,18 +175,24 @@ benchmark:
 ################################################################################
 
 # Ensure the build directories exist
+ifeq ($(OS),Windows_NT)
+    MKDIR = cmd.exe /C mkdir $(subst /,\,$@)
+else
+    MKDIR = mkdir $@
+endif
+
 $(BUILD_ROOT):
-	@-mkdir $(BUILD_ROOT)
+	@-$(MKDIR)
 $(BUILD_DIR): | $(BUILD_ROOT)
-	@-cd $(BUILD_ROOT) && mkdir $(HOST_OS)
+	@-$(MKDIR)
 $(RELEASE_BUILD_DIR) $(DEBUG_BUILD_DIR) $(TEST_BUILD_DIR): | $(BUILD_DIR)
-	@-cd $(BUILD_DIR) && mkdir release debug tests
+	@-$(MKDIR)
 
 # Clean up build artifacts
 clean:
 ifeq ($(OS),Windows_NT)
-	@-if exist $(BUILD_ROOT) rmdir /S /Q $(BUILD_ROOT)
-	@-if exist $(RELEASE_BIN) del $(RELEASE_BIN)
+	@-cmd.exe /C if exist $(BUILD_ROOT) rmdir /S /Q $(BUILD_ROOT)
+	@-cmd.exe /C if exist $(RELEASE_BIN) del $(RELEASE_BIN)
 else
 	@-rm -rf $(BUILD_ROOT) $(RELEASE_BIN)
 endif
