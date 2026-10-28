@@ -11,231 +11,311 @@
 #define SNOW_ENABLED 1
 #include "snow/snow.h"
 
-#include "ctx.h"
-
 #include <stdbool.h>  // bool, true, false
 #include <stdlib.h>   // malloc, free
 
 #define TEST_PATTERN "123456789"
 #define TEST_PATTERN_PREFIX "12345"
 
-static void function_without_error(void) {}
-
-static void function_with_generic_error(Ctx* ctx) {
-  THROW(E_SEMANTIC_OTHER_ERROR, "test error");
+static void function_with_error(Ctx* ctx) {
+  THROW(E_LEXER_ERROR, "test error");
 }
 
-static void function_with_specific_error(Ctx* ctx) {
-  THROW(E_SEMANTIC_UNDEFINED_ERROR, "test error");
+static void function_with_nested_error(Ctx* ctx) {
+  function_with_error(ctx);
 }
 
-static void function_with_failing_try(Ctx* ctx) {
-  TRY(function_with_generic_error(ctx));
+describe(Ctx) {
+  subdesc(ctx_init) {
+    it("initializes Ctx correctly") {
+      Ctx test_ctx;
 
-  fail("should not reach here");
-}
+      ctx_init(&test_ctx, DEFAULT_FLAGS);
 
-static void function_with_nested_failing_try(Ctx* ctx) {
-  TRY(function_with_failing_try(ctx));
-}
-
-static void function_with_passing_try(Ctx* ctx, bool* reached) {
-  TRY(function_without_error());
-
-  *reached = true;
-}
-
-static void attempt_ctx_malloc(Ctx* ctx, bool* reached) {
-  ctx->buffer = TRY_MALLOC(sizeof(char) * 10);
-
-  *reached = true;
-}
-
-static void attempt_ctx_realloc(Ctx* ctx, bool* reached, int size) {
-  TRY_REALLOC(ctx->buffer, sizeof(char) * size);
-
-  *reached = true;
-}
-
-static void allocate_buffer_helper(Ctx* ctx) {
-  ctx->buffer = malloc(sizeof(char) * 10);
-
-  // Check for unsuccessful allocation, as that would void the test result
-  assertneq(ctx->buffer, NULL,
-            "Failed to allocate memory required to conduct the unit test");
-
-  for (int i = 0; i < 9; i++)
-    ctx->buffer[i] = TEST_PATTERN[i];
-
-  ctx->buffer[9] = '\0';
-}
-
-describe(ctx) {
-  Ctx context;
-  Ctx* ctx = &context;
-
-  it("initializes correctly") {
-    ctx_init(ctx);
-
-    asserteq(ctx->exit_code, E_OK);
-    asserteq(ctx->flags.forceNthMallocFail, 0);
-    asserteq(ctx->buffer, NULL);
+      asserteq(test_ctx.exit_code, E_OK);
+      asserteq(test_ctx.flags.forceNthMallocFail, 0);
+    }
   }
 
-  before_each() {
-    ctx_init(ctx);
+  subdesc(ctx_free) {
+    it("returns correct ExitCode") {
+      Ctx test_ctx;
+
+      ctx_init(&test_ctx, DEFAULT_FLAGS);
+
+      test_ctx.exit_code = E_LEXER_ERROR;
+
+      asserteq(ctx_free(&test_ctx), E_LEXER_ERROR);
+    }
   }
 
-  if ("correctly frees without any allocated memory") {
-    ctx_free(ctx);
+  subdesc(parse_cli_flags) {
+    it("uses default flags when no options are provided") {
+      Flags flags;
+      char* argv[] = {"ifj26"};
 
-    asserteq(ctx->buffer, NULL);
-  }
+      assert(parse_cli_args(1, argv, &flags));
+      asserteq(flags.forceNthMallocFail, 0);
+      assert(!flags.verbose);
+    }
 
-  it("correctly frees with allocated memory") {
-    allocate_buffer_helper(ctx);
+    it("parses the allocation failure index") {
+      Flags flags;
+      char* argv[] = {"ifj26", "--debugForceNthMallocFail", "4"};
 
-    ctx_free(ctx);
+      assert(parse_cli_args(3, argv, &flags));
+      asserteq(flags.forceNthMallocFail, 4);
+      assert(!flags.verbose);
+    }
 
-    asserteq(ctx->buffer, NULL);
+    it("parses the verbose option") {
+      Flags flags;
+      char* argv[] = {"ifj26", "--verbose"};
 
-    // Leaks will be detected by the test runner
-  }
+      assert(parse_cli_args(2, argv, &flags));
+      asserteq(flags.forceNthMallocFail, 0);
+      assert(flags.verbose);
+    }
 
-  after_each() {
-    ctx_free(ctx);
+    it("accepts supported options in either order") {
+      Flags flags;
+      char* verbose_first[] = {"ifj26", "--verbose",
+                               "--debugForceNthMallocFail", "2"};
+      char* fail_first[] = {"ifj26", "--debugForceNthMallocFail", "2",
+                            "--verbose"};
+
+      assert(parse_cli_args(4, verbose_first, &flags));
+      asserteq(flags.forceNthMallocFail, 2);
+      assert(flags.verbose);
+
+      assert(parse_cli_args(4, fail_first, &flags));
+      asserteq(flags.forceNthMallocFail, 2);
+      assert(flags.verbose);
+    }
+
+    it("rejects a missing allocation failure index") {
+      Flags flags;
+      char* argv[] = {"ifj26", "--debugForceNthMallocFail"};
+
+      assert(!parse_cli_args(2, argv, &flags));
+    }
+
+    it("rejects invalid allocation failure indices") {
+      Flags flags;
+      char* invalid_values[] = {"0", "-1", "not-a-number",
+                                "999999999999999999999999999999999999"};
+
+      for (size_t i = 0; i < 4; i++) {
+        char* argv[] = {"ifj26", "--debugForceNthMallocFail",
+                        invalid_values[i]};
+        assert(!parse_cli_args(3, argv, &flags));
+      }
+    }
+
+    it("rejects unknown options") {
+      Flags flags;
+      char* argv[] = {"ifj26", "--unknown"};
+
+      assert(!parse_cli_args(2, argv, &flags));
+    }
   }
 
   subdesc(THROW) {
-    it("correctly throws error") {
-      function_with_generic_error(ctx);
+    it("throws an error") {
+      assertThrow(E_LEXER_ERROR, { THROW(E_LEXER_ERROR, "test error"); });
+    };
 
-      asserteq(ctx->exit_code, E_SEMANTIC_OTHER_ERROR);
+    it("throws an error from a nested call") {
+      assertThrow(E_LEXER_ERROR, { function_with_error(ctx); });
     }
 
-    it("correctly overrides less specific error") {
-      function_with_generic_error(ctx);
-      function_with_specific_error(ctx);
-
-      asserteq(ctx->exit_code, E_SEMANTIC_UNDEFINED_ERROR);
-    }
-
-    it("does not override specific error with a generic one") {
-      function_with_specific_error(ctx);
-      function_with_generic_error(ctx);
-
-      asserteq(ctx->exit_code, E_SEMANTIC_UNDEFINED_ERROR);
-    }
-  }
-
-  subdesc(TRY) {
-    it("propagates on THROW") {
-      function_with_failing_try(ctx);
-
-      asserteq(ctx->exit_code, E_SEMANTIC_OTHER_ERROR);
-    }
-
-    it("propagates on a nested THROW") {
-      function_with_nested_failing_try(ctx);
-
-      asserteq(ctx->exit_code, E_SEMANTIC_OTHER_ERROR);
-    }
-
-    it("does not propagate if no error is thrown") {
-      bool reached = false;
-
-      function_with_passing_try(ctx, &reached);
-
-      assert(reached);
-      asserteq(ctx->exit_code, E_OK);
+    it("throws an error from a deeply nested call") {
+      assertThrow(E_LEXER_ERROR, { function_with_nested_error(ctx); });
     }
   }
 
   subdesc(TRY_MALLOC) {
-    it("allocates memory correctly") {
+    static char* ptr;
+
+    before_each() {
+      ptr = NULL;
+    }
+
+    after_each() {
+      free(ptr);
+    }
+
+    it("allocates without throwing") {
       bool reached = false;
-      attempt_ctx_malloc(ctx, &reached);
+
+      assertNoThrow({
+        ptr = TRY_MALLOC(sizeof(char) * 10);
+
+        reached = true;
+      });
 
       assert(reached);
-      asserteq(ctx->exit_code, E_OK);
-      assert(ctx->buffer != NULL);
+      assert(ptr != NULL);
     }
 
     it("throws on allocation failure") {
       ctx->flags.forceNthMallocFail = 1;
 
-      bool reached = false;
-      attempt_ctx_malloc(ctx, &reached);
+      assertThrow(E_INTERNAL_ERROR, {
+        ptr = TRY_MALLOC(sizeof(char) * 10);
 
-      assert(!reached);
-      asserteq(ctx->exit_code, E_INTERNAL_ERROR);
-      asserteq(ctx->buffer, NULL);
+        fail("Allocation should have failed");
+      });
+
+      asserteq(ptr, NULL);
+    }
+  }
+
+  subdesc(TRY_MALLOC_OR) {
+    static char* ptr;
+
+    before_each() {
+      ptr = NULL;
+    }
+
+    after_each() {
+      free(ptr);
+    }
+
+    it("allocates without throwing") {
+      bool reached = false;
+
+      assertNoThrow({
+        ptr = TRY_MALLOC_OR(sizeof(char) * 10, {});
+
+        reached = true;
+      });
+
+      assert(reached);
+      assert(ptr != NULL);
+    }
+
+    it("does not run cleanup on successful allocation") {
+      bool reached = false;
+
+      assertNoThrow({
+        ptr = TRY_MALLOC_OR(sizeof(char) * 10,
+                            { fail("Cleanup should not be run"); });
+
+        reached = true;
+      });
+
+      assert(reached);
+      assert(ptr != NULL);
+    }
+
+    it("runs cleanup before jumping on allocation failure") {
+      ctx->flags.forceNthMallocFail = 1;
+
+      bool reached = false;
+
+      assertThrow(E_INTERNAL_ERROR, {
+        ptr = TRY_MALLOC_OR(sizeof(char) * 10, { reached = true; });
+
+        fail("Allocation should have failed");
+      });
+
+      assert(reached);
+      asserteq(ptr, NULL);
     }
   }
 
   subdesc(TRY_REALLOC) {
-    it("reallocates memory correctly (increasing size)") {
-      allocate_buffer_helper(ctx);
+    static char* ptr;
 
+    before_each() {
+      // Allocate the buffer before each test
+      ptr = malloc(sizeof(char) * 10);
+
+      // Check for unsuccessful allocation, as that would void the test result
+      assertneq(ptr, NULL,
+                "Failed to allocate memory required to conduct the unit test");
+
+      // Fill the buffer with test pattern
+      for (int i = 0; i < 9; i++)
+        ptr[i] = TEST_PATTERN[i];
+      ptr[9] = '\0';
+    }
+
+    after_each() {
+      // Free the buffer after each test
+      free(ptr);
+    }
+
+    it("reallocates memory correctly (increasing size)") {
       bool reached = false;
-      attempt_ctx_realloc(ctx, &reached, 20);
+
+      assertNoThrow({
+        TRY_REALLOC(ptr, sizeof(char) * 20);
+
+        reached = true;
+      });
 
       assert(reached);
-      asserteq(ctx->exit_code, E_OK);
-      asserteq_str(ctx->buffer, TEST_PATTERN);
+      asserteq_str(ptr, TEST_PATTERN);
 
-      ctx->buffer[19] = '0';
-      assert(ctx->buffer[19] == '0');
+      ptr[19] = '0';
+      assert(ptr[19] == '0');
     }
 
     it("reallocates memory correctly (decreasing size)") {
-      allocate_buffer_helper(ctx);
-
       bool reached = false;
-      attempt_ctx_realloc(ctx, &reached, 5);
+
+      assertNoThrow({
+        TRY_REALLOC(ptr, sizeof(char) * 5);
+
+        reached = true;
+      });
 
       assert(reached);
-      asserteq(ctx->exit_code, E_OK);
 
       for (int i = 0; i < 5; i++)
-        assert(ctx->buffer[i] == TEST_PATTERN[i]);
+        assert(ptr[i] == TEST_PATTERN[i]);
     }
 
     it("throws on reallocation failure") {
-      allocate_buffer_helper(ctx);
-
       ctx->flags.forceNthMallocFail = 1;
 
-      bool reached = false;
-      attempt_ctx_realloc(ctx, &reached, 20);
+      assertThrow(E_INTERNAL_ERROR, {
+        TRY_REALLOC(ptr, sizeof(char) * 20);
 
-      assert(!reached);
-      asserteq(ctx->exit_code, E_INTERNAL_ERROR);
+        fail("Realloc should have thrown an error");
+      });
     }
 
     it("keeps buffer contents after failure") {
-      allocate_buffer_helper(ctx);
-
-      char* oldBuffer = ctx->buffer;
+      char* oldBuffer = ptr;
 
       ctx->flags.forceNthMallocFail = 1;
 
-      bool reached = false;
-      attempt_ctx_realloc(ctx, &reached, 20);
+      assertThrow(E_INTERNAL_ERROR, {
+        TRY_REALLOC(ptr, sizeof(char) * 20);
 
-      assert(!reached);
-      asserteq(ctx->exit_code, E_INTERNAL_ERROR);
-      asserteq_str(ctx->buffer, TEST_PATTERN);
-      asserteq_ptr(ctx->buffer, oldBuffer);
+        fail("Realloc should have thrown an error");
+      });
+
+      asserteq_str(ptr, TEST_PATTERN);
+      asserteq_ptr(ptr, oldBuffer);
+    }
+
+    // Override so it doesn't allocate the buffer for the following test
+    before_each() {
+      ptr = NULL;
     }
 
     it("does not realloc NULL pointer") {
-      bool reached = false;
-      attempt_ctx_realloc(ctx, &reached, 20);
+      assertThrow(E_INTERNAL_ERROR, {
+        TRY_REALLOC(ptr, sizeof(char) * 20);
 
-      assert(!reached);
-      asserteq(ctx->exit_code, E_INTERNAL_ERROR);
-      asserteq_ptr(ctx->buffer, NULL);
+        fail("Realloc should have thrown an error");
+      });
+
+      asserteq_ptr(ptr, NULL);
     }
   }
 }
