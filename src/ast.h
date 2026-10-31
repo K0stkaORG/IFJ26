@@ -117,20 +117,22 @@ AstNodeValue ast_node_get_value(const AstNode* node);
  * @param node pointer to a AST node
  * @return number of node children
  */
-size_t ast_node_child_count(const AstNode* node);
+size_t ast_node_get_child_count(const AstNode* node);
 
 /**
  * @brief Returns child of given node
  *
+ * @pre Node pointer is not NULL!
  * @param node pointer to a AST node
  * @param index index of child
  * @param child pointer to a variable to store child node
  */
-void ast_node_get_child(AstNode* node, size_t index, AstNode** child);
+void ast_node_get_child(Ctx* ctx, AstNode* node, size_t index, AstNode** child);
 
 /**
  * @brief Returns parent of given node
  *
+ * @pre Node pointer is not NULL!
  * @param node pointer to a AST node
  * @param parent pointer to a variable to store parent node
  */
@@ -140,10 +142,10 @@ void ast_node_get_parent(AstNode* node, AstNode** parent);
  * @brief Appends child to given parent node
  *
  * @param ctx pointer to an initialized shared allocation and error context
- * @param parent pointer to a parent AST node
+ * @param node pointer to a parent AST node
  * @param child pointer to a AST node to append
  */
-void ast_node_append_child(Ctx* ctx, AstNode* parent, AstNode* child);
+void ast_node_append_child(Ctx* ctx, AstNode* node, AstNode* child);
 
 /**
  * @brief Inserts child at given index in parent node
@@ -154,18 +156,19 @@ void ast_node_append_child(Ctx* ctx, AstNode* parent, AstNode* child);
  * @param child pointer to a AST node to insert
  */
 void ast_node_insert_child(Ctx* ctx,
-                           AstNode* parent,
+                           AstNode* node,
                            size_t index,
                            AstNode* child);
 
 /**
  * @brief Detaches child at given index from parent node
  *
+ * @param ctx pointer to an initialized shared allocation and error context
  * @param parent pointer to a parent AST node
  * @param index index of child to detach
  * @param child pointer to a variable to store detached child node
  */
-void ast_node_detach_child(AstNode* parent, size_t index, AstNode** child);
+void ast_node_detach_child(Ctx* ctx, AstNode* node, size_t index, AstNode** child);
 
 // === AST ===
 
