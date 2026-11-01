@@ -385,4 +385,18 @@ typedef struct {
   int function_count;
 } IrProgram;
 
+/**
+ * @brief Initializes the IR struct
+ *
+ * @param[out] ir Pointer to the IR struct to initialize
+ */
+void ir_init(IrProgram* ir);
+
+/**
+ * @brief Frees the IR struct and resets it to default values
+ *
+ * @param[in,out] ir Pointer to the IR struct to free
+ */
+void ir_free(IrProgram* ir);
+
 #endif
