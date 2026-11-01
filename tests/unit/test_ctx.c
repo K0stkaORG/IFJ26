@@ -11,6 +11,8 @@
 #define SNOW_ENABLED 1
 #include "snow/snow.h"
 
+#include "ctx.h"
+
 #include <stdbool.h>  // bool, true, false
 #include <stdlib.h>   // malloc, free
 
