@@ -15,6 +15,8 @@
 #ifndef CTX_H
 #define CTX_H
 
+#include "ir.h"  // IrProgram
+
 #include <setjmp.h>   // jmp_buf
 #include <stdbool.h>  // bool, true, false
 #include <stddef.h>   // NULL, size_t
@@ -104,6 +106,9 @@ typedef struct Ctx {
 
   // Flags for the compiler
   Flags flags;
+
+  // Intermediate representation of the program
+  IrProgram ir;
 } Ctx;
 
 /**
