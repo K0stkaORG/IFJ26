@@ -13,7 +13,8 @@
 
 #include "ir.h"
 
-#include <stdlib.h>  // free
+#include <stdbool.h>  // bool
+#include <stdlib.h>   // free
 
 void ir_init(IrProgram* ir) {
   // Set IR to default values
@@ -23,10 +24,29 @@ void ir_init(IrProgram* ir) {
 }
 
 /**
+ * @brief Frees the memory used by an operand.
+ *
+ * Frees any memory used by an operand. It is safe to call this function on
+ * a already/partially freed operand. Does not free the operand pointer itself.
+ *
+ * @param[in,out] operand The operand to free.
+ */
+static void ir_free_operand(IrOperand* operand) {
+  // Check the pointer is valid
+  if (operand == NULL)
+    return;
+
+  // Free the operand value (if dynamically allocated)
+  if (operand->type == IR_OP_STRING)
+    free(operand->value.string_value);
+}
+
+/**
  * @brief Frees the memory used by an instruction.
  *
  * Frees any memory used by an instruction. It is safe to call this function on
- * a already/partially freed instruction
+ * a already/partially freed instruction. Does not free the instruction pointer
+ * itself.
  *
  * @param[in,out] instruction The instruction to free.
  */
@@ -35,20 +55,59 @@ static void ir_free_instruction(IrInstruction* instruction) {
   if (instruction == NULL)
     return;
 
-  // Free the operands (if dynamically allocated)
-  if (instruction->type == IR_INST_CALL)
-    if (instruction->operands.call.args != NULL)
-      free(instruction->operands.call.args);
+  // Free the operands
+  switch (instruction->type) {
+    // Unary instructions
+    case IR_INST_FLOOR:
+    case IR_INST_NOT:
+    case IR_INST_INT2DOUBLE:
+      ir_free_operand(&instruction->operands.unary.operand);
+      break;
 
-  // Free the instruction
-  free(instruction);
+    // Binary instructions
+    case IR_INST_ADD:
+    case IR_INST_SUB:
+    case IR_INST_MUL:
+    case IR_INST_IDIV:
+    case IR_INST_DIV:
+    case IR_INST_EQ:
+    case IR_INST_NE:
+    case IR_INST_LT:
+    case IR_INST_LE:
+    case IR_INST_GT:
+    case IR_INST_GE:
+    case IR_INST_CONCAT:
+      ir_free_operand(&instruction->operands.binary.left);
+      ir_free_operand(&instruction->operands.binary.right);
+      break;
+
+    // Store instruction
+    case IR_INST_STORE:
+      ir_free_operand(&instruction->operands.store.source);
+      break;
+
+    // Call instruction
+    case IR_INST_CALL:
+      if (instruction->operands.call.args != NULL) {
+        // Free each argument
+        for (int oid = 0; oid < instruction->operands.call.arg_count; oid++)
+          ir_free_operand(&instruction->operands.call.args[oid]);
+
+        // Free the argument array
+        free(instruction->operands.call.args);
+      }
+      break;
+
+    default:
+      break;
+  }
 }
 
 /**
  * @brief Frees the memory used by a block.
  *
  * Frees any memory used by a block. It is safe to call this function on a
- * already/partially freed block
+ * already/partially freed block. Does not free the block pointer itself.
  *
  * @param[in,out] block The block to free.
  */
@@ -67,15 +126,30 @@ static void ir_free_block(IrBlock* block) {
     free(block->instructions);
   }
 
-  // Free the block
-  free(block);
+  // Free the terminator
+  switch (block->terminator.type) {
+    case IR_TERMINATOR_CONDITIONAL:
+      ir_free_operand(&block->terminator.value.conditional_target.condition);
+      break;
+
+    case IR_TERMINATOR_RETURN:
+      ir_free_operand(&block->terminator.value.return_value);
+      break;
+
+    case IR_TERMINATOR_EXIT:
+      ir_free_operand(&block->terminator.value.exit_code);
+      break;
+
+    default:
+      break;
+  }
 }
 
 /**
  * @brief Frees the memory used by a function.
  *
  * Frees any memory used by a function. It is safe to call this function on a
- * already/partially freed function
+ * already/partially freed function. Does not free the function pointer itself.
  *
  * @param[in,out] function The function to free.
  */
@@ -108,9 +182,6 @@ static void ir_free_function(IrFunction* function) {
     // Free block array
     free(function->blocks);
   }
-
-  // Free the function
-  free(function);
 }
 
 void ir_free(IrProgram* ir) {
