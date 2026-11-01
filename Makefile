@@ -104,6 +104,11 @@ UNIT_BINS := $(addprefix $(TEST_BUILD_DIR)/,$(addsuffix $(EXE),$(UNIT_NAMES)))
 UNIT_DEPS := $(addprefix $(TEST_BUILD_DIR)/,$(addsuffix .d,$(UNIT_NAMES)))
 UNIT_OBJS := $(filter-out $(DEBUG_BUILD_DIR)/ifj26.o,$(DEBUG_OBJS))
 
+# Unit test helper sources, objects, and dependencies
+UNIT_HELPER_SRCS := $(wildcard $(UNIT_TESTS_DIR)/helpers/*.c)
+UNIT_HELPER_OBJS := $(patsubst $(UNIT_TESTS_DIR)/helpers/%.c,$(TEST_BUILD_DIR)/helper_%.o,$(UNIT_HELPER_SRCS))
+UNIT_DEPS += $(UNIT_HELPER_OBJS:.o=.d)
+
 ################################################################################
 # Test configuration                                                           #
 ################################################################################
@@ -151,9 +156,13 @@ $(DEBUG_BIN): $(DEBUG_OBJS)
 $(DEBUG_BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(DEBUG_BUILD_DIR)
 	@$(CC) $(CFLAGS_DEBUG) -c -o $@ $<
 
+# Build unit test helper objects
+$(TEST_BUILD_DIR)/helper_%.o: $(UNIT_TESTS_DIR)/helpers/%.c | $(TEST_BUILD_DIR)
+	@$(CC) $(CFLAGS_UNIT) -MF $(TEST_BUILD_DIR)/helper_$*.d -c -o $@ $<
+
 # Build unit test executables
-$(TEST_BUILD_DIR)/%$(EXE): tests/unit/%.c $(UNIT_OBJS) | $(TEST_BUILD_DIR)
-	@$(CC) $(CFLAGS_UNIT) -MF $(TEST_BUILD_DIR)/$*.d -o $@ $< $(UNIT_OBJS)
+$(TEST_BUILD_DIR)/%$(EXE): tests/unit/%.c $(UNIT_OBJS) $(UNIT_HELPER_OBJS) | $(TEST_BUILD_DIR)
+	@$(CC) $(CFLAGS_UNIT) -MF $(TEST_BUILD_DIR)/$*.d -o $@ $< $(filter %.o,$^)
 
 # Run unit tests
 test-unit: $(UNIT_BINS)
