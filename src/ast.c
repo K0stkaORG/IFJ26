@@ -22,7 +22,7 @@ void ast_node_create(Ctx* ctx, AstNode** node) {
   **node = (AstNode){.type = AST_NODE_NONE,
                      .value = {.int_value = 0},
                      .parent = NULL,
-                     .child_nodes = NULL,
+                     .child_nodes = TRY_MALLOC(sizeof((*node)->child_nodes)),
                      .child_count = 0,
                      .child_capacity = 0};
 }
@@ -112,14 +112,22 @@ void ast_node_insert_child(Ctx* ctx,
   child->parent = node;
 }
 
-void ast_node_detach_child(Ctx* ctx, AstNode* node, size_t index, AstNode** child) {
+void ast_node_detach_child(Ctx* ctx,
+                           AstNode* node,
+                           size_t index,
+                           AstNode** child) {
   if (node == NULL) {
     THROW(E_INTERNAL_ERROR, "Cannot detach child: parent pointer is NULL");
   }
   if (index >= node->child_count) {
     THROW(E_INTERNAL_ERROR, "Cannot detach child: index out of bounds");
   }
+  if (node->child_nodes[index] == NULL) {
+    THROW(E_INTERNAL_ERROR,
+          "Cannot detach child: child at index %zu doesn't exist", index);
+  }
   *child = node->child_nodes[index];
+  (*child)->parent = NULL;
   for (size_t i = index; i < node->child_count - 1; i++) {
     node->child_nodes[i] = node->child_nodes[i + 1];
   }
