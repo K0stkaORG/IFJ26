@@ -18,7 +18,7 @@
  */
 typedef struct BstNode BstNode;
 struct BstNode {
-  char* key;
+  void* key;
   void* data;
   BstNode* child_left;
   BstNode* child_right;
@@ -27,15 +27,21 @@ struct BstNode {
 };
 
 /**
+ * @brief Type for function that compares keys and returns result in int.
+ */
+typedef int (*BstKeyComparator)(const void* a, const void* b);
+
+/**
  * @brief Height-balanced BST defined by its root
  */
 typedef struct Bst {
   BstNode* root;
+  BstKeyComparator key_comparator;
 } Bst;
 
-void bst_init(Bst* tree);
-void bst_insert(Ctx* ctx, Bst* tree, const char* key, void* data);
-void* bst_search(Bst* tree, const char* key);
+void bst_init(Bst* tree, BstKeyComparator key_comparator);
+void bst_insert(Ctx* ctx, Bst* tree, void* key, void* data);
+void* bst_search(Bst* tree, void* key);
 void bst_destroy(Bst* tree);
 
 #endif

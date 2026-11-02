@@ -27,7 +27,7 @@
  * @param key Lookup key for the node in the BST
  * @param data Data payload of the node
  */
-static void bst_node_init(BstNode* node, char* key, void* data) {
+static void bst_node_init(BstNode* node, void* key, void* data) {
   node->balance = 0;
   node->height = 1;
   node->child_left = NULL;
@@ -175,7 +175,7 @@ static void bst_node_move_data(BstNode* target_node, BstNode* origin_node) {
   if (target_node->data != NULL && target_node->data != origin_node->data)
     free(target_node->data);
   target_node->data = origin_node->data;
-  if (origin_node->key != NULL)
+  if (origin_node->key != NULL && target_node->key != origin_node->key)
     free(origin_node->key);
   free(origin_node);
 }
@@ -186,17 +186,19 @@ static void bst_node_move_data(BstNode* target_node, BstNode* origin_node) {
  * @param new_node Pointer to node to be inserted into the subtree
  * @return Modified subtree root
  */
-static BstNode* bst_subtree_insert_node(BstNode* tree_root, BstNode* new_node) {
+static BstNode* bst_subtree_insert_node(BstNode* tree_root,
+                                        BstNode* new_node,
+                                        BstKeyComparator key_comparator) {
   if (tree_root == NULL)
     return new_node;
 
-  if (strcmp(new_node->key, tree_root->key) < 0) {
-    tree_root->child_left =
-        bst_subtree_insert_node(tree_root->child_left, new_node);
-  } else if (strcmp(new_node->key, tree_root->key) > 0) {
-    tree_root->child_right =
-        bst_subtree_insert_node(tree_root->child_right, new_node);
-  } else if (strcmp(new_node->key, tree_root->key) == 0) {
+  if (key_comparator(new_node->key, tree_root->key) < 0) {
+    tree_root->child_left = bst_subtree_insert_node(tree_root->child_left,
+                                                    new_node, key_comparator);
+  } else if (key_comparator(new_node->key, tree_root->key) > 0) {
+    tree_root->child_right = bst_subtree_insert_node(tree_root->child_right,
+                                                     new_node, key_comparator);
+  } else if (key_comparator(new_node->key, tree_root->key) == 0) {
     bst_node_move_data(tree_root, new_node);
   }
 
@@ -209,10 +211,12 @@ static BstNode* bst_subtree_insert_node(BstNode* tree_root, BstNode* new_node) {
 /**
  * @brief Initialize a new BST
  * @param tree Pointer to the tree to initialize
+ * @param key_comparator Function that compares abstract keys
  * @pre Tree must be allocated
  */
-void bst_init(Bst* tree) {
+void bst_init(Bst* tree, BstKeyComparator key_comparator) {
   tree->root = NULL;
+  tree->key_comparator = key_comparator;
 }
 
 /**
@@ -221,13 +225,13 @@ void bst_init(Bst* tree) {
  * @param key Key to search for in the tree
  * @return Pointer to the data if found, or NULL
  */
-void* bst_search(Bst* tree, const char* key) {
+void* bst_search(Bst* tree, void* key) {
   if (tree == NULL || key == NULL)
     return NULL;
 
   BstNode* current_node = tree->root;
   while (current_node != NULL) {
-    int comparison = strcmp(key, current_node->key);
+    int comparison = tree->key_comparator(key, current_node->key);
     if (comparison == 0)
       return current_node->data;
     else if (comparison < 0)
@@ -245,20 +249,18 @@ void* bst_search(Bst* tree, const char* key) {
  * @param key Key of the node
  * @param data Data stored in the node
  * @pre Tree is initialized
- * @pre Key is allocated on stack. If on heap, caller must free.
+ * @pre Key is allocated on heap.
  * @pre Data is allocated on heap.
  * @pre Data must not be reinserted under different key.
  */
-void bst_insert(Ctx* ctx, Bst* tree, const char* key, void* data) {
+void bst_insert(Ctx* ctx, Bst* tree, void* key, void* data) {
   if (key == NULL)
     return;
 
   BstNode* node = TRY_MALLOC(sizeof(BstNode));
-  char* node_key = TRY_MALLOC(strlen(key) + 1);
-  strcpy(node_key, key);
-  bst_node_init(node, node_key, data);
+  bst_node_init(node, key, data);
 
-  tree->root = bst_subtree_insert_node(tree->root, node);
+  tree->root = bst_subtree_insert_node(tree->root, node, tree->key_comparator);
 }
 
 /**
