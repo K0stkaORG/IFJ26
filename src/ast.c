@@ -21,6 +21,7 @@ void ast_node_create(Ctx* ctx, AstNode** node) {
   *node = TRY_MALLOC(sizeof(**node));
   **node = (AstNode){.type = AST_NODE_NONE,
                      .value = {.int_value = 0},
+                     .parent = NULL,
                      .child_nodes = NULL,
                      .child_count = 0,
                      .child_capacity = 0};
