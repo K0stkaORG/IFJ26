@@ -226,15 +226,6 @@ static BstNode* bst_subtree_insert_node(BstNode* tree_root,
   return tree_root;
 }
 
-/**
- * @brief Initialize a new BST
- * @param tree Pointer to the tree to initialize
- * @param key_comparator Function that compares abstract keys
- * @param key_destructor Function that destructs key, or NULL if not owned
- * @param data_destructor Function that destructs data, or NULL if not owned
- * @pre Tree must be allocated
- * @pre key_comparator must not be NULL and must be a function that returns int
- */
 void bst_init(Bst* tree,
               BstKeyComparator key_comparator,
               BstKeyDestructor key_destructor,
@@ -245,12 +236,6 @@ void bst_init(Bst* tree,
   tree->data_destructor = data_destructor;
 }
 
-/**
- * @brief Search data in BST by key
- * @param tree Pointer to the tree to search in
- * @param key Key to search for in the tree
- * @return Pointer to the data if found, or NULL
- */
 void* bst_search(Bst* tree, void* key) {
   if (tree == NULL || key == NULL)
     return NULL;
@@ -268,17 +253,6 @@ void* bst_search(Bst* tree, void* key) {
   return NULL;
 }
 
-/**
- * @brief Configure node and insert it into BST
- * @param ctx Error context
- * @param tree Pointer to the tree
- * @param key Key of the node
- * @param data Data stored in the node
- * @pre Tree is initialized
- * @pre If key destructor is set, key must be allocated on heap.
- * @pre If data destructor is set, data must be allocated on heap.
- * @pre Data must not be reinserted under different key.
- */
 void bst_insert(Ctx* ctx, Bst* tree, void* key, void* data) {
   if (key == NULL)
     return;
@@ -291,10 +265,6 @@ void bst_insert(Ctx* ctx, Bst* tree, void* key, void* data) {
                               tree->key_destructor, tree->data_destructor);
 }
 
-/**
- * @brief Destructor for BST
- * @param tree Pointer to the tree to destroy
- */
 void bst_destroy(Bst* tree) {
   if (tree == NULL)
     return;
