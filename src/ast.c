@@ -14,17 +14,41 @@ struct AstNode {
   size_t child_capacity;
 };
 
+/**
+ * HELPERS
+ */
+
+// NOLINTNEXTLINE(misc-no-recursion)
+static bool ast_node_is_ancestor(const AstNode* node,
+                                 const AstNode* candidate) {
+  if (node == NULL) {
+    return false;
+  }
+  if (node == candidate) {
+    return true;
+  }
+  return ast_node_is_ancestor(node->parent, candidate);
+}
+
+/**
+ * PUBLIC
+ */
 void ast_node_create(Ctx* ctx, AstNode** node) {
   if (node == NULL) {
     THROW(E_INTERNAL_ERROR, "Cannot create AST node: output pointer is NULL");
   }
-  *node = TRY_MALLOC(sizeof(**node));
-  **node = (AstNode){.type = AST_NODE_NONE,
-                     .value = {.int_value = 0},
-                     .parent = NULL,
-                     .child_nodes = TRY_MALLOC(sizeof((*node)->child_nodes)),
-                     .child_count = 0,
-                     .child_capacity = 0};
+
+  AstNode* temp = TRY_MALLOC(sizeof(*temp));
+  AstNode** children =
+      TRY_MALLOC_OR(sizeof(*temp->child_nodes), { free(temp); });
+
+  *temp = (AstNode){.type = AST_NODE_NONE,
+                    .value = {.int_value = 0},
+                    .parent = NULL,
+                    .child_nodes = children,
+                    .child_count = 0,
+                    .child_capacity = 0};
+  *node = temp;
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -80,6 +104,13 @@ void ast_node_append_child(Ctx* ctx, AstNode* node, AstNode* child) {
   if (node == NULL) {
     THROW(E_INTERNAL_ERROR, "Cannot append child: node pointer is NULL");
   }
+  if (child->parent != NULL) {
+    THROW(E_INTERNAL_ERROR,
+          "Cannot append child: child already has node as parent");
+  }
+  if (ast_node_is_ancestor(node, child)) {
+    THROW(E_INTERNAL_ERROR, "Cannot append child: child is ancestor of node");
+  }
   if (node->child_count == node->child_capacity) {
     node->child_capacity = node->child_capacity * 2 + 1;
     TRY_REALLOC(node->child_nodes,
@@ -95,6 +126,13 @@ void ast_node_insert_child(Ctx* ctx,
                            AstNode* child) {
   if (node == NULL) {
     THROW(E_INTERNAL_ERROR, "Cannot insert child: parent pointer is NULL");
+  }
+  if (child->parent != NULL) {
+    THROW(E_INTERNAL_ERROR,
+          "Cannot append child: child already has node as parent");
+  }
+  if (ast_node_is_ancestor(node, child)) {
+    THROW(E_INTERNAL_ERROR, "Cannot append child: child is ancestor of node");
   }
   if (index > node->child_count) {
     THROW(E_INTERNAL_ERROR, "Cannot insert child: index out of bounds");
