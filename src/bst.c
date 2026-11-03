@@ -14,6 +14,19 @@
 #include <string.h>
 
 /**
+ * @brief Node of the BST
+ */
+typedef struct BstNode BstNode;
+struct BstNode {
+  void* key;
+  void* data;
+  BstNode* child_left;
+  BstNode* child_right;
+  int height;
+  int balance;
+};
+
+/**
  * @brief Calculate maximum of two values
  * @param a First value
  * @param b Second value

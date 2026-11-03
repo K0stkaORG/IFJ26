@@ -14,19 +14,6 @@
 #include "ctx.h"
 
 /**
- * @brief Node of the BST
- */
-typedef struct BstNode BstNode;
-struct BstNode {
-  void* key;
-  void* data;
-  BstNode* child_left;
-  BstNode* child_right;
-  int height;
-  int balance;
-};
-
-/**
  * @brief Type for function that compares keys and returns result in int.
  */
 typedef int (*BstKeyComparator)(const void* a, const void* b);
@@ -40,6 +27,11 @@ typedef void (*BstKeyDestructor)(void* key);
  * @brief Type for function that destructs data.
  */
 typedef void (*BstDataDestructor)(void* data);
+
+/**
+ * @brief Node of the BST
+ */
+typedef struct BstNode BstNode;
 
 /**
  * @brief Height-balanced BST defined by its root

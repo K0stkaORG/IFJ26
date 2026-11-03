@@ -21,6 +21,17 @@
 #include <string.h>
 #include "bst.h"
 
+// BstNode redefined to allow whitebox testing
+typedef struct BstNode BstNode;
+struct BstNode {
+  void* key;
+  void* data;
+  BstNode* child_left;
+  BstNode* child_right;
+  int height;
+  int balance;
+};
+
 describe(bst) {
   subdesc(bst_init) {
     it("initializes an empty tree with a NULL root") {
