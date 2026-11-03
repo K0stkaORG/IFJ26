@@ -153,16 +153,20 @@ static BstNode* bst_node_repair_balance(BstNode* node) {
 /**
  * @brief Destructs a BST subtree defined by root node
  * @param node Pointer to the root node
+ * @param key_destructor Function that destructs key
+ * @param data_destructor Function that destructs data
  */
-static void bst_node_destroy_subtree(BstNode* node) {
+static void bst_node_destroy_subtree(BstNode* node,
+                                     BstKeyDestructor key_destructor,
+                                     BstDataDestructor data_destructor) {
   if (node == NULL)
     return;
-  bst_node_destroy_subtree(node->child_left);
-  bst_node_destroy_subtree(node->child_right);
-  if (node->data != NULL)
-    free(node->data);
-  if (node->key != NULL)
-    free(node->key);
+  bst_node_destroy_subtree(node->child_left, key_destructor, data_destructor);
+  bst_node_destroy_subtree(node->child_right, key_destructor, data_destructor);
+  if (node->data != NULL && data_destructor != NULL)
+    data_destructor(node->data);
+  if (node->key != NULL && key_destructor != NULL)
+    key_destructor(node->key);
   free(node);
 }
 
@@ -170,13 +174,20 @@ static void bst_node_destroy_subtree(BstNode* node) {
  * @brief Move data from one BST node to another and destroy the old one
  * @param target_node Pointer to the target node
  * @param origin_node Pointer to the origin node to be destroyed
+ * @param key_destructor Function that destructs key
+ * @param data_destructor Function that destructs data
  */
-static void bst_node_move_data(BstNode* target_node, BstNode* origin_node) {
-  if (target_node->data != NULL && target_node->data != origin_node->data)
-    free(target_node->data);
+static void bst_node_move_data(BstNode* target_node,
+                               BstNode* origin_node,
+                               BstKeyDestructor key_destructor,
+                               BstDataDestructor data_destructor) {
+  if (target_node->data != NULL && target_node->data != origin_node->data &&
+      data_destructor != NULL)
+    data_destructor(target_node->data);
   target_node->data = origin_node->data;
-  if (origin_node->key != NULL && target_node->key != origin_node->key)
-    free(origin_node->key);
+  if (origin_node->key != NULL && target_node->key != origin_node->key &&
+      key_destructor != NULL)
+    key_destructor(origin_node->key);
   free(origin_node);
 }
 
@@ -184,22 +195,29 @@ static void bst_node_move_data(BstNode* target_node, BstNode* origin_node) {
  * @brief Helper for recursive BST node insertion
  * @param tree_root Pointer to root node of the subtree
  * @param new_node Pointer to node to be inserted into the subtree
+ * @param key_comparator Function compares two keys
+ * @param key_destructor Function that destructs key
+ * @param data_destructor Function that destructs data
  * @return Modified subtree root
  */
 static BstNode* bst_subtree_insert_node(BstNode* tree_root,
                                         BstNode* new_node,
-                                        BstKeyComparator key_comparator) {
+                                        BstKeyComparator key_comparator,
+                                        BstKeyDestructor key_destructor,
+                                        BstDataDestructor data_destructor) {
   if (tree_root == NULL)
     return new_node;
 
   if (key_comparator(new_node->key, tree_root->key) < 0) {
-    tree_root->child_left = bst_subtree_insert_node(tree_root->child_left,
-                                                    new_node, key_comparator);
+    tree_root->child_left =
+        bst_subtree_insert_node(tree_root->child_left, new_node, key_comparator,
+                                key_destructor, data_destructor);
   } else if (key_comparator(new_node->key, tree_root->key) > 0) {
-    tree_root->child_right = bst_subtree_insert_node(tree_root->child_right,
-                                                     new_node, key_comparator);
+    tree_root->child_right = bst_subtree_insert_node(
+        tree_root->child_right, new_node, key_comparator, key_destructor,
+        data_destructor);
   } else if (key_comparator(new_node->key, tree_root->key) == 0) {
-    bst_node_move_data(tree_root, new_node);
+    bst_node_move_data(tree_root, new_node, key_destructor, data_destructor);
   }
 
   bst_node_update_metadata(tree_root);
@@ -212,11 +230,19 @@ static BstNode* bst_subtree_insert_node(BstNode* tree_root,
  * @brief Initialize a new BST
  * @param tree Pointer to the tree to initialize
  * @param key_comparator Function that compares abstract keys
+ * @param key_destructor Function that destructs key, or NULL if not owned
+ * @param data_destructor Function that destructs data, or NULL if not owned
  * @pre Tree must be allocated
+ * @pre key_comparator must not be NULL and must be a function that returns int
  */
-void bst_init(Bst* tree, BstKeyComparator key_comparator) {
+void bst_init(Bst* tree,
+              BstKeyComparator key_comparator,
+              BstKeyDestructor key_destructor,
+              BstDataDestructor data_destructor) {
   tree->root = NULL;
   tree->key_comparator = key_comparator;
+  tree->key_destructor = key_destructor;
+  tree->data_destructor = data_destructor;
 }
 
 /**
@@ -249,8 +275,8 @@ void* bst_search(Bst* tree, void* key) {
  * @param key Key of the node
  * @param data Data stored in the node
  * @pre Tree is initialized
- * @pre Key is allocated on heap.
- * @pre Data is allocated on heap.
+ * @pre If key destructor is set, key must be allocated on heap.
+ * @pre If data destructor is set, data must be allocated on heap.
  * @pre Data must not be reinserted under different key.
  */
 void bst_insert(Ctx* ctx, Bst* tree, void* key, void* data) {
@@ -260,7 +286,9 @@ void bst_insert(Ctx* ctx, Bst* tree, void* key, void* data) {
   BstNode* node = TRY_MALLOC(sizeof(BstNode));
   bst_node_init(node, key, data);
 
-  tree->root = bst_subtree_insert_node(tree->root, node, tree->key_comparator);
+  tree->root =
+      bst_subtree_insert_node(tree->root, node, tree->key_comparator,
+                              tree->key_destructor, tree->data_destructor);
 }
 
 /**
@@ -270,6 +298,7 @@ void bst_insert(Ctx* ctx, Bst* tree, void* key, void* data) {
 void bst_destroy(Bst* tree) {
   if (tree == NULL)
     return;
-  bst_node_destroy_subtree(tree->root);
+  bst_node_destroy_subtree(tree->root, tree->key_destructor,
+                           tree->data_destructor);
   tree->root = NULL;
 }
