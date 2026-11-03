@@ -5,16 +5,16 @@
  * @author Jan Kostka (xkostkj00)
  * @date 1. 11. 2026
  *
- * @brief Intermediate representation helper functions
+ * @brief Intermediate representation initialization and cleanup
  *
- * This file contains helper functions for working with the intermediate
- * representation of the program.
+ * This file contains functions for initializing and cleaning up the
+ * intermediate representation of the program.
  */
 
 #include "ir.h"
+#include "ir_internal.h"
 
-#include <stdbool.h>  // bool
-#include <stdlib.h>   // free
+#include <stdlib.h>  // free
 
 void ir_init(IrProgram* ir) {
   // Set IR to default values
@@ -31,7 +31,7 @@ void ir_init(IrProgram* ir) {
  *
  * @param[in,out] operand The operand to free.
  */
-static void ir_free_operand(IrOperand* operand) {
+void ir_free_operand(IrOperand* operand) {
   // Check the pointer is valid
   if (operand == NULL)
     return;
