@@ -16,7 +16,6 @@
 #include "ctx.h"
 
 typedef struct AstNode AstNode;
-typedef struct Ast Ast;
 
 typedef enum {
   AST_NODE_INVALID = -1,
@@ -169,70 +168,5 @@ void ast_node_insert_child(Ctx* ctx,
  * @param child pointer to a variable to store detached child node
  */
 void ast_node_detach_child(Ctx* ctx, AstNode* node, size_t index, AstNode** child);
-
-// === AST ===
-
-/**
- * @brief Initializes AST
- *
- * @param ctx pointer to an initialized shared allocation and error context
- * @param ast pointer to a uninitialized AST variable
- */
-void ast_create(Ctx* ctx, Ast** ast);
-
-/**
- * @brief Frees AST
- *
- * @param ast pointer to a AST
- */
-void ast_destroy(Ast* ast);
-
-/**
- * @brief Clears AST
- *
- * @param ast pointer to a AST
- */
-void ast_clear(Ast* ast);
-
-/**
- * @brief Returns AST root node
- *
- * @param ast pointer to a AST
- * @param root pointer to a variable to store root node
- */
-void ast_get_root(Ast* ast, AstNode** root);
-
-/**
- * @brief Sets root node for given AST
- *
- * @param ast pointer to a AST
- * @param root pointer to a AST node to set as root
- */
-void ast_set_root(Ast* ast, AstNode* root);
-
-/**
- * @brief Detaches root node from given AST
- *
- * @param ast pointer to a AST
- * @param root pointer to a variable to store detached root node
- */
-void ast_detach_root(Ast* ast, AstNode** root);
-
-/**
- * @brief Removes node from given AST
- *
- * @param ast pointer to a AST
- * @param node pointer to a AST node to remove
- */
-void ast_remove_node(Ast* ast, AstNode* node);
-
-/**
- * @brief Replaces node in given AST
- *
- * @param ast pointer to a AST
- * @param old_node pointer to a AST node to replace
- * @param new_node pointer to a replacement AST node
- */
-void ast_replace_node(Ast* ast, AstNode* old_node, AstNode* new_node);
 
 #endif

@@ -13,6 +13,6 @@ typedef enum {
 
 Parser* parser_create(void);
 void parser_destroy(Parser* parser);
-ParserStatus parser_parse(Parser* parser, Ast* ast);
+ParserStatus parser_parse(Parser* parser, AstNode** root);
 
 #endif
