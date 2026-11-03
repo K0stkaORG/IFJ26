@@ -66,7 +66,7 @@ typedef union {
 void ast_node_create(Ctx* ctx, AstNode** node);
 
 /**
- * @brief Frees AST node
+ * @brief Frees an AST node and its descendants, detaching it from its parent
  *
  * @param ctx pointer to an initialized shared allocation and error context
  * @param node pointer to a AST node
@@ -167,6 +167,9 @@ void ast_node_insert_child(Ctx* ctx,
  * @param index index of child to detach
  * @param child pointer to a variable to store detached child node
  */
-void ast_node_detach_child(Ctx* ctx, AstNode* node, size_t index, AstNode** child);
+void ast_node_detach_child(Ctx* ctx,
+                           AstNode* node,
+                           size_t index,
+                           AstNode** child);
 
 #endif
