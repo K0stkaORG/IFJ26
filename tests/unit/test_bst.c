@@ -15,6 +15,7 @@
 // bst_init test
 
 #include <stdlib.h>
+#include "ctx.h"
 #define SNOW_ENABLED 1
 #include "snow/snow.h"
 
@@ -95,7 +96,7 @@ describe(bst) {
 
       Ctx context;
       Ctx* ctx = &context;
-      ctx_init(ctx);
+      ctx_init(ctx, DEFAULT_TEST_FLAGS);
 
       char key[] = "stack_key";
       int data = 42;
@@ -172,7 +173,7 @@ describe(bst) {
 
     before_each() {
       bst_init(&tree, (BstKeyComparator)strcmp, free, free);
-      ctx_init(ctx);
+      ctx_init(ctx, DEFAULT_TEST_FLAGS);
     }
 
     after_each() {
@@ -433,7 +434,7 @@ describe(bst) {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
 
-      bst_insert(ctx, &tree, NULL, data1);
+      assertThrow(E_INTERNAL_ERROR, { bst_insert(ctx, &tree, NULL, data1); });
 
       asserteq(ctx->exit_code, E_INTERNAL_ERROR);
       asserteq_ptr(tree.root, NULL);
@@ -446,7 +447,7 @@ describe(bst) {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
 
-      bst_insert(ctx, NULL, key, data1);
+      assertThrow(E_INTERNAL_ERROR, { bst_insert(ctx, NULL, key, data1); });
 
       asserteq(ctx->exit_code, E_INTERNAL_ERROR);
       free(key);
@@ -545,6 +546,17 @@ describe(bst) {
         assertneq_ptr(found, NULL);
         asserteq(*(int*)found, i);
       }
+    }
+
+    it("test malloc failure in bst_insert and verify tree remains empty") {
+      ctx->flags.forceNthMallocFail = 1;
+
+      char key[] = "a";
+      int data = 1;
+
+      asserteq_ptr(tree.root, NULL);
+      assertThrow(E_INTERNAL_ERROR, { bst_insert(ctx, &tree, key, &data); });
+      asserteq_ptr(tree.root, NULL);
     }
   }
 }
