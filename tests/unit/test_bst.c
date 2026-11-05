@@ -196,6 +196,16 @@ describe(bst) {
       asserteq_ptr(tree.root->child_right, NULL);
     }
 
+    it("inserts a and tries to search NULL key") {
+      data1 = TRY_MALLOC(sizeof(int));
+      *data1 = 1;
+
+      bst_insert(ctx, &tree, strdup("a"), data1);
+
+      void* result = bst_search(&tree, NULL);
+      asserteq_ptr(result, NULL);
+    }
+
     it("inserts a, b and verifies search for a, b, 1, d") {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
