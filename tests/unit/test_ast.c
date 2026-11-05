@@ -1,0 +1,786 @@
+/**
+ * @file ast.h
+ * Project: IFJ26
+ *
+ * @author Lukáš Pollák (xpollal00)
+ * @date 31. 10. 2026
+ *
+ * @brief Unit test for the AST
+ */
+
+#include <stdint.h>
+#include "ast.h"
+#include "snow/snow.h"
+
+#define AST_TEST_NODE_CAPACITY 32
+
+static AstNode* ast_test_nodes[AST_TEST_NODE_CAPACITY];
+static size_t ast_test_node_count;
+
+static AstNode* ast_test_node(Ctx* ctx) {
+  assert(ast_test_node_count <
+         sizeof(ast_test_nodes) / sizeof(ast_test_nodes[0]));
+  AstNode* node = NULL;
+  ast_node_create(ctx, &node);
+  ast_test_nodes[ast_test_node_count++] = node;
+  return node;
+}
+
+static void ast_test_attach_child(Ctx* ctx,
+                                  AstNode* parent,
+                                  AstNode* child,
+                                  bool insert) {
+  if (insert) {
+    ast_node_insert_child(ctx, parent, 0, child);
+  } else {
+    ast_node_append_child(ctx, parent, child);
+  }
+}
+
+describe(AST_NODE) {
+  subdesc(CREATE) {
+    it("Should create a valid AST node") {
+      // Arrange: prepare the output pointer for the new node.
+      AstNode* node = NULL;
+
+      // Act: create the node and register cleanup.
+      ast_node_create(ctx, &node);
+      defer({
+        if (node != NULL) {
+          ast_node_destroy(ctx, node);
+        }
+      });
+
+      // Assert: check the initial state exposed by the public API.
+      assertneq_ptr(node, NULL);
+      asserteq(ast_node_get_type(node), AST_NODE_NONE);
+      asserteq(ast_node_get_child_count(node), 0);
+      asserteq(ast_node_get_value(node).int_value, 0);
+
+      AstNode* parent = node;
+      ast_node_get_parent(node, &parent);
+      asserteq_ptr(parent, NULL);
+    }
+  }
+
+  subdesc(DESTROY) {
+    it("Should destroy a node and its children") {
+      // Arrange: build a tree with multiple children and a grandchild.
+      static AstNode* root;
+      static AstNode* pending;
+      root = NULL;
+      pending = NULL;
+      defer({
+        if (pending != NULL) {
+          ast_node_destroy(ctx, pending);
+        }
+        if (root != NULL) {
+          ast_node_destroy(ctx, root);
+        }
+      });
+
+      ast_node_create(ctx, &root);
+      for (size_t child_index = 0; child_index < 4; child_index++) {
+        ast_node_create(ctx, &pending);
+        ast_node_append_child(ctx, root, pending);
+        pending = NULL;
+      }
+
+      AstNode* first_child = NULL;
+      ast_node_get_child(ctx, root, 0, &first_child);
+      ast_node_create(ctx, &pending);
+      ast_node_append_child(ctx, first_child, pending);
+      pending = NULL;
+
+      // Act: destroy the root and its owned descendants.
+      assertNoThrow({
+        ast_node_destroy(ctx, root);
+        root = NULL;
+      });
+
+      // Assert: check that recursive destruction completed without an error.
+      asserteq(ctx->exit_code, E_OK);
+    }
+
+    it("Should compact the parent when destroying any attached subtree") {
+      static AstNode* root;
+      static AstNode* pending;
+      root = NULL;
+      pending = NULL;
+      defer({
+        if (pending != NULL) {
+          ast_node_destroy(ctx, pending);
+        }
+        if (root != NULL) {
+          ast_node_destroy(ctx, root);
+        }
+      });
+
+      for (size_t child_count = 1; child_count <= 4; child_count++) {
+        for (size_t removed_index = 0; removed_index < child_count;
+             removed_index++) {
+          AstNode* children[4] = {NULL};
+          ast_node_create(ctx, &root);
+          for (size_t child_index = 0; child_index < child_count;
+               child_index++) {
+            ast_node_create(ctx, &pending);
+            ast_node_append_child(ctx, root, pending);
+            children[child_index] = pending;
+            pending = NULL;
+          }
+          for (size_t descendant_index = 0; descendant_index < 3;
+               descendant_index++) {
+            ast_node_create(ctx, &pending);
+            ast_node_append_child(ctx, children[removed_index], pending);
+            pending = NULL;
+          }
+
+          assertNoThrow({ ast_node_destroy(ctx, children[removed_index]); });
+          children[removed_index] = NULL;
+
+          asserteq(ast_node_get_child_count(root), child_count - 1);
+          size_t remaining_index = 0;
+          for (size_t child_index = 0; child_index < child_count;
+               child_index++) {
+            if (child_index == removed_index) {
+              continue;
+            }
+            AstNode* actual = NULL;
+            ast_node_get_child(ctx, root, remaining_index++, &actual);
+            asserteq_ptr(actual, children[child_index]);
+            ast_node_get_parent(actual, &actual);
+            asserteq_ptr(actual, root);
+          }
+          AstNode* actual = NULL;
+          assertThrow(E_INTERNAL_ERROR, {
+            ast_node_get_child(ctx, root, child_count - 1, &actual);
+          });
+          ctx->exit_code = E_OK;
+
+          ast_node_create(ctx, &pending);
+          ast_node_append_child(ctx, root, pending);
+          AstNode* replacement = pending;
+          pending = NULL;
+          asserteq(ast_node_get_child_count(root), child_count);
+          ast_node_get_child(ctx, root, child_count - 1, &actual);
+          asserteq_ptr(actual, replacement);
+          ast_node_get_parent(replacement, &actual);
+          asserteq_ptr(actual, root);
+
+          assertNoThrow({
+            ast_node_destroy(ctx, root);
+            root = NULL;
+          });
+        }
+      }
+    }
+  }
+}
+
+describe(AST_NODE_OPERATIONS) {
+  before_each() {
+    ast_test_node_count = 0;
+  }
+
+  after_each() {
+    ctx->flags.forceNthMallocFail = 0;
+    for (size_t index = 0; index < ast_test_node_count; index++) {
+      while (ast_node_get_child_count(ast_test_nodes[index]) > 0) {
+        AstNode* detached = NULL;
+        ast_node_detach_child(ctx, ast_test_nodes[index], 0, &detached);
+      }
+    }
+    for (size_t index = 0; index < ast_test_node_count; index++) {
+      ast_node_destroy(ctx, ast_test_nodes[index]);
+    }
+    ast_test_node_count = 0;
+  }
+
+  subdesc(ATTACHMENT_REGRESSIONS) {
+    it("Should reject duplicate children in append and insert") {
+      for (size_t operation = 0; operation < 2; operation++) {
+        // Arrange: attach two children to expose unintended insertion shifts.
+        ctx->exit_code = E_OK;
+        AstNode* parent = ast_test_node(ctx);
+        AstNode* first = ast_test_node(ctx);
+        AstNode* second = ast_test_node(ctx);
+        ast_node_append_child(ctx, parent, first);
+        ast_node_append_child(ctx, parent, second);
+
+        // Act: try to attach the second child again.
+        assertThrow(E_INTERNAL_ERROR, {
+          ast_test_attach_child(ctx, parent, second, operation == 1);
+        });
+
+        // Assert: preserve both children in order and their original parent.
+        asserteq(ast_node_get_child_count(parent), 2);
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, parent, 0, &actual);
+        asserteq_ptr(actual, first);
+        ast_node_get_child(ctx, parent, 1, &actual);
+        asserteq_ptr(actual, second);
+        ast_node_get_parent(first, &actual);
+        asserteq_ptr(actual, parent);
+        ast_node_get_parent(second, &actual);
+        asserteq_ptr(actual, parent);
+      }
+    }
+
+    it("Should reject children owned by another parent in append and insert") {
+      for (size_t operation = 0; operation < 2; operation++) {
+        // Arrange: give both the source and destination an existing child.
+        ctx->exit_code = E_OK;
+        AstNode* source = ast_test_node(ctx);
+        AstNode* destination = ast_test_node(ctx);
+        AstNode* child = ast_test_node(ctx);
+        AstNode* existing = ast_test_node(ctx);
+        ast_node_append_child(ctx, source, child);
+        ast_node_append_child(ctx, destination, existing);
+
+        // Act: try to attach the source's child to the destination.
+        assertThrow(E_INTERNAL_ERROR, {
+          ast_test_attach_child(ctx, destination, child, operation == 1);
+        });
+
+        // Assert: preserve each parent's child and both ownership pointers.
+        asserteq(ast_node_get_child_count(source), 1);
+        asserteq(ast_node_get_child_count(destination), 1);
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, source, 0, &actual);
+        asserteq_ptr(actual, child);
+        ast_node_get_child(ctx, destination, 0, &actual);
+        asserteq_ptr(actual, existing);
+        ast_node_get_parent(child, &actual);
+        asserteq_ptr(actual, source);
+        ast_node_get_parent(existing, &actual);
+        asserteq_ptr(actual, destination);
+      }
+    }
+
+    it("Should reject self-attachment in append and insert") {
+      for (size_t operation = 0; operation < 2; operation++) {
+        // Arrange: create a detached node with no children.
+        ctx->exit_code = E_OK;
+        AstNode* node = ast_test_node(ctx);
+
+        // Act: try to make the node its own child.
+        assertThrow(E_INTERNAL_ERROR, {
+          ast_test_attach_child(ctx, node, node, operation == 1);
+        });
+
+        // Assert: leave the node detached and childless.
+        asserteq(ast_node_get_child_count(node), 0);
+        AstNode* actual = node;
+        ast_node_get_parent(node, &actual);
+        asserteq_ptr(actual, NULL);
+      }
+    }
+
+    it("Should reject root attachment beneath descendants in append and "
+       "insert") {
+      for (size_t operation = 0; operation < 2; operation++) {
+        // Arrange: build a three-level tree whose root has no parent.
+        ctx->exit_code = E_OK;
+        AstNode* root = ast_test_node(ctx);
+        AstNode* middle = ast_test_node(ctx);
+        AstNode* leaf = ast_test_node(ctx);
+        ast_node_append_child(ctx, root, middle);
+        ast_node_append_child(ctx, middle, leaf);
+
+        // Act: try to close a cycle at each descendant level.
+        assertThrow(E_INTERNAL_ERROR, {
+          ast_test_attach_child(ctx, middle, root, operation == 1);
+        });
+        assertThrow(E_INTERNAL_ERROR, {
+          ast_test_attach_child(ctx, leaf, root, operation == 1);
+        });
+
+        // Assert: preserve the complete acyclic tree and its parent links.
+        asserteq(ast_node_get_child_count(root), 1);
+        asserteq(ast_node_get_child_count(middle), 1);
+        asserteq(ast_node_get_child_count(leaf), 0);
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, root, 0, &actual);
+        asserteq_ptr(actual, middle);
+        ast_node_get_child(ctx, middle, 0, &actual);
+        asserteq_ptr(actual, leaf);
+        ast_node_get_parent(root, &actual);
+        asserteq_ptr(actual, NULL);
+        ast_node_get_parent(middle, &actual);
+        asserteq_ptr(actual, root);
+        ast_node_get_parent(leaf, &actual);
+        asserteq_ptr(actual, middle);
+      }
+    }
+  }
+
+  subdesc(ATTACHMENT_TRANSFERS) {
+    it("Should allow detached children to move through append and insert") {
+      for (size_t operation = 0; operation < 2; operation++) {
+        // Arrange: detach a child and prepare a destination with one sibling.
+        AstNode* source = ast_test_node(ctx);
+        AstNode* destination = ast_test_node(ctx);
+        AstNode* child = ast_test_node(ctx);
+        AstNode* existing = ast_test_node(ctx);
+        ast_node_append_child(ctx, source, child);
+        ast_node_append_child(ctx, destination, existing);
+        AstNode* detached = NULL;
+        ast_node_detach_child(ctx, source, 0, &detached);
+
+        // Act: transfer ownership of the detached child to the destination.
+        assertNoThrow({
+          ast_test_attach_child(ctx, destination, detached, operation == 1);
+        });
+
+        // Assert: preserve the sibling and expose the requested child order.
+        asserteq_ptr(detached, child);
+        asserteq(ast_node_get_child_count(source), 0);
+        asserteq(ast_node_get_child_count(destination), 2);
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, destination, operation == 1 ? 0 : 1, &actual);
+        asserteq_ptr(actual, child);
+        ast_node_get_child(ctx, destination, operation == 1 ? 1 : 0, &actual);
+        asserteq_ptr(actual, existing);
+        ast_node_get_parent(child, &actual);
+        asserteq_ptr(actual, destination);
+        ast_node_get_parent(existing, &actual);
+        asserteq_ptr(actual, destination);
+      }
+    }
+
+    it("Should allow independent subtrees in append and insert") {
+      for (size_t operation = 0; operation < 2; operation++) {
+        // Arrange: build an independent subtree and a destination sibling.
+        AstNode* parent = ast_test_node(ctx);
+        AstNode* existing = ast_test_node(ctx);
+        AstNode* subtree = ast_test_node(ctx);
+        AstNode* leaf = ast_test_node(ctx);
+        ast_node_append_child(ctx, parent, existing);
+        ast_node_append_child(ctx, subtree, leaf);
+
+        // Act: attach the parentless subtree without disturbing descendants.
+        assertNoThrow(
+            { ast_test_attach_child(ctx, parent, subtree, operation == 1); });
+
+        // Assert: preserve sibling order and every new or existing parent link.
+        asserteq(ast_node_get_child_count(parent), 2);
+        asserteq(ast_node_get_child_count(subtree), 1);
+        asserteq(ast_node_get_child_count(leaf), 0);
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, parent, operation == 1 ? 0 : 1, &actual);
+        asserteq_ptr(actual, subtree);
+        ast_node_get_child(ctx, parent, operation == 1 ? 1 : 0, &actual);
+        asserteq_ptr(actual, existing);
+        ast_node_get_child(ctx, subtree, 0, &actual);
+        asserteq_ptr(actual, leaf);
+        ast_node_get_parent(subtree, &actual);
+        asserteq_ptr(actual, parent);
+        ast_node_get_parent(leaf, &actual);
+        asserteq_ptr(actual, subtree);
+        ast_node_get_parent(existing, &actual);
+        asserteq_ptr(actual, parent);
+        ast_node_get_parent(parent, &actual);
+        asserteq_ptr(actual, NULL);
+      }
+    }
+  }
+
+  subdesc(GET_CHILD) {
+    it("Should reject child indices at the count and SIZE_MAX") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* child = ast_test_node(ctx);
+      ast_node_append_child(ctx, parent, child);
+      size_t indices[] = {1, SIZE_MAX};
+
+      // Act: execute the function.
+      for (size_t index = 0; index < 2; index++) {
+        AstNode* actual = NULL;
+        assertThrow(E_INTERNAL_ERROR, {
+          ast_node_get_child(ctx, parent, indices[index], &actual);
+        });
+      }
+
+      // Assert: check the observable result.
+      asserteq(ctx->exit_code, E_INTERNAL_ERROR);
+      asserteq(ast_node_get_child_count(parent), 1);
+    }
+  }
+
+  subdesc(ATTACHMENT_ALLOCATION) {
+    it("Should preserve a full buffer after failed growth and allow retry") {
+      for (size_t operation = 0; operation < 2; operation++) {
+        AstNode* parent = ast_test_node(ctx);
+        AstNode* existing[3];
+        for (size_t index = 0; index < 3; index++) {
+          existing[index] = ast_test_node(ctx);
+          ast_node_append_child(ctx, parent, existing[index]);
+        }
+        AstNode* child = ast_test_node(ctx);
+
+        for (size_t attempt = 0; attempt < 2; attempt++) {
+          ctx->exit_code = E_OK;
+          ctx->flags.forceNthMallocFail = 1;
+          assertThrow(E_INTERNAL_ERROR, {
+            if (operation == 0) {
+              ast_node_append_child(ctx, parent, child);
+            } else {
+              ast_node_insert_child(ctx, parent, 1, child);
+            }
+          });
+
+          asserteq(ctx->flags.forceNthMallocFail, 0);
+          asserteq(ast_node_get_child_count(parent), 3);
+          AstNode* actual = NULL;
+          ast_node_get_parent(child, &actual);
+          asserteq_ptr(actual, NULL);
+          for (size_t index = 0; index < 3; index++) {
+            ast_node_get_child(ctx, parent, index, &actual);
+            asserteq_ptr(actual, existing[index]);
+            ast_node_get_parent(existing[index], &actual);
+            asserteq_ptr(actual, parent);
+          }
+        }
+
+        ctx->exit_code = E_OK;
+        ctx->flags.forceNthMallocFail = 0;
+        assertNoThrow({
+          if (operation == 0) {
+            ast_node_append_child(ctx, parent, child);
+          } else {
+            ast_node_insert_child(ctx, parent, 1, child);
+          }
+        });
+
+        asserteq(ast_node_get_child_count(parent), 4);
+        AstNode* expected[4] = {existing[0], existing[1], existing[2], child};
+        if (operation != 0) {
+          expected[1] = child;
+          expected[2] = existing[1];
+          expected[3] = existing[2];
+        }
+        for (size_t index = 0; index < 4; index++) {
+          AstNode* actual = NULL;
+          ast_node_get_child(ctx, parent, index, &actual);
+          asserteq_ptr(actual, expected[index]);
+          ast_node_get_parent(expected[index], &actual);
+          asserteq_ptr(actual, parent);
+        }
+      }
+    }
+  }
+
+  subdesc(APPEND_CHILD) {
+    it("Should append the first child and establish its parent") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* child = ast_test_node(ctx);
+
+      // Act: execute the function.
+      ast_node_append_child(ctx, parent, child);
+
+      // Assert: check the observable result.
+      AstNode* actual = NULL;
+      ast_node_get_child(ctx, parent, 0, &actual);
+      asserteq_ptr(actual, child);
+      asserteq(ast_node_get_child_count(parent), 1);
+      ast_node_get_parent(child, &actual);
+      asserteq_ptr(actual, parent);
+    }
+
+    it("Should preserve child order across repeated buffer growth") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* children[10];
+      for (size_t index = 0; index < 10; index++) {
+        children[index] = ast_test_node(ctx);
+      }
+
+      // Act: execute the function.
+      for (size_t index = 0; index < 10; index++) {
+        ast_node_append_child(ctx, parent, children[index]);
+      }
+
+      // Assert: check the observable result.
+      asserteq(ast_node_get_child_count(parent), 10);
+      for (size_t index = 0; index < 10; index++) {
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, parent, index, &actual);
+        asserteq_ptr(actual, children[index]);
+        ast_node_get_parent(children[index], &actual);
+        asserteq_ptr(actual, parent);
+      }
+    }
+  }
+
+  subdesc(INSERT_CHILD) {
+    it("Should insert at index zero into an empty node") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* child = ast_test_node(ctx);
+
+      // Act: execute the function.
+      ast_node_insert_child(ctx, parent, 0, child);
+
+      // Assert: check the observable result.
+      AstNode* actual = NULL;
+      ast_node_get_child(ctx, parent, 0, &actual);
+      asserteq_ptr(actual, child);
+      asserteq(ast_node_get_child_count(parent), 1);
+      ast_node_get_parent(child, &actual);
+      asserteq_ptr(actual, parent);
+    }
+
+    it("Should insert at the beginning and preserve child order") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* existing[3];
+      for (size_t index = 0; index < 3; index++) {
+        existing[index] = ast_test_node(ctx);
+        ast_node_append_child(ctx, parent, existing[index]);
+      }
+      AstNode* child = ast_test_node(ctx);
+
+      // Act: execute the function.
+      ast_node_insert_child(ctx, parent, 0, child);
+
+      // Assert: check the observable result.
+      asserteq(ast_node_get_child_count(parent), 4);
+      for (size_t index = 0; index < 4; index++) {
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, parent, index, &actual);
+        AstNode* expected =
+            index == 0 ? child : existing[index < 0 ? index : index - 1];
+        asserteq_ptr(actual, expected);
+      }
+      AstNode* actual_parent = NULL;
+      ast_node_get_parent(child, &actual_parent);
+      asserteq_ptr(actual_parent, parent);
+    }
+
+    it("Should insert at the middle and preserve child order") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* existing[3];
+      for (size_t index = 0; index < 3; index++) {
+        existing[index] = ast_test_node(ctx);
+        ast_node_append_child(ctx, parent, existing[index]);
+      }
+      AstNode* child = ast_test_node(ctx);
+
+      // Act: execute the function.
+      ast_node_insert_child(ctx, parent, 1, child);
+
+      // Assert: check the observable result.
+      asserteq(ast_node_get_child_count(parent), 4);
+      for (size_t index = 0; index < 4; index++) {
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, parent, index, &actual);
+        AstNode* expected =
+            index == 1 ? child : existing[index < 1 ? index : index - 1];
+        asserteq_ptr(actual, expected);
+      }
+      AstNode* actual_parent = NULL;
+      ast_node_get_parent(child, &actual_parent);
+      asserteq_ptr(actual_parent, parent);
+    }
+
+    it("Should insert at the end and preserve child order") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* existing[3];
+      for (size_t index = 0; index < 3; index++) {
+        existing[index] = ast_test_node(ctx);
+        ast_node_append_child(ctx, parent, existing[index]);
+      }
+      AstNode* child = ast_test_node(ctx);
+
+      // Act: execute the function.
+      ast_node_insert_child(ctx, parent, 3, child);
+
+      // Assert: check the observable result.
+      asserteq(ast_node_get_child_count(parent), 4);
+      for (size_t index = 0; index < 4; index++) {
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, parent, index, &actual);
+        AstNode* expected =
+            index == 3 ? child : existing[index < 3 ? index : index - 1];
+        asserteq_ptr(actual, expected);
+      }
+      AstNode* actual_parent = NULL;
+      ast_node_get_parent(child, &actual_parent);
+      asserteq_ptr(actual_parent, parent);
+    }
+
+    it("Should reject insertion beyond the count including SIZE_MAX") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* child = ast_test_node(ctx);
+      size_t indices[] = {1, SIZE_MAX};
+
+      // Act: execute the function.
+      for (size_t index = 0; index < 2; index++) {
+        assertThrow(E_INTERNAL_ERROR, {
+          ast_node_insert_child(ctx, parent, indices[index], child);
+        });
+      }
+
+      // Assert: check the observable result.
+      asserteq(ast_node_get_child_count(parent), 0);
+
+      AstNode* actual = child;
+      ast_node_get_parent(child, &actual);
+      asserteq_ptr(actual, NULL);
+    }
+  }
+
+  subdesc(DETACH_CHILD) {
+    it("Should detach the only child and clear its parent") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* children[1];
+      for (size_t index = 0; index < 1; index++) {
+        children[index] = ast_test_node(ctx);
+        ast_node_append_child(ctx, parent, children[index]);
+      }
+      AstNode* detached = NULL;
+
+      // Act: execute the function.
+      ast_node_detach_child(ctx, parent, 0, &detached);
+
+      // Assert: check the observable result.
+      asserteq_ptr(detached, children[0]);
+      asserteq(ast_node_get_child_count(parent), 0);
+      for (size_t index = 0; index < 0; index++) {
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, parent, index, &actual);
+        asserteq_ptr(actual, children[index < 0 ? index : index + 1]);
+        AstNode* actual_parent = NULL;
+        ast_node_get_parent(actual, &actual_parent);
+        asserteq_ptr(actual_parent, parent);
+      }
+      AstNode* actual_parent = parent;
+      ast_node_get_parent(detached, &actual_parent);
+      asserteq_ptr(actual_parent, NULL);
+      ast_node_set_type(detached, AST_NODE_RETURN);
+      asserteq(ast_node_get_type(detached), AST_NODE_RETURN);
+    }
+
+    it("Should detach the first child and clear its parent") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* children[3];
+      for (size_t index = 0; index < 3; index++) {
+        children[index] = ast_test_node(ctx);
+        ast_node_append_child(ctx, parent, children[index]);
+      }
+      AstNode* detached = NULL;
+
+      // Act: execute the function.
+      ast_node_detach_child(ctx, parent, 0, &detached);
+
+      // Assert: check the observable result.
+      asserteq_ptr(detached, children[0]);
+      asserteq(ast_node_get_child_count(parent), 2);
+      for (size_t index = 0; index < 2; index++) {
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, parent, index, &actual);
+        asserteq_ptr(actual, children[index < 0 ? index : index + 1]);
+        AstNode* actual_parent = NULL;
+        ast_node_get_parent(actual, &actual_parent);
+        asserteq_ptr(actual_parent, parent);
+      }
+      AstNode* actual_parent = parent;
+      ast_node_get_parent(detached, &actual_parent);
+      asserteq_ptr(actual_parent, NULL);
+      ast_node_set_type(detached, AST_NODE_RETURN);
+      asserteq(ast_node_get_type(detached), AST_NODE_RETURN);
+    }
+
+    it("Should detach the middle child and clear its parent") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* children[3];
+      for (size_t index = 0; index < 3; index++) {
+        children[index] = ast_test_node(ctx);
+        ast_node_append_child(ctx, parent, children[index]);
+      }
+      AstNode* detached = NULL;
+
+      // Act: execute the function.
+      ast_node_detach_child(ctx, parent, 1, &detached);
+
+      // Assert: check the observable result.
+      asserteq_ptr(detached, children[1]);
+      asserteq(ast_node_get_child_count(parent), 2);
+      for (size_t index = 0; index < 2; index++) {
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, parent, index, &actual);
+        asserteq_ptr(actual, children[index < 1 ? index : index + 1]);
+        AstNode* actual_parent = NULL;
+        ast_node_get_parent(actual, &actual_parent);
+        asserteq_ptr(actual_parent, parent);
+      }
+      AstNode* actual_parent = parent;
+      ast_node_get_parent(detached, &actual_parent);
+      asserteq_ptr(actual_parent, NULL);
+      ast_node_set_type(detached, AST_NODE_RETURN);
+      asserteq(ast_node_get_type(detached), AST_NODE_RETURN);
+    }
+
+    it("Should detach the last child and clear its parent") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* children[3];
+      for (size_t index = 0; index < 3; index++) {
+        children[index] = ast_test_node(ctx);
+        ast_node_append_child(ctx, parent, children[index]);
+      }
+      AstNode* detached = NULL;
+
+      // Act: execute the function.
+      ast_node_detach_child(ctx, parent, 2, &detached);
+
+      // Assert: check the observable result.
+      asserteq_ptr(detached, children[2]);
+      asserteq(ast_node_get_child_count(parent), 2);
+      for (size_t index = 0; index < 2; index++) {
+        AstNode* actual = NULL;
+        ast_node_get_child(ctx, parent, index, &actual);
+        asserteq_ptr(actual, children[index < 2 ? index : index + 1]);
+        AstNode* actual_parent = NULL;
+        ast_node_get_parent(actual, &actual_parent);
+        asserteq_ptr(actual_parent, parent);
+      }
+      AstNode* actual_parent = parent;
+      ast_node_get_parent(detached, &actual_parent);
+      asserteq_ptr(actual_parent, NULL);
+      ast_node_set_type(detached, AST_NODE_RETURN);
+      asserteq(ast_node_get_type(detached), AST_NODE_RETURN);
+    }
+
+    it("Should reject detachment at the count and SIZE_MAX") {
+      // Arrange: prepare resources for the function.
+      AstNode* parent = ast_test_node(ctx);
+      AstNode* child = ast_test_node(ctx);
+      ast_node_append_child(ctx, parent, child);
+      size_t indices[] = {1, SIZE_MAX};
+
+      // Act: execute the function.
+      for (size_t index = 0; index < 2; index++) {
+        AstNode* detached = NULL;
+        assertThrow(E_INTERNAL_ERROR, {
+          ast_node_detach_child(ctx, parent, indices[index], &detached);
+        });
+      }
+
+      // Assert: check the observable result.
+      asserteq(ast_node_get_child_count(parent), 1);
+      AstNode* actual = NULL;
+      ast_node_get_child(ctx, parent, 0, &actual);
+      asserteq_ptr(actual, child);
+    }
+  }
+}
+
+snow_main();

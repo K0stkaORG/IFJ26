@@ -1,1 +1,192 @@
 #include "ast.h"
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include "ctx.h"
+
+struct AstNode {
+  AstNodeType type;
+  AstNodeValue value;
+
+  AstNode* parent;
+  AstNode** child_nodes;
+  size_t child_count;
+  size_t child_capacity;
+};
+
+/**
+ * HELPERS
+ */
+
+// NOLINTNEXTLINE(misc-no-recursion)
+static bool ast_node_is_ancestor(const AstNode* node,
+                                 const AstNode* candidate) {
+  if (node == NULL) {
+    return false;
+  }
+  if (node == candidate) {
+    return true;
+  }
+  return ast_node_is_ancestor(node->parent, candidate);
+}
+
+/**
+ * PUBLIC
+ */
+void ast_node_create(Ctx* ctx, AstNode** node) {
+  if (node == NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot create AST node: output pointer is NULL");
+  }
+
+  AstNode* temp = TRY_MALLOC(sizeof(*temp));
+  AstNode** children =
+      TRY_MALLOC_OR(sizeof(*temp->child_nodes), { free(temp); });
+
+  *temp = (AstNode){.type = AST_NODE_NONE,
+                    .value = {.int_value = 0},
+                    .parent = NULL,
+                    .child_nodes = children,
+                    .child_count = 0,
+                    .child_capacity = 0};
+  *node = temp;
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void ast_node_destroy(Ctx* ctx, AstNode* node) {
+  if (node == NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot destroy AST node: node pointer is NULL");
+  }
+  if (node->parent != NULL) {
+    AstNode* parent = node->parent;
+    size_t child_index = parent->child_count;
+    while (child_index > 0 && parent->child_nodes[child_index - 1] != node) {
+      child_index--;
+    }
+    if (child_index == 0) {
+      THROW(E_INTERNAL_ERROR, "Cannot destroy AST node: parent does not own node");
+    }
+    AstNode* detached = NULL;
+    ast_node_detach_child(ctx, parent, child_index - 1, &detached);
+  }
+  while (node->child_count > 0) {
+    ast_node_destroy(ctx, node->child_nodes[node->child_count - 1]);
+  }
+  free(node->child_nodes);
+  free(node);
+  return;
+}
+
+void ast_node_set_type(AstNode* node, AstNodeType type) {
+  node->type = type;
+}
+
+void ast_node_set_value(AstNode* node, AstNodeValue value) {
+  node->value = value;
+}
+
+AstNodeType ast_node_get_type(const AstNode* node) {
+  return node->type;
+}
+
+AstNodeValue ast_node_get_value(const AstNode* node) {
+  return node->value;
+}
+
+size_t ast_node_get_child_count(const AstNode* node) {
+  return node->child_count;
+}
+
+void ast_node_get_child(Ctx* ctx,
+                        AstNode* node,
+                        size_t index,
+                        AstNode** child) {
+  if (index >= node->child_count) {
+    THROW(E_INTERNAL_ERROR, "Cannot get child: index out of bounds");
+  }
+  *child = node->child_nodes[index];
+}
+
+void ast_node_get_parent(AstNode* node, AstNode** parent) {
+  *parent = node->parent;
+}
+
+void ast_node_append_child(Ctx* ctx, AstNode* node, AstNode* child) {
+  if (node == NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot append child: node pointer is NULL");
+  }
+  if (child == NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot append child: child pointer is NULL");
+  }
+  if (child->parent != NULL) {
+    THROW(E_INTERNAL_ERROR,
+          "Cannot append child: child already has node as parent");
+  }
+  if (ast_node_is_ancestor(node, child)) {
+    THROW(E_INTERNAL_ERROR, "Cannot append child: child is ancestor of node");
+  }
+  if (node->child_count == node->child_capacity) {
+    size_t new_capacity = node->child_capacity * 2 + 1;
+    TRY_REALLOC(node->child_nodes,
+                new_capacity * sizeof(*node->child_nodes));
+    node->child_capacity = new_capacity;
+  }
+  node->child_nodes[node->child_count++] = child;
+  child->parent = node;
+}
+
+void ast_node_insert_child(Ctx* ctx,
+                           AstNode* node,
+                           size_t index,
+                           AstNode* child) {
+  if (node == NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot insert child: parent pointer is NULL");
+  }
+  if (child == NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot insert child: child pointer is NULL");
+  }
+  if (child->parent != NULL) {
+    THROW(E_INTERNAL_ERROR,
+          "Cannot append child: child already has node as parent");
+  }
+  if (ast_node_is_ancestor(node, child)) {
+    THROW(E_INTERNAL_ERROR, "Cannot append child: child is ancestor of node");
+  }
+  if (index > node->child_count) {
+    THROW(E_INTERNAL_ERROR, "Cannot insert child: index out of bounds");
+  }
+  if (node->child_count == node->child_capacity) {
+    size_t new_capacity = node->child_capacity * 2 + 1;
+    TRY_REALLOC(node->child_nodes,
+                new_capacity * sizeof(*node->child_nodes));
+    node->child_capacity = new_capacity;
+  }
+  for (size_t i = node->child_count; i > index; i--) {
+    node->child_nodes[i] = node->child_nodes[i - 1];
+  }
+  node->child_nodes[index] = child;
+  node->child_count++;
+  child->parent = node;
+}
+
+void ast_node_detach_child(Ctx* ctx,
+                           AstNode* node,
+                           size_t index,
+                           AstNode** child) {
+  if (node == NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot detach child: parent pointer is NULL");
+  }
+  if (index >= node->child_count) {
+    THROW(E_INTERNAL_ERROR, "Cannot detach child: index out of bounds");
+  }
+  if (node->child_nodes[index] == NULL) {
+    THROW(E_INTERNAL_ERROR,
+          "Cannot detach child: child at index %zu doesn't exist", index);
+  }
+  *child = node->child_nodes[index];
+  (*child)->parent = NULL;
+  for (size_t i = index; i < node->child_count - 1; i++) {
+    node->child_nodes[i] = node->child_nodes[i + 1];
+  }
+  node->child_count--;
+  node->child_nodes[node->child_count] = NULL;
+}
