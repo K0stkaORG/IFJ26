@@ -58,15 +58,16 @@ void bst_init(Bst* tree,
               BstDataDestructor data_destructor);
 
 /**
- * @brief Configure node and insert it into BST
+ * @brief Insert data under key into BST
  * @param ctx Error context
  * @param tree Pointer to the tree
  * @param key Key of the node
  * @param data Data stored in the node
- * @pre Tree is initialized
+ * @pre tree != NULL, key != NULL
  * @pre If key destructor is set, key must be allocated on heap.
  * @pre If data destructor is set, data must be allocated on heap.
  * @pre Data must not be reinserted under different key.
+ * @pre Reusing key will result in original data loss.
  */
 void bst_insert(Ctx* ctx, Bst* tree, void* key, void* data);
 

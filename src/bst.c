@@ -136,7 +136,7 @@ static BstNode* bst_rotate_right(BstNode* node) {
  * @brief Check balance around critical node and if unbalanced, perform
  * rotations
  * @param node Pointer to the critical node
- * @return Pointer to the modified critical node
+ * @return Pointer to the root of balanced subtree
  */
 static BstNode* bst_node_repair_balance(BstNode* node) {
   if (bst_node_get_balance(node) == -2) {
