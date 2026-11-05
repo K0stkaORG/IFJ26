@@ -181,7 +181,7 @@ describe(bst) {
       ctx_free(ctx);
     }
 
-    it("inserts a and verifies search for a, b, c, 1, d") {
+    it("inserts a and verifies search for a, 1, d") {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
 
@@ -196,7 +196,7 @@ describe(bst) {
       asserteq_ptr(tree.root->child_right, NULL);
     }
 
-    it("inserts a, b and verifies search for a, b, c, 1, d") {
+    it("inserts a, b and verifies search for a, b, 1, d") {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
       data2 = TRY_MALLOC(sizeof(int));
@@ -235,7 +235,7 @@ describe(bst) {
       asserteq_ptr(tree.root->child_left, NULL);
     }
 
-    it("inserts b, a and verifies search for a, b, c, 1, d") {
+    it("inserts b, a and verifies search for a, b, 1, d") {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
       data2 = TRY_MALLOC(sizeof(int));
@@ -363,7 +363,7 @@ describe(bst) {
       asserteq_ptr(bst_search(&tree, (void*)"d"), NULL);
     }
 
-    it("updates data for an existing key using bst_node_move_data") {
+    it("updates data for an existing key") {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
       data2 = TRY_MALLOC(sizeof(int));
@@ -379,7 +379,7 @@ describe(bst) {
       asserteq_ptr(tree.root->child_right, NULL);
     }
 
-    it("inserts already existing node with same data") {
+    it("inserts already existing key-data pair") {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
 
