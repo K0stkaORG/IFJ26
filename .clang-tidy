@@ -4,6 +4,8 @@ Checks: >
   clang-analyzer-*,
   misc-*,
   performance-*,
-  -bugprone-multi-level-implicit-pointer-conversion
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-easily-swappable-parameters,
+  -misc-no-recursion
 WarningsAsErrors: false
 HeaderFilterRegex: 'src/.*'
