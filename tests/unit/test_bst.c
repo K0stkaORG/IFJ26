@@ -42,10 +42,7 @@ struct BstNode {
 // replaced all occurrences of strdup with heapStr to resolve strdup not working
 // in Windows
 
-static Ctx* test_ctx = NULL;
-
-static char* heapStr(const char* src) {
-  Ctx* ctx = test_ctx;
+static char* heapStr(Ctx* ctx, const char* src) {
   char* newStr = TRY_MALLOC(strlen(src) + 1);
   strcpy(newStr, src);
   return newStr;
@@ -112,10 +109,6 @@ describe(bst) {
       Bst tree;
       bst_init(&tree, (BstKeyComparator)strcmp, NULL, NULL);
 
-      Ctx context;
-      Ctx* ctx = &context;
-      ctx_init(ctx, DEFAULT_TEST_FLAGS);
-
       char key[] = "stack_key";
       int data = 42;
 
@@ -124,8 +117,6 @@ describe(bst) {
 
       bst_destroy(&tree);
       asserteq_ptr(tree.root, NULL);
-
-      ctx_free(ctx);
     }
   }
 
@@ -135,12 +126,10 @@ describe(bst) {
   //  1. Create Bst tree;
   //  2. Create 3 key strings: "a", "b", "c".
   //  2. Add Ctx context;
-  //  Ctx* ctx = &context;
   //  3. Declare int *data1, data2, data3;
   //
   //  Add before_each:
   //  1. call bst_init to initialize the tree
-  //  2. initialize ctx using ctx_init.
   //
   //  Then after_each (to be executed after each test delivering clear state):
   //  1. calls bst_destroy on the tree, verifying tree->root is NULL.
@@ -175,8 +164,6 @@ describe(bst) {
 
   subdesc(bst_insert) {
     Bst tree;
-    Ctx context;
-    Ctx* ctx = &context;
     int* data1;
     int* data2;
     int* data3;
@@ -190,23 +177,19 @@ describe(bst) {
     // double-free in bst_destroy
 
     before_each() {
-      test_ctx = ctx;
       bst_init(&tree, (BstKeyComparator)strcmp, free, free);
-      ctx_init(ctx, DEFAULT_TEST_FLAGS);
     }
 
     after_each() {
       bst_destroy(&tree);
       asserteq_ptr(tree.root, NULL);
-      ctx_free(ctx);
-      test_ctx = NULL;
     }
 
     it("inserts a and verifies search for a, 1, d") {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
 
-      bst_insert(ctx, &tree, heapStr("a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data1);
       asserteq(*(int*)bst_search(&tree, (void*)"a"), 1);
@@ -221,7 +204,7 @@ describe(bst) {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
 
-      bst_insert(ctx, &tree, heapStr("a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
 
       void* result = bst_search(&tree, NULL);
       asserteq_ptr(result, NULL);
@@ -233,8 +216,8 @@ describe(bst) {
       data2 = TRY_MALLOC(sizeof(int));
       *data2 = 2;
 
-      bst_insert(ctx, &tree, heapStr("a"), data1);
-      bst_insert(ctx, &tree, heapStr("b"), data2);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "b"), data2);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data1);
       asserteq(*(int*)bst_search(&tree, (void*)"a"), 1);
@@ -253,8 +236,8 @@ describe(bst) {
       data2 = TRY_MALLOC(sizeof(int));
       *data2 = 2;
 
-      bst_insert(ctx, &tree, heapStr("a"), data1);
-      bst_insert(ctx, &tree, heapStr("aa"), data2);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "aa"), data2);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data1);
       asserteq(*(int*)bst_search(&tree, (void*)"a"), 1);
@@ -272,8 +255,8 @@ describe(bst) {
       data2 = TRY_MALLOC(sizeof(int));
       *data2 = 2;
 
-      bst_insert(ctx, &tree, heapStr("b"), data2);
-      bst_insert(ctx, &tree, heapStr("a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "b"), data2);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data1);
       asserteq(*(int*)bst_search(&tree, (void*)"a"), 1);
@@ -294,9 +277,9 @@ describe(bst) {
       data3 = TRY_MALLOC(sizeof(int));
       *data3 = 3;
 
-      bst_insert(ctx, &tree, heapStr("c"), data3);
-      bst_insert(ctx, &tree, heapStr("b"), data2);
-      bst_insert(ctx, &tree, heapStr("a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "c"), data3);
+      bst_insert(ctx, &tree, heapStr(ctx, "b"), data2);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data1);
       asserteq_ptr(bst_search(&tree, (void*)"b"), data2);
@@ -321,9 +304,9 @@ describe(bst) {
       data3 = TRY_MALLOC(sizeof(int));
       *data3 = 3;
 
-      bst_insert(ctx, &tree, heapStr("a"), data1);
-      bst_insert(ctx, &tree, heapStr("b"), data2);
-      bst_insert(ctx, &tree, heapStr("c"), data3);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "b"), data2);
+      bst_insert(ctx, &tree, heapStr(ctx, "c"), data3);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data1);
       asserteq_ptr(bst_search(&tree, (void*)"b"), data2);
@@ -348,9 +331,9 @@ describe(bst) {
       data3 = TRY_MALLOC(sizeof(int));
       *data3 = 3;
 
-      bst_insert(ctx, &tree, heapStr("c"), data3);
-      bst_insert(ctx, &tree, heapStr("a"), data1);
-      bst_insert(ctx, &tree, heapStr("b"), data2);
+      bst_insert(ctx, &tree, heapStr(ctx, "c"), data3);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "b"), data2);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data1);
       asserteq_ptr(bst_search(&tree, (void*)"b"), data2);
@@ -375,9 +358,9 @@ describe(bst) {
       data3 = TRY_MALLOC(sizeof(int));
       *data3 = 3;
 
-      bst_insert(ctx, &tree, heapStr("a"), data1);
-      bst_insert(ctx, &tree, heapStr("c"), data3);
-      bst_insert(ctx, &tree, heapStr("b"), data2);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "c"), data3);
+      bst_insert(ctx, &tree, heapStr(ctx, "b"), data2);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data1);
       asserteq_ptr(bst_search(&tree, (void*)"b"), data2);
@@ -400,8 +383,8 @@ describe(bst) {
       data2 = TRY_MALLOC(sizeof(int));
       *data2 = 2;
 
-      bst_insert(ctx, &tree, heapStr("a"), data1);
-      bst_insert(ctx, &tree, heapStr("a"), data2);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data2);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data2);
       asserteq(*(int*)bst_search(&tree, (void*)"a"), 2);
@@ -414,8 +397,8 @@ describe(bst) {
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
 
-      bst_insert(ctx, &tree, heapStr("a"), data1);
-      bst_insert(ctx, &tree, heapStr("a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data1);
       asserteq(*(int*)bst_search(&tree, (void*)"a"), 1);
@@ -432,9 +415,9 @@ describe(bst) {
       data3 = TRY_MALLOC(sizeof(int));
       *data3 = 3;
 
-      bst_insert(ctx, &tree, heapStr("a"), data1);
-      bst_insert(ctx, &tree, heapStr("a"), data2);
-      bst_insert(ctx, &tree, heapStr("a"), data3);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data1);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data2);
+      bst_insert(ctx, &tree, heapStr(ctx, "a"), data3);
 
       asserteq_ptr(bst_search(&tree, (void*)"a"), data3);
       asserteq(*(int*)bst_search(&tree, (void*)"a"), 3);
@@ -463,7 +446,7 @@ describe(bst) {
 
     it("attempts to insert valid heap key and data to NULL tree using "
        "bst_insert") {
-      char* key = heapStr("a");
+      char* key = heapStr(ctx, "a");
       data1 = TRY_MALLOC(sizeof(int));
       *data1 = 1;
 
@@ -493,7 +476,7 @@ describe(bst) {
         snprintf(key_buf, sizeof(key_buf), "%02d", seq[i]);
         int* data = TRY_MALLOC(sizeof(int));
         *data = seq[i];
-        bst_insert(ctx, &tree, heapStr(key_buf), data);
+        bst_insert(ctx, &tree, heapStr(ctx, key_buf), data);
       }
 
       asserteq(tree.root->height, 4);
@@ -514,7 +497,7 @@ describe(bst) {
         snprintf(key_buf, sizeof(key_buf), "%02d", seq[i]);
         int* data = TRY_MALLOC(sizeof(int));
         *data = seq[i];
-        bst_insert(ctx, &tree, heapStr(key_buf), data);
+        bst_insert(ctx, &tree, heapStr(ctx, key_buf), data);
       }
 
       asserteq(tree.root->height, 4);
@@ -536,7 +519,7 @@ describe(bst) {
         snprintf(key_buf, sizeof(key_buf), "%02d", seq[i]);
         int* data = TRY_MALLOC(sizeof(int));
         *data = seq[i];
-        bst_insert(ctx, &tree, heapStr(key_buf), data);
+        bst_insert(ctx, &tree, heapStr(ctx, key_buf), data);
       }
 
       for (int i = 1; i <= 15; i++) {
@@ -556,7 +539,7 @@ describe(bst) {
         snprintf(key_buf, sizeof(key_buf), "%02d", seq[i]);
         int* data = TRY_MALLOC(sizeof(int));
         *data = seq[i];
-        bst_insert(ctx, &tree, heapStr(key_buf), data);
+        bst_insert(ctx, &tree, heapStr(ctx, key_buf), data);
       }
 
       for (int i = 1; i <= 15; i++) {
