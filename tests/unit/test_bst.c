@@ -14,6 +14,7 @@
 // Changes: Created test_bst.c with Snow framework scaffolding and initial
 // bst_init test
 
+#include <stdio.h>
 #include <stdlib.h>
 #include "ctx.h"
 #define SNOW_ENABLED 1
