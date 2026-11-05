@@ -20,6 +20,7 @@
 typedef enum {
   IDENT,
 
+  AT_MAIN,
   IMPORT,
   DEF,
   VAL,
@@ -46,8 +47,10 @@ typedef enum {
 
   STRING,
   TRIPLE_STRING,
-  S_STRING,
-  TRIPLE_S_STRING,
+  S_STRING_START,
+  S_STRING_END,
+  TRIPLE_S_STRING_START,
+  TRIPLE_S_STRING_END,
 
   OPERATOR_PLUS,
   OPERATOR_MINUS,
@@ -72,13 +75,12 @@ typedef enum {
   PERIOD,
   COLON,
   SEMICOLON,
-  AT,
 
   CONTROL_ARROW,
 
   INDENT,
-  DEDENT,
   EOL_TOKEN,
+  WHITESPACE,
   EOF_TOKEN
 } TokenType;
 
