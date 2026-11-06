@@ -38,7 +38,8 @@
 
 #include <stddef.h>  // size_t, NULL
 #include <stdlib.h>  // free
-#include "ctx.h"
+
+typedef struct Ctx Ctx;  // Forward declaration to avoid circular includes
 
 /**
  * @brief Declares a named dynamic array type holding elements of type T.
