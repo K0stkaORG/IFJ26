@@ -5,8 +5,8 @@
 // should be as frictionless as possible for example accessing the data should
 // be able to be done like this: *array->data[123]*, apending and inserting
 // should be done as functions. Don't modify the current implementation of the
-// project i will adapt the AST later myself." Changes: added file with a
-// generic, type-safe dynamic array.
+// project i will adapt the AST later myself."
+// Changes: added file with a generic, type-safe dynamic array.
 /**
  * @file array.h
  * Project: IFJ26
@@ -54,11 +54,11 @@
  * @param Name Name of the declared type
  * @param T Element type
  */
-#define ARRAY_TYPE(Name, T) \
-  typedef struct {          \
-    T* data;                \
-    size_t count;           \
-    size_t capacity;        \
+#define ARRAY_TYPE(Name, T)                           \
+  typedef struct {                                    \
+    T* data; /* NOLINT(bugprone-macro-parentheses) */ \
+    size_t count;                                     \
+    size_t capacity;                                  \
   } Name
 
 /**

@@ -5,8 +5,8 @@
 // should be as frictionless as possible for example accessing the data should
 // be able to be done like this: *array->data[123]*, apending and inserting
 // should be done as functions. Don't modify the current implementation of the
-// project i will adapt the AST later myself." Changes: added file with the
-// type-independent dynamic array helpers.
+// project i will adapt the AST later myself."
+// Changes: added file with the type-independent dynamic array helpers.
 /**
  * @file array.c
  * Project: IFJ26
@@ -24,11 +24,13 @@
 
 #define ARRAY_MIN_CAPACITY 4
 
-void* array_reserve_helper(Ctx* ctx,
-                           void* data,
-                           size_t* capacity,
-                           size_t min_capacity,
-                           size_t elem_size) {
+void* array_reserve_helper(
+    Ctx* ctx,
+    void* data,
+    size_t* capacity,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+    size_t min_capacity,
+    size_t elem_size) {
   if (min_capacity <= *capacity) {
     return data;
   }
