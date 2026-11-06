@@ -12,6 +12,7 @@
  */
 
 #include "ir.h"
+#include "array.h"
 #include "ir_internal.h"
 
 #include <stdlib.h>  // free
@@ -19,8 +20,7 @@
 void ir_init(IrProgram* ir) {
   // Set IR to default values
   ir->entrypoint = IR_INVALID_ID;
-  ir->functions = NULL;
-  ir->function_count = 0;
+  array_init(&ir->functions);
 }
 
 /**
@@ -90,7 +90,7 @@ static void ir_free_instruction(IrInstruction* instruction) {
     case IR_INST_CALL:
       if (instruction->operands.call.args != NULL) {
         // Free each argument
-        for (int oid = 0; oid < instruction->operands.call.arg_count; oid++)
+        for (size_t oid = 0; oid < instruction->operands.call.arg_count; oid++)
           ir_free_operand(&instruction->operands.call.args[oid]);
 
         // Free the argument array
@@ -117,13 +117,13 @@ static void ir_free_block(IrBlock* block) {
     return;
 
   // Free instructions
-  if (block->instructions != NULL) {
+  if (block->instructions.data != NULL) {
     // Free each instruction
-    for (int instId = 0; instId < block->instruction_count; instId++)
-      ir_free_instruction(&block->instructions[instId]);
+    for (size_t instId = 0; instId < block->instructions.count; instId++)
+      ir_free_instruction(&block->instructions.data[instId]);
 
     // Free the instruction array
-    free(block->instructions);
+    array_free(&block->instructions);
   }
 
   // Free the terminator
@@ -163,36 +163,34 @@ static void ir_free_function(IrFunction* function) {
     free(function->name);
 
   // If allocated, free function slots
-  if (function->slots != NULL) {
+  if (function->slots.data != NULL) {
     // Free slot names
-    for (int sid = 0; sid < function->slot_count; sid++)
-      if (function->slots[sid].name != NULL)
-        free(function->slots[sid].name);
+    for (size_t sid = 0; sid < function->slots.count; sid++)
+      if (function->slots.data[sid].name != NULL)
+        free(function->slots.data[sid].name);
 
     // Free slot array
-    free(function->slots);
+    array_free(&function->slots);
   }
 
   // Free function blocks
-  if (function->blocks != NULL) {
+  if (function->blocks.data != NULL) {
     // Free each block
-    for (int bid = 0; bid < function->block_count; bid++)
-      ir_free_block(&function->blocks[bid]);
+    for (size_t bid = 0; bid < function->blocks.count; bid++)
+      ir_free_block(&function->blocks.data[bid]);
 
     // Free block array
-    free(function->blocks);
+    array_free(&function->blocks);
   }
 }
 
 void ir_free(IrProgram* ir) {
   // Free contents of each function
-  for (int fid = 0; fid < ir->function_count; fid++)
-    ir_free_function(&ir->functions[fid]);
+  for (size_t fid = 0; fid < ir->functions.count; fid++)
+    ir_free_function(&ir->functions.data[fid]);
 
   // Free functions array
-  free(ir->functions);
-  ir->functions = NULL;
-  ir->function_count = 0;
+  array_free(&ir->functions);
 
   // Reset entrypoint
   ir->entrypoint = IR_INVALID_ID;

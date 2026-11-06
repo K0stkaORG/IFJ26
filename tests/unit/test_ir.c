@@ -23,8 +23,9 @@ describe(ir) {
       ir_init(&ir);
 
       assert(ir.entrypoint == IR_INVALID_ID);
-      assert(ir.functions == NULL);
-      assert(ir.function_count == 0);
+      assert(ir.functions.data == NULL);
+      assert(ir.functions.count == 0);
+      assert(ir.functions.capacity == 0);
     }
   }
 
@@ -37,8 +38,9 @@ describe(ir) {
       ir_free(&ir);
 
       assert(ir.entrypoint == IR_INVALID_ID);
-      assert(ir.functions == NULL);
-      assert(ir.function_count == 0);
+      assert(ir.functions.data == NULL);
+      assert(ir.functions.count == 0);
+      assert(ir.functions.capacity == 0);
     }
 
     it("frees all allocated memory") {
@@ -47,8 +49,9 @@ describe(ir) {
       ir_free(&ir);
 
       assert(ir.entrypoint == IR_INVALID_ID);
-      assert(ir.functions == NULL);
-      assert(ir.function_count == 0);
+      assert(ir.functions.data == NULL);
+      assert(ir.functions.count == 0);
+      assert(ir.functions.capacity == 0);
     }
   }
 

@@ -14,8 +14,11 @@
 #ifndef IR_H
 #define IR_H
 
+#include "array.h"
+
 #include <stdbool.h>  // bool
-#include <stdint.h>   // int32_t
+#include <stddef.h>   // size_t
+#include <stdint.h>   // int32_t, SIZE_MAX
 
 /**
  * @brief Id of a value in the IR
@@ -23,17 +26,17 @@
  * Values are any intermediate values the program computes during execution. Ids
  * are local to the function which contains the value.
  */
-typedef int IrValueId;
+typedef size_t IrValueId;
 
 /**
  * @brief Id of a stack slot in the IR
  *
  * Stack slots are function parameters + local variables in the IR. Ids are
  * local to the function which contains the slot. IDs 0 - (parameter_count - 1)
- * are function parameters, IDs parameter_count - (slot_count - 1) are local
+ * are function parameters, IDs parameter_count - (slots.count - 1) are local
  * variables
  */
-typedef int IrStackSlotId;
+typedef size_t IrStackSlotId;
 
 /**
  * @brief Id of a block in the IR
@@ -41,19 +44,19 @@ typedef int IrStackSlotId;
  * Blocks are sequences of instructions in the IR with a terminator at the end.
  * Ids are local to the function which contains the block.
  */
-typedef int IrBlockId;
+typedef size_t IrBlockId;
 
 /**
  * @brief Id of a function in the IR
  *
  * Function ids are global across the whole program.
  */
-typedef int IrFunctionId;
+typedef size_t IrFunctionId;
 
 /**
  * @brief Invalid id for a value, slot, block, or function in the IR
  */
-#define IR_INVALID_ID (-1)
+#define IR_INVALID_ID SIZE_MAX
 
 /**
  * @brief Integer type used in the IR
@@ -255,7 +258,7 @@ typedef struct {
 
       // Arguments of the call
       IrOperand* args;
-      int arg_count;
+      size_t arg_count;
     } call;
   } operands;
 
@@ -313,6 +316,11 @@ typedef struct {
 } IrBlockTerminator;
 
 /**
+ * @brief Array of IR instructions
+ */
+ARRAY_TYPE(IrInstructionArray, IrInstruction);
+
+/**
  * @brief IR block
  *
  * Represents a block of instructions in the IR. Always has exactly one
@@ -320,8 +328,7 @@ typedef struct {
  */
 typedef struct {
   // Instructions in the block
-  IrInstruction* instructions;
-  int instruction_count;
+  IrInstructionArray instructions;
 
   // Terminator of the block
   IrBlockTerminator terminator;
@@ -342,6 +349,16 @@ typedef struct {
 } IrStackSlot;
 
 /**
+ * @brief Array of IR stack slots
+ */
+ARRAY_TYPE(IrStackSlotArray, IrStackSlot);
+
+/**
+ * @brief Array of IR blocks
+ */
+ARRAY_TYPE(IrBlockArray, IrBlock);
+
+/**
  * @brief IR for a single function
  *
  * Represents a single function in the IR.
@@ -351,10 +368,9 @@ typedef struct {
   char* name;
 
   // Parameters and local variables of the function
-  IrStackSlot* slots;  // First parameter_count slots are parameters, rest are
-                       // local variables
-  int slot_count;
-  int parameter_count;
+  IrStackSlotArray slots;  // First parameter_count slots are parameters, rest
+                           // are local variables
+  size_t parameter_count;
 
   // Return type of the function
   IrType return_type;
@@ -363,12 +379,16 @@ typedef struct {
   IrBlockId entrypoint;
 
   // Blocks of the function
-  IrBlock* blocks;
-  int block_count;
+  IrBlockArray blocks;
 
   // Number of values in the function (also the next available value id)
-  int value_count;
+  size_t value_count;
 } IrFunction;
+
+/**
+ * @brief Array of IR functions
+ */
+ARRAY_TYPE(IrFunctionArray, IrFunction);
 
 /**
  * @brief IR for entire program
@@ -381,8 +401,7 @@ typedef struct {
   IrFunctionId entrypoint;
 
   // Array of all functions in the program
-  IrFunction* functions;
-  int function_count;
+  IrFunctionArray functions;
 } IrProgram;
 
 /**
