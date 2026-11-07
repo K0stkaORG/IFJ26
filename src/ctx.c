@@ -13,6 +13,8 @@
 
 #include "ctx.h"
 
+#include "ir.h"  // ir_init, ir_free
+
 #include <errno.h>   // errno, ERANGE
 #include <limits.h>  // INT_MAX
 #include <setjmp.h>  // longjmp
@@ -27,6 +29,9 @@ void ctx_init(Ctx* ctx, Flags flags) {
 
   // Flags
   ctx->flags = flags;
+
+  // Initialize IR program
+  ir_init(&ctx->ir);
 }
 
 bool parse_cli_args(int argc, char* argv[], Flags* flags) {
@@ -85,6 +90,7 @@ bool parse_cli_args(int argc, char* argv[], Flags* flags) {
 
 ExitCode ctx_free(Ctx* ctx) {
   // Free allocated memory
+  ir_free(&ctx->ir);
 
   // Return the exit code
   return ctx->exit_code;
