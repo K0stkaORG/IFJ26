@@ -25,6 +25,13 @@ CompileFlags:
         ]
 
 ---
+# Flags for unit test helper files
+If:
+    PathMatch: tests/unit/helpers/.*
+CompileFlags:
+    Add: [-I../../../tests/vendor, -I../../../tests/vendor/snow_win, -I../../../src]
+
+---
 # Flags for .c files
 If:
     PathMatch: .*\.c

@@ -1,0 +1,5 @@
+IN true
+OUT safe: true\n
+OUT either: true\n
+OUT ready\n
+EXIT 0

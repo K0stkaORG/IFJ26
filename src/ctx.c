@@ -66,6 +66,15 @@ bool parse_cli_args(int argc, char* argv[], Flags* flags) {
       continue;
     }
 
+    // Handle -o0
+    if (strcmp(argv[current], "-o0") == 0) {
+      flags->disableOptimizations = true;
+
+      // Consume the argument
+      current += 1;
+      continue;
+    }
+
     // Unrecognized argument
     return false;
   }

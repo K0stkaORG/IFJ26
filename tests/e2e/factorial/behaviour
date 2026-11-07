@@ -1,0 +1,4 @@
+IN 5
+OUT iterative: 120\n
+OUT recursive: 120\n
+EXIT 0

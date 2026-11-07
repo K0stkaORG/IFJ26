@@ -1,0 +1,6 @@
+IN abcde
+OUT edcba\n
+OUT abc\n
+OUT length: 5\n
+OUT half: 2.50\n
+EXIT 0

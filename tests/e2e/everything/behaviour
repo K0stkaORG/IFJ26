@@ -1,0 +1,37 @@
+OUT number?\x20
+IN 4
+OUT sum=
+OUT 10, empty=0\nname?\x20
+IN Ada
+OUT A:Ada\nfactor?\x20
+IN 2.5
+OUT scaled=25\n
+OUT args:L
+IN 5
+OUT R|456\n
+OUT discard:call;return-value;return-loop;\n
+OUT functions:456,24,true,false,()\n
+OUT numbers:128,26,36,-2,4,10.60\n
+OUT float:1.00,0.00,-0.00\n
+OUT loop:4,0,42\n
+OUT logic:ABC|true,true,true,false\n
+OUT branch:-0+;if|6,12,7,21|5.00,2.50\n
+OUT range:SET1g35g|1|642|234|4\n
+OUT strings:[][Ada],-1,-1,-1,127\n
+OUT members:-3,-4,2.50,(),5\n
+OUT literals:a\\b"c\td\re|a\\n\nb|xy\n
+OUT "Ada" costs $3.50\nA|true|()|2\n
+OUT native:0x1.4p+1,true,()\n
+OUT bool?\x20
+IN true
+IN TRUE
+OUT bool:true,false\ninvalid int/double?\x20
+IN 1_000
+IN 2.5junk
+OUT invalid:0,0.00\nempty line?\x20
+IN
+OUT line:1,10\ndivisor?\x20
+IN 2
+IN 123
+OUT division survived:42\n
+EXIT 0

@@ -71,22 +71,25 @@ typedef struct {
 
   // Whether debug printing is enabled
   bool verbose;
+
+  // Whether optimizations are disabled
+  bool disableOptimizations;
 } Flags;
 
 /**
  * @brief Default flags used in the IFJ26 compiler
  */
-#define DEFAULT_FLAGS                         \
-  (Flags) {                                   \
-    .forceNthMallocFail = 0, .verbose = false \
+#define DEFAULT_FLAGS                                                         \
+  (Flags) {                                                                   \
+    .forceNthMallocFail = 0, .verbose = false, .disableOptimizations = false, \
   }
 
 /**
  * @brief Default flags used for unit and e2e tests
  */
-#define DEFAULT_TEST_FLAGS                   \
-  (Flags) {                                  \
-    .forceNthMallocFail = 0, .verbose = true \
+#define DEFAULT_TEST_FLAGS                                                   \
+  (Flags) {                                                                  \
+    .forceNthMallocFail = 0, .verbose = true, .disableOptimizations = false, \
   }
 
 /**
