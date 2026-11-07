@@ -14,7 +14,7 @@
 #   make test                   - run all tests                                #
 #   make test-unit              - run unit tests                               #
 #   make test-e2e               - run end-to-end tests                         #
-#   make benchmark              - run performance benchmarks                   #
+#   make test-memory            - run memory tests                             #
 #   make clean                  - remove build artifacts                       #
 ################################################################################
 
@@ -170,14 +170,14 @@ test-unit: $(UNIT_BINS)
 
 # Run end-to-end tests
 test-e2e: debug
-	@$(PY) scripts/run_e2e.py $(VALGRIND_FLAG)
+	@$(PY) scripts/run_e2e.py $(VALGRIND_FLAG) --compiler "$(DEBUG_BIN)" --build-dir "$(TEST_BUILD_DIR)"
+
+# Run memory tests
+test-memory: debug
+	@$(PY) scripts/run_e2e.py $(VALGRIND_FLAG) --compiler "$(DEBUG_BIN)" --build-dir "$(TEST_BUILD_DIR)" --memory
 
 # Run all tests
-test: test-unit test-e2e
-
-# Run benchmarks
-benchmark:
-	echo "Not implemented"
+test: test-unit test-e2e test-memory
 
 ################################################################################
 # Folder/file utilities                                                        #
@@ -211,7 +211,7 @@ endif
 ################################################################################
 
 # Non-filename recipes
-.PHONY: release debug test test-unit test-e2e benchmark clean
+.PHONY: release debug test test-unit test-e2e test-memory benchmark clean
 
 # Correctly rebuild dependency changes
 -include $(RELEASE_DEPS) $(DEBUG_DEPS) $(UNIT_DEPS)
