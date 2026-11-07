@@ -92,7 +92,7 @@ typedef struct {
 /**
  * @brief Shared memory and error context for the IFJ26 compiler
  */
-typedef struct {
+typedef struct Ctx {
   // Exit code of the program
   ExitCode exit_code;
 
