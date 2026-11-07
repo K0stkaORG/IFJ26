@@ -1,0 +1,6 @@
+OUT truncated: -3\n
+OUT floor: -0x1p+2\n
+OUT floor Int: -4\n
+OUT length: 5\n
+OUT Unit: ()\n
+EXIT 0
