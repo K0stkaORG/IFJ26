@@ -41,6 +41,8 @@ void ctx_init(Ctx* ctx, Flags flags) {
 
   // Initialize global symtable
   symtable_init(ctx, &ctx->global_symtable, NULL);
+  // Initialize lexer buffer
+  array_init(&ctx->lexer_buffer);
 
   // Initialize IR program
   ir_init(&ctx->ir);
@@ -109,6 +111,10 @@ bool parse_cli_args(int argc, char* argv[], Flags* flags) {
 }
 
 ExitCode ctx_free(Ctx* ctx) {
+  // Free allocated memory
+  array_free(&ctx->lexer_buffer);
+  ir_free(&ctx->ir);
+
   // Free the AST
   if (ctx->ast != NULL) {
     AstNode* ast = ctx->ast;
