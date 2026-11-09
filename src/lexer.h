@@ -3,7 +3,7 @@
  * Project: IFJ26
  *
  * @author David Alois Bureš (xburesd00)
- * @date 13. 10. 2026
+ * @date 8. 11. 2026
  *
  * @brief Header file for lexer.c
  *
@@ -11,8 +11,12 @@
  */
 
 // include guard
-#ifndef IFJ26_LEXER_H
-#define IFJ26_LEXER_H
+#ifndef LEXER_H
+#define LEXER_H
+
+#include <stddef.h>
+#include "array.h"
+typedef struct Ctx Ctx;  // Forward declaration to avoid circular includes
 
 /**
  * @brief Definition of lexical tokens
@@ -99,8 +103,20 @@ typedef union {
 typedef struct {
   TokenType type;
   TokenValue value;
-  int line;
-  int column;
+  size_t line;
+  size_t column;
 } Token;
 
-#endif /* IFJ26_LEXER_H */
+/**
+ * @brief Array type for lexer buffer
+ */
+ARRAY_TYPE(LexerByteBuffer, unsigned char);
+
+/**
+ * @brief Returns next token and deletes from the reel
+ *
+ * @return Next token
+ */
+Token next_token(Ctx* ctx);
+
+#endif /* LEXER_H */
