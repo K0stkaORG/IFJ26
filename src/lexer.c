@@ -25,89 +25,207 @@ static struct {
 } Input;  // RENAME
 
 static enum {
-  START,
-  IDENTIFIER,
-  INTEGER,
-  WHITESPACE_STATE,
-  QUOTE_START,
-  TEXT_IN_STRING_1,
-  STRING_WITH_TEXT,
-  EQUALS,
-  ASSIGNMENT,
-  LESS_THEN,
-  LESS_THEN_OR_EQUAL,
-  GREATER_THEN,
-  GREATER_THEN_OR_EQUAL,
-  NEGATION,
-  NOT_EQUAL,
-  LEFT_PARENTHESIS,
-  UNIT,
-  RIGHT_PARENTHESIS,
-  DOUBLE_AMPERSAND,
-  AMPERSAND,
-  PIPE,
-  DOUBLE_PIPE,
-  PLUS,
-  MINUS,
-  ASTERISK,
-  SLASH,
-  EMPTY_STRING,
-  QUADRUPLE_QUOTE,
-  TRIPLE_QUOTE_TEXT_QUOTE,
-  T_STRING_WITH_TEXT,
-  TRIPLE_QUOTE_TEXT_DOUBLE_QUOTE,
-  TRIPLE_STRING_STATE,
-  NUMBER_DOT,
-  DOUBLE,
-  NUMBER_DOT_NUMBER_E,
-  DOUBLE_WITH_EXPONENT,
-  UNDERSCORE_1,  // Q36
-  UNDERSCORE_2,  // Q37
-  UNDERSCORE_3,  // Q38
-  DOUBLE_WITH_SIGNED_EXPONENT,
-  PERIOD_STATE,
-  COMMENT,
-  COMMA_STATE,
-  COLON_STATE,
-  SEMICOLON_STATE,
-  AT,
-  LEFT_ARROW,
-  UNDERSCORE_4,  // Q47
-  EOL_OR_EOF,
-  AT_M,
-  AT_MA,
-  AT_MAI,
-  AT_MAIN_STATE,
-  ZERO,
-  ESCAPED_1,  // Q54
-  S,
-  DOUBLE_WITH_D_SUFFIX_1,  // Q56
-  DOUBLE_WITH_D_SUFFIX_2,  // Q57
-  SLASH_ASTERISK,
-  INSIDE_BLOCK_COMMENT,
-  SLASH_DOUBLE_ASTERISK_1,  // Q60
-  POTENTIAL_NESTING,        // FIX SPELLING
-  BLOCK_COMMENT,
-  INSIDE_MULTILINE_BLOCK_COMMENT,
-  SLASH_DOUBLE_ASTERISK_2,  // Q64
-  MULTILINE_BLOCK_COMMENT,
-  NESTING,
-  S_QUOTE,
-  S_DOUBLE_QUOTE,
-  S_TRIPLE_QUOTE,
-  DOLLAR_SIGN,
-  QUOTE_1,
-  QUOTE_2,
-  DOUBLE_QUOTE,
-  TRIPLE_QUOTE,
-  DOLLAR_EXPRESSION_START,
-  DOLLAR_EXPRESSION_END,
-  TEXT_IN_STRING_2,
-  ESCAPED_2,  // Q78
-  DOUBLE_DOLLAR_SIGN,
-  TRIPLE_S_STRING_STRING,
-  UNIT_WITH_WHITESPACE,
+  START,                           // q0
+  IDENTIFIER,                      // q1
+  INTEGER,                         // q2
+  WHITESPACE_STATE,                // q3
+  QUOTE_START,                     // q4
+  TEXT_IN_STRING_1,                // q5
+  STRING_WITH_TEXT,                // q6
+  EQUALS,                          // q7
+  ASSIGNMENT,                      // q8
+  LESS_THEN,                       // q9
+  LESS_THEN_OR_EQUAL,              // q10
+  GREATER_THEN,                    // q11
+  GREATER_THEN_OR_EQUAL,           // q12
+  NEGATION,                        // q13
+  NOT_EQUAL,                       // q14
+  LEFT_PARENTHESIS,                // q15
+  UNIT,                            // q16
+  RIGHT_PARENTHESIS,               // q17
+  DOUBLE_AMPERSAND,                // q18
+  AMPERSAND,                       // q19
+  PIPE,                            // q20
+  DOUBLE_PIPE,                     // q21
+  PLUS,                            // q22
+  MINUS,                           // q23
+  ASTERISK,                        // q24
+  SLASH,                           // q25
+  EMPTY_STRING,                    // q26
+  QUADRUPLE_QUOTE,                 // q27
+  TRIPLE_QUOTE_TEXT_QUOTE,         // q28
+  T_STRING_WITH_TEXT,              // q29
+  TRIPLE_QUOTE_TEXT_DOUBLE_QUOTE,  // q30
+  TRIPLE_STRING_STATE,             // q31
+  NUMBER_DOT,                      // q32
+  DOUBLE,                          // q33
+  NUMBER_DOT_NUMBER_E,             // q34
+  DOUBLE_WITH_EXPONENT,            // q35
+  UNDERSCORE_1,                    // Q36
+  UNDERSCORE_2,                    // Q37
+  UNDERSCORE_3,                    // Q38
+  DOUBLE_WITH_SIGNED_EXPONENT,     // q39
+  PERIOD_STATE,                    // q40
+  COMMENT,                         // q41
+  COMMA_STATE,                     // q42
+  COLON_STATE,                     // q43
+  SEMICOLON_STATE,                 // q44
+  AT,                              // q45
+  LEFT_ARROW,                      // q46
+  UNDERSCORE_4,                    // Q47
+  EOL_OR_EOF,                      // q48
+  AT_M,                            // q49
+  AT_MA,                           // q50
+  AT_MAI,                          // q51
+  AT_MAIN_STATE,                   // q52
+  ZERO,                            // q53
+  ESCAPED_1,                       // Q54
+  S,                               // q55
+  DOUBLE_WITH_D_SUFFIX_1,          // Q56
+  DOUBLE_WITH_D_SUFFIX_2,          // Q57
+  SLASH_ASTERISK,                  // q58
+  INSIDE_BLOCK_COMMENT,            // q59
+  SLASH_DOUBLE_ASTERISK_1,         // Q60
+  POTENTIAL_NESTING,               // q61       // FIX SPELLING
+  BLOCK_COMMENT,                   // q62
+  INSIDE_MULTILINE_BLOCK_COMMENT,  // q63
+  SLASH_DOUBLE_ASTERISK_2,         // Q64
+  MULTILINE_BLOCK_COMMENT,         // q65
+  NESTING,                         // q66
+  S_QUOTE,                         // q67
+  S_DOUBLE_QUOTE,                  // q68
+  S_TRIPLE_QUOTE,                  // q69
+  DOLLAR_SIGN,                     // q70
+  QUOTE_1,                         // q71
+  QUOTE_2,                         // q72
+  DOUBLE_QUOTE,                    // q73
+  TRIPLE_QUOTE,                    // q74
+  DOLLAR_EXPRESSION_START,         // q75
+  DOLLAR_EXPRESSION_END,           // q76
+  TEXT_IN_STRING_2,                // q77
+  ESCAPED_2,                       // Q78
+  DOUBLE_DOLLAR_SIGN,              // q79
+  TRIPLE_S_STRING_STRING,          // q80
+  UNIT_WITH_WHITESPACE,            // q81
 } current_state;
+
+// enum for internal fsm stack
+enum {
+  STACK_EMPTY,
+  STACK_DOLLAR_EXPR,
+  STACK_NESTED_COMMENT,
+  STACK_S_STRING,
+  STACK_MULTILINE_S_STRING,
+};
+
+typedef enum {
+  TRANSITION_KEEP,
+  TRANSITION_PUSH,
+  TRANSITION_POP,
+  TRANSITION_REPLACE,
+} TransitionStackAction;
+
+typedef struct {
+  bool (*matches)(int character);  // Literal or character-class predicate.
+  unsigned int stack_top_mask;     // Bit n permits stack symbol n.
+  int next_state;                  // One of the existing state enum values.
+  TransitionStackAction stack_action;
+  int stack_symbol;  // Used only for push and replace.
+} Transition;
+
+static bool is_ascii(int character) {
+  return character >= 0 && character <= 127;
+}
+
+static bool a3_digits_not_0(int character) {
+  return character >= '1' && character <= '9';
+}
+
+static bool a4_digits(int character) {
+  return character >= '0' && character <= '9';
+}
+
+static bool a16_letters(int character) {
+  return (character >= 'A' && character <= 'Z') ||
+         (character >= 'a' && character <= 'z');
+}
+
+static bool a2_ident_char(int character) {
+  return a16_letters(character) || a4_digits(character) || character == '_';
+}
+
+static bool a5_whitespace(int character) {
+  return character == ' ' || character == '\t' || character == '\n' ||
+         character == '\r';
+}
+
+static bool a10_newline(int character) {
+  return character == '\n' || character == '\r';
+}
+
+static bool a6_string_char(int character) {
+  return is_ascii(character) && !a10_newline(character) && character != '"' &&
+         character != '\\';
+}
+
+static bool a7_triple_string_char(int character) {
+  return is_ascii(character) && character != '"';
+}
+
+static bool a8_exponent(int character) {
+  return character == 'e' || character == 'E';
+}
+
+static bool a9_sign(int character) {
+  return character == '+' || character == '-';
+}
+
+static bool a12_escape(int character) {
+  return character == '\\' || character == '"' || character == 'n' ||
+         character == 'r' || character == 't';
+}
+
+static bool a13_suffix(int character) {
+  return character == 'd' || character == 'D';
+}
+
+static bool a14_comment_char(int character) {
+  return is_ascii(character) && !a10_newline(character) && character != '*' &&
+         character != '/';
+}
+
+static bool a15_multiline_comment_char(int character) {
+  return is_ascii(character) && character != '*' && character != '/';
+}
+
+static bool a17_s_string_char(int character) {
+  return a6_string_char(character) && character != '$';
+}
+
+static bool a18_triple_s_string_char(int character) {
+  return a7_triple_string_char(character) && character != '$';
+}
+
+static bool a1_letter_not_s(int character) {
+  return a16_letters(character) && character != 's';
+}
+
+static bool a11_line_comment(int character) {
+  return is_ascii(character) && !a10_newline(character);
+}
+
+static const Transition identifier_transitions[] = {
+    {
+        .matches = a2_ident_char,
+        .stack_top_mask = (1u << STACK_EMPTY) | (1u << STACK_DOLLAR_EXPR) |
+                          (1u << STACK_NESTED_COMMENT) |
+                          (1u << STACK_S_STRING) |
+                          (1u << STACK_MULTILINE_S_STRING),
+        .next_state = IDENTIFIER,
+        .stack_action = TRANSITION_KEEP,
+        .stack_symbol = STACK_EMPTY,  // Ignored when keeping the stack.
+    },
+};
 
 /**
  * @brief provides next token from the stdin stream
@@ -123,6 +241,8 @@ Token next_token(Ctx* ctx) {
   LexerByteBuffer stack = ARRAY_EMPTY;
   while (true) {
     int current;
+
+    // fetching next char, from buffer if possible, otherwise save new to buffer
     if (buffer->count > Input.cursor) {
       current = buffer->data[Input.cursor];
       Input.cursor++;
@@ -133,15 +253,10 @@ Token next_token(Ctx* ctx) {
       }
     }
 
-    enum {
-      STACK_EMPTY,
-      STACK_DOLLAR_EXPR,
-      STACK_NESTED_COMMENT,
-      STACK_S_STRING,
-      STACK_MULTILINE_S_STRING,
-    };
-
+    // top of the stack
     int top = stack.count == 0 ? STACK_EMPTY : stack.data[stack.count - 1];
+
+    // tests for different transitions:
     bool ascii = current >= 0 && current <= 127;
     bool letter = (current >= 'A' && current <= 'Z') ||
                   (current >= 'a' && current <= 'z');          // A16
@@ -160,6 +275,7 @@ Token next_token(Ctx* ctx) {
     bool suffix = current == 'd' || current == 'D';  // A13
     bool comment_char =
         ascii && !newline && current != '*' && current != '/';  // A14
+
     bool multiline_comment_char =
         ascii && current != '*' && current != '/';              // A15
     bool s_string_char = string_char && current != '$';         // A17
@@ -241,25 +357,22 @@ Token next_token(Ctx* ctx) {
                 if (top == STACK_EMPTY)
                   next_state = AT;
                 break;
-              case '$':
-                if (top == STACK_DOLLAR_EXPR)
-                  next_state = DOLLAR_SIGN;
-                break;
               case '}':
                 if (top == STACK_DOLLAR_EXPR) {
-                  array_remove(ctx, &stack, stack.count - 1);
+                  array_remove(ctx, &stack, stack.count - 1);  // stack pop
                   next_state = DOLLAR_EXPRESSION_END;
                 }
                 break;
               default:
-                // FIX add default
+                break;
             }
           }
-        } else if (current == '$') {
+        }  //  if (top == STACK_EMPTY || top == STACK_DOLLAR_EXPR)
+        else if (current == '$') {
           next_state = DOLLAR_SIGN;
         } else if (top == STACK_S_STRING) {
           if (current == '"') {
-            array_remove(ctx, &stack, stack.count - 1);
+            array_remove(ctx, &stack, stack.count - 1);  // stack pop
             next_state = QUOTE_1;
           } else if (s_string_char) {
             next_state = TEXT_IN_STRING_2;
