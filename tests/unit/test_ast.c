@@ -783,4 +783,138 @@ describe(AST_NODE_OPERATIONS) {
   }
 }
 
+describe(AST_EXPRESSIONS) {
+  subdesc(ATTRIBUTES) {
+    it("Should default data type and position of a new node") {
+      AstNode* node = NULL;
+      ast_node_create(ctx, &node);
+      defer({ ast_node_destroy(ctx, node); });
+
+      asserteq(ast_node_get_data_type(node), AST_DATA_TYPE_UNKNOWN);
+      asserteq(ast_node_get_line(node), 0);
+      asserteq(ast_node_get_column(node), 0);
+    }
+
+    it("Should store data type and position independently of the kind") {
+      AstNode* node = NULL;
+      ast_node_create(ctx, &node);
+      defer({ ast_node_destroy(ctx, node); });
+
+      ast_node_set_type(node, AST_NODE_ADD);
+      ast_node_set_data_type(node, AST_DATA_TYPE_DOUBLE);
+      ast_node_set_position(node, 3, 14);
+
+      asserteq(ast_node_get_type(node), AST_NODE_ADD);
+      asserteq(ast_node_get_data_type(node), AST_DATA_TYPE_DOUBLE);
+      asserteq(ast_node_get_line(node), 3);
+      asserteq(ast_node_get_column(node), 14);
+    }
+
+    it("Should report which node types carry a value") {
+      asserteq(ast_node_type_has_value(AST_NODE_IDENT), true);
+      asserteq(ast_node_type_has_value(AST_NODE_INT_LIT), true);
+      asserteq(ast_node_type_has_value(AST_NODE_DOUBLE_LIT), true);
+      asserteq(ast_node_type_has_value(AST_NODE_STRING_LIT), true);
+      asserteq(ast_node_type_has_value(AST_NODE_BOOL_LIT), true);
+      asserteq(ast_node_type_has_value(AST_NODE_ADD), false);
+      asserteq(ast_node_type_has_value(AST_NODE_IF), false);
+      asserteq(ast_node_type_has_value(AST_NODE_NONE), false);
+    }
+  }
+
+  subdesc(MAKE_LEAF) {
+    it("Should create a literal leaf with its value") {
+      AstNode* leaf = NULL;
+      ast_make_leaf(ctx, AST_NODE_INT_LIT, (AstNodeValue){.int_value = 42},
+                    &leaf);
+      defer({ ast_node_destroy(ctx, leaf); });
+
+      asserteq(ast_node_get_type(leaf), AST_NODE_INT_LIT);
+      asserteq(ast_node_get_value(leaf).int_value, 42);
+      asserteq(ast_node_get_child_count(leaf), 0);
+    }
+
+    it("Should reject node types without a value") {
+      AstNode* leaf = NULL;
+      assertThrow(E_INTERNAL_ERROR, {
+        ast_make_leaf(ctx, AST_NODE_ADD, (AstNodeValue){.int_value = 1}, &leaf);
+      });
+      asserteq_ptr(leaf, NULL);
+    }
+  }
+
+  subdesc(MAKE_TREE) {
+    it("Should build x = a + 1 with children in source order") {
+      AstNode* x = NULL;
+      AstNode* a = NULL;
+      AstNode* one = NULL;
+      AstNode* sum = NULL;
+      AstNode* assign = NULL;
+      ast_make_leaf(ctx, AST_NODE_IDENT, (AstNodeValue){.symbol = NULL}, &x);
+      ast_make_leaf(ctx, AST_NODE_IDENT, (AstNodeValue){.symbol = NULL}, &a);
+      ast_make_leaf(ctx, AST_NODE_INT_LIT, (AstNodeValue){.int_value = 1},
+                    &one);
+
+      ast_make_binary(ctx, AST_NODE_ADD, a, one, &sum);
+      ast_make_binary(ctx, AST_NODE_ASSIGN, x, sum, &assign);
+      defer({ ast_node_destroy(ctx, assign); });
+
+      asserteq(ast_node_get_type(assign), AST_NODE_ASSIGN);
+      asserteq(ast_node_get_child_count(assign), 2);
+      AstNode* child = NULL;
+      ast_node_get_child(ctx, assign, 0, &child);
+      asserteq_ptr(child, x);
+      ast_node_get_child(ctx, assign, 1, &child);
+      asserteq_ptr(child, sum);
+      ast_node_get_child(ctx, sum, 0, &child);
+      asserteq_ptr(child, a);
+      ast_node_get_child(ctx, sum, 1, &child);
+      asserteq_ptr(child, one);
+    }
+
+    it("Should leave children with the caller when a precondition fails") {
+      AstNode* left = NULL;
+      AstNode* right = NULL;
+      AstNode* parent = NULL;
+      AstNode* result = NULL;
+      ast_node_create(ctx, &left);
+      ast_node_create(ctx, &right);
+      ast_node_create(ctx, &parent);
+      ast_node_append_child(ctx, parent, right);
+      defer({
+        ast_node_destroy(ctx, parent);
+        ast_node_destroy(ctx, left);
+      });
+
+      assertThrow(E_INTERNAL_ERROR,
+                  { ast_make_binary(ctx, AST_NODE_ADD, left, right, &result); });
+      ctx->exit_code = E_OK;
+      assertThrow(E_INTERNAL_ERROR,
+                  { ast_make_binary(ctx, AST_NODE_ADD, left, NULL, &result); });
+
+      asserteq_ptr(result, NULL);
+      AstNode* actual_parent = left;
+      ast_node_get_parent(left, &actual_parent);
+      asserteq_ptr(actual_parent, NULL);
+      ast_node_get_parent(right, &actual_parent);
+      asserteq_ptr(actual_parent, parent);
+    }
+
+    it("Should build a unary node") {
+      AstNode* operand = NULL;
+      AstNode* negation = NULL;
+      ast_make_leaf(ctx, AST_NODE_BOOL_LIT,
+                    (AstNodeValue){.boolean_value = true}, &operand);
+      ast_make_unary(ctx, AST_NODE_NOT, operand, &negation);
+      defer({ ast_node_destroy(ctx, negation); });
+
+      asserteq(ast_node_get_type(negation), AST_NODE_NOT);
+      asserteq(ast_node_get_child_count(negation), 1);
+      AstNode* child = NULL;
+      ast_node_get_child(ctx, negation, 0, &child);
+      asserteq_ptr(child, operand);
+    }
+  }
+}
+
 snow_main();

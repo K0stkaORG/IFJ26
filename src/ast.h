@@ -27,27 +27,74 @@ typedef enum {
   AST_NODE_CASE,
   AST_NODE_MATCH,
   AST_NODE_IF,
-  AST_NODE_ELSE,
-  AST_NODE_THEN,
-  AST_NODE_DO,
   AST_NODE_VAL,
   AST_NODE_VAR,
   AST_NODE_FOR,
   AST_NODE_WHILE,
 
-  AST_NODE_TYPE_DOUBLE,
-  AST_NODE_TYPE_INT,
-  AST_NODE_TYPE_BOOLEAN,
-  AST_NODE_TYPE_STRING,
-  AST_NODE_TYPE_UNIT,
+  AST_NODE_TYPE_ANNOTATION,
 
   AST_NODE_CLASS,
   AST_NODE_EXTENSION,
   AST_NODE_TYPE_LIST,
-  AST_NODE_TYPE,
+
+  // Literals
+  AST_NODE_IDENT,
+  AST_NODE_INT_LIT,
+  AST_NODE_DOUBLE_LIT,
+  AST_NODE_STRING_LIT,
+  AST_NODE_BOOL_LIT,
+  AST_NODE_UNIT_LIT,
+
+  // Binary operators, children are [left, right]
+  AST_NODE_ADD,
+  AST_NODE_SUB,
+  AST_NODE_MUL,
+  AST_NODE_DIV,
+  AST_NODE_EQ,
+  AST_NODE_NEQ,
+  AST_NODE_LT,
+  AST_NODE_GT,
+  AST_NODE_LE,
+  AST_NODE_GE,
+  AST_NODE_AND,
+  AST_NODE_OR,
+  AST_NODE_ASSIGN,
+
+  // Unary operator, children are [operand]
+  AST_NODE_NOT,
+
+  // N-ary nodes
+  AST_NODE_CALL,   // children are [callee, arg...]
+  AST_NODE_BLOCK,  // children are the statements in order
 } AstNodeType;
 
+/**
+ * @brief Semantic data type of an expression, filled in by type checking.
+ *
+ * Not to be confused with AST_NODE_TYPE_ANNOTATION, which is a type written in
+ * the source code (its data_type holds the annotated type).
+ */
+typedef enum {
+  AST_DATA_TYPE_UNKNOWN,
+  AST_DATA_TYPE_INT,
+  AST_DATA_TYPE_DOUBLE,
+  AST_DATA_TYPE_BOOLEAN,
+  AST_DATA_TYPE_STRING,
+  AST_DATA_TYPE_UNIT,
+} AstDataType;
+
+typedef struct SymtableData SymtableData;
+
+/**
+ * @brief Payload of a node, the valid member is given by the node type.
+ *
+ * IDENT -> symbol, INT_LIT -> int_value, DOUBLE_LIT -> float_value,
+ * STRING_LIT -> string_value, BOOL_LIT -> boolean_value. Other kinds carry no
+ * value.
+ */
 typedef union {
+  const SymtableData* symbol;
   char char_value;
   int int_value;
   double float_value;
@@ -171,5 +218,102 @@ void ast_node_detach_child(Ctx* ctx,
                            AstNode* node,
                            size_t index,
                            AstNode** child);
+
+// === AST NODE ATTRIBUTES ===
+
+/**
+ * @brief Tells whether nodes of given type carry a value
+ *
+ * @param type node type
+ * @return true for IDENT and literal kinds, false otherwise
+ */
+bool ast_node_type_has_value(AstNodeType type);
+
+/**
+ * @brief Sets semantic data type (result type of an expression) of given node
+ *
+ * @pre Node pointer is not NULL!
+ */
+void ast_node_set_data_type(AstNode* node, AstDataType data_type);
+
+/**
+ * @brief Returns semantic data type of given node
+ *
+ * @pre Node pointer is not NULL!
+ * @return AST_DATA_TYPE_UNKNOWN until type checking sets it
+ */
+AstDataType ast_node_get_data_type(const AstNode* node);
+
+/**
+ * @brief Sets source position the node originates from
+ *
+ * @pre Node pointer is not NULL!
+ * @param line line number from the token
+ * @param column column number from the token
+ */
+void ast_node_set_position(AstNode* node, int line, int column);
+
+/**
+ * @brief Returns source line of given node (0 if unset)
+ *
+ * @pre Node pointer is not NULL!
+ */
+int ast_node_get_line(const AstNode* node);
+
+/**
+ * @brief Returns source column of given node (0 if unset)
+ *
+ * @pre Node pointer is not NULL!
+ */
+int ast_node_get_column(const AstNode* node);
+
+// === AST CONSTRUCTION HELPERS (MakeLeaf / MakeTree) ===
+
+/**
+ * @brief Creates a leaf node with a value
+ *
+ * @param ctx pointer to an initialized shared allocation and error context
+ * @param type node type, must satisfy ast_node_type_has_value
+ * @param value value of the leaf
+ * @param node pointer to a variable to store the new node
+ */
+void ast_make_leaf(Ctx* ctx,
+                   AstNodeType type,
+                   AstNodeValue value,
+                   AstNode** node);
+
+/**
+ * @brief Creates a node with one child
+ *
+ * Takes ownership of operand on success. On a thrown error the operand stays
+ * owned by the caller.
+ *
+ * @param ctx pointer to an initialized shared allocation and error context
+ * @param type node type
+ * @param operand parentless child node
+ * @param node pointer to a variable to store the new node
+ */
+void ast_make_unary(Ctx* ctx,
+                    AstNodeType type,
+                    AstNode* operand,
+                    AstNode** node);
+
+/**
+ * @brief Creates a node with two children, in the order [left, right]
+ *
+ * Takes ownership of both children on success. On a thrown error the children
+ * stay owned by the caller.
+ *
+ * @param ctx pointer to an initialized shared allocation and error context
+ * @param type node type
+ * @param left parentless left child node
+ * @param right parentless right child node
+ * @param node pointer to a variable to store the new node
+ */
+void ast_make_binary(Ctx* ctx,
+                   AstNodeType type,
+                   AstNode* left,
+                   AstNode* right,
+                   AstNode** node);
 
 #endif
