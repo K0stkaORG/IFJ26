@@ -12,8 +12,10 @@
  */
 
 #include "ctx.h"
+#include "array.h"
 #include "ast.h"  // ast_node_destroy
 #include "ir.h"   // ir_init, ir_free
+#include "lexer.h"
 #include "optimizer.h"
 #include "symtable.h"           // symtable_init, symtable_destroy
 #include "symtable_builtins.h"  // symtable_builtins_populate
@@ -41,8 +43,14 @@ void ctx_init(Ctx* ctx, Flags flags) {
 
   // Initialize global symtable
   symtable_init(ctx, &ctx->global_symtable, NULL);
-  // Initialize lexer buffer
-  array_init(&ctx->lexer_buffer);
+
+  // Initialize lexer struct
+  array_init(&ctx->lexer.buffer);
+  array_init(&ctx->lexer.stack);
+  array_init(&ctx->lexer.saved_stack);
+  ctx->lexer.line = 1;
+  ctx->lexer.column = 1;
+  ctx->lexer.cursor = 0;
 
   // Initialize IR program
   ir_init(&ctx->ir);
@@ -112,7 +120,9 @@ bool parse_cli_args(int argc, char* argv[], Flags* flags) {
 
 ExitCode ctx_free(Ctx* ctx) {
   // Free allocated memory
-  array_free(&ctx->lexer_buffer);
+  array_free(&ctx->lexer.buffer);
+  array_free(&ctx->lexer.stack);
+  array_free(&ctx->lexer.saved_stack);
   ir_free(&ctx->ir);
 
   // Free the AST
