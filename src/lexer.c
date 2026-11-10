@@ -17,14 +17,7 @@
 #include "array.h"
 #include "ctx.h"
 
-static struct {
-  size_t line;
-  size_t column;
-  size_t cursor;
-
-} Input;  // RENAME
-
-static enum {
+typedef enum {
   START,                           // q0
   IDENTIFIER,                      // q1
   INTEGER,                         // q2
@@ -107,7 +100,7 @@ static enum {
   DOUBLE_DOLLAR_SIGN,              // q79
   TRIPLE_S_STRING_STRING,          // q80
   UNIT_WITH_WHITESPACE,            // q81
-} current_state;
+} State;
 
 // enum for internal fsm stack
 enum {
@@ -225,6 +218,7 @@ static bool a11_line_comment(int character) {
 // scripts/generate_lexer_transitions.py.
 
 typedef struct {
+  bool accepting;
   const Transition* transitions;
   size_t count;
 } StateTransitions;
@@ -258,8 +252,10 @@ typedef struct {
    .next_state = (next),                     \
    .stack_action = TRANSITION_REPLACE,       \
    .stack_symbol = (symbol)}
-#define OUTGOING(array) \
-  {.transitions = (array), .count = sizeof(array) / sizeof((array)[0])}
+#define OUTGOING(array, is_accepting) \
+  {.accepting = (is_accepting),       \
+   .transitions = (array),            \
+   .count = sizeof(array) / sizeof((array)[0])}
 
 // Literal matchers.
 static bool literal_negation(int character) {
@@ -705,65 +701,135 @@ static const Transition unit_with_whitespace_transitions[] = {
 
 // States without outgoing rules have a NULL pointer and zero count.
 static const StateTransitions state_transitions[UNIT_WITH_WHITESPACE + 1] = {
-    [START] = OUTGOING(start_transitions),
-    [IDENTIFIER] = OUTGOING(identifier_transitions),
-    [INTEGER] = OUTGOING(integer_transitions),
-    [WHITESPACE_STATE] = OUTGOING(whitespace_state_transitions),
-    [QUOTE_START] = OUTGOING(quote_start_transitions),
-    [TEXT_IN_STRING_1] = OUTGOING(text_in_string_1_transitions),
-    [EQUALS] = OUTGOING(equals_transitions),
-    [LESS_THEN] = OUTGOING(less_then_transitions),
-    [GREATER_THEN] = OUTGOING(greater_then_transitions),
-    [NEGATION] = OUTGOING(negation_transitions),
-    [LEFT_PARENTHESIS] = OUTGOING(left_parenthesis_transitions),
-    [AMPERSAND] = OUTGOING(ampersand_transitions),
-    [PIPE] = OUTGOING(pipe_transitions),
-    [SLASH] = OUTGOING(slash_transitions),
-    [EMPTY_STRING] = OUTGOING(empty_string_transitions),
-    [QUADRUPLE_QUOTE] = OUTGOING(quadruple_quote_transitions),
-    [TRIPLE_QUOTE_TEXT_QUOTE] = OUTGOING(triple_quote_text_quote_transitions),
-    [T_STRING_WITH_TEXT] = OUTGOING(t_string_with_text_transitions),
+    [START] = OUTGOING(start_transitions, false),
+    [IDENTIFIER] = OUTGOING(identifier_transitions, true),
+    [INTEGER] = OUTGOING(integer_transitions, true),
+    [WHITESPACE_STATE] = OUTGOING(whitespace_state_transitions, true),
+    [QUOTE_START] = OUTGOING(quote_start_transitions, false),
+    [TEXT_IN_STRING_1] = OUTGOING(text_in_string_1_transitions, false),
+    [STRING_WITH_TEXT] = {.accepting = true},
+    [EQUALS] = OUTGOING(equals_transitions, true),
+    [ASSIGNMENT] = {.accepting = true},
+    [LESS_THEN] = OUTGOING(less_then_transitions, true),
+    [LESS_THEN_OR_EQUAL] = {.accepting = true},
+    [GREATER_THEN] = OUTGOING(greater_then_transitions, true),
+    [GREATER_THEN_OR_EQUAL] = {.accepting = true},
+    [NEGATION] = OUTGOING(negation_transitions, true),
+    [NOT_EQUAL] = {.accepting = true},
+    [LEFT_PARENTHESIS] = OUTGOING(left_parenthesis_transitions, true),
+    [UNIT] = {.accepting = true},
+    [RIGHT_PARENTHESIS] = {.accepting = true},
+    [DOUBLE_AMPERSAND] = {.accepting = true},
+    [AMPERSAND] = OUTGOING(ampersand_transitions, false),
+    [PIPE] = OUTGOING(pipe_transitions, false),
+    [DOUBLE_PIPE] = {.accepting = true},
+    [PLUS] = {.accepting = true},
+    [MINUS] = {.accepting = true},
+    [ASTERISK] = {.accepting = true},
+    [SLASH] = OUTGOING(slash_transitions, true),
+    [EMPTY_STRING] = OUTGOING(empty_string_transitions, true),
+    [QUADRUPLE_QUOTE] = OUTGOING(quadruple_quote_transitions, false),
+    [TRIPLE_QUOTE_TEXT_QUOTE] =
+        OUTGOING(triple_quote_text_quote_transitions, false),
+    [T_STRING_WITH_TEXT] = OUTGOING(t_string_with_text_transitions, false),
     [TRIPLE_QUOTE_TEXT_DOUBLE_QUOTE] =
-        OUTGOING(triple_quote_text_double_quote_transitions),
-    [NUMBER_DOT] = OUTGOING(number_dot_transitions),
-    [DOUBLE] = OUTGOING(double_transitions),
-    [NUMBER_DOT_NUMBER_E] = OUTGOING(number_dot_number_e_transitions),
-    [DOUBLE_WITH_EXPONENT] = OUTGOING(double_with_exponent_transitions),
-    [UNDERSCORE_1] = OUTGOING(underscore_1_transitions),
-    [UNDERSCORE_2] = OUTGOING(underscore_2_transitions),
-    [UNDERSCORE_3] = OUTGOING(underscore_3_transitions),
+        OUTGOING(triple_quote_text_double_quote_transitions, false),
+    [TRIPLE_STRING_STATE] = {.accepting = true},
+    [NUMBER_DOT] = OUTGOING(number_dot_transitions, false),
+    [DOUBLE] = OUTGOING(double_transitions, true),
+    [NUMBER_DOT_NUMBER_E] = OUTGOING(number_dot_number_e_transitions, false),
+    [DOUBLE_WITH_EXPONENT] = OUTGOING(double_with_exponent_transitions, true),
+    [UNDERSCORE_1] = OUTGOING(underscore_1_transitions, false),
+    [UNDERSCORE_2] = OUTGOING(underscore_2_transitions, false),
+    [UNDERSCORE_3] = OUTGOING(underscore_3_transitions, false),
     [DOUBLE_WITH_SIGNED_EXPONENT] =
-        OUTGOING(double_with_signed_exponent_transitions),
-    [PERIOD_STATE] = OUTGOING(period_state_transitions),
-    [COMMENT] = OUTGOING(comment_transitions),
-    [AT] = OUTGOING(at_transitions),
-    [UNDERSCORE_4] = OUTGOING(underscore_4_transitions),
-    [AT_M] = OUTGOING(at_m_transitions),
-    [AT_MA] = OUTGOING(at_ma_transitions),
-    [AT_MAI] = OUTGOING(at_mai_transitions),
-    [ZERO] = OUTGOING(zero_transitions),
-    [ESCAPED_1] = OUTGOING(escaped_1_transitions),
-    [S] = OUTGOING(s_transitions),
-    [SLASH_ASTERISK] = OUTGOING(slash_asterisk_transitions),
-    [INSIDE_BLOCK_COMMENT] = OUTGOING(inside_block_comment_transitions),
-    [SLASH_DOUBLE_ASTERISK_1] = OUTGOING(slash_double_asterisk_1_transitions),
-    [POTENTIAL_NESTING] = OUTGOING(potential_nesting_transitions),
+        OUTGOING(double_with_signed_exponent_transitions, false),
+    [PERIOD_STATE] = OUTGOING(period_state_transitions, true),
+    [COMMENT] = OUTGOING(comment_transitions, false),
+    [COMMA_STATE] = {.accepting = true},
+    [COLON_STATE] = {.accepting = true},
+    [SEMICOLON_STATE] = {.accepting = true},
+    [AT] = OUTGOING(at_transitions, false),
+    [LEFT_ARROW] = {.accepting = true},
+    [UNDERSCORE_4] = OUTGOING(underscore_4_transitions, false),
+    [EOL_OR_EOF] = {.accepting = true},
+    [AT_M] = OUTGOING(at_m_transitions, false),
+    [AT_MA] = OUTGOING(at_ma_transitions, false),
+    [AT_MAI] = OUTGOING(at_mai_transitions, false),
+    [AT_MAIN_STATE] = {.accepting = true},
+    [ZERO] = OUTGOING(zero_transitions, true),
+    [ESCAPED_1] = OUTGOING(escaped_1_transitions, false),
+    [S] = OUTGOING(s_transitions, true),
+    [DOUBLE_WITH_D_SUFFIX_1] = {.accepting = true},
+    [DOUBLE_WITH_D_SUFFIX_2] = {.accepting = true},
+    [SLASH_ASTERISK] = OUTGOING(slash_asterisk_transitions, false),
+    [INSIDE_BLOCK_COMMENT] = OUTGOING(inside_block_comment_transitions, false),
+    [SLASH_DOUBLE_ASTERISK_1] =
+        OUTGOING(slash_double_asterisk_1_transitions, false),
+    [POTENTIAL_NESTING] = OUTGOING(potential_nesting_transitions, false),
+    [BLOCK_COMMENT] = {.accepting = true},
     [INSIDE_MULTILINE_BLOCK_COMMENT] =
-        OUTGOING(inside_multiline_block_comment_transitions),
-    [SLASH_DOUBLE_ASTERISK_2] = OUTGOING(slash_double_asterisk_2_transitions),
-    [NESTING] = OUTGOING(nesting_transitions),
-    [S_QUOTE] = OUTGOING(s_quote_transitions),
-    [S_DOUBLE_QUOTE] = OUTGOING(s_double_quote_transitions),
-    [DOLLAR_SIGN] = OUTGOING(dollar_sign_transitions),
-    [QUOTE_2] = OUTGOING(quote_2_transitions),
-    [DOUBLE_QUOTE] = OUTGOING(double_quote_transitions),
-    [TEXT_IN_STRING_2] = OUTGOING(text_in_string_2_transitions),
-    [ESCAPED_2] = OUTGOING(escaped_2_transitions),
-    [TRIPLE_S_STRING_STRING] = OUTGOING(triple_s_string_string_transitions),
-    [UNIT_WITH_WHITESPACE] = OUTGOING(unit_with_whitespace_transitions),
+        OUTGOING(inside_multiline_block_comment_transitions, false),
+    [SLASH_DOUBLE_ASTERISK_2] =
+        OUTGOING(slash_double_asterisk_2_transitions, false),
+    [MULTILINE_BLOCK_COMMENT] = {.accepting = true},
+    [NESTING] = OUTGOING(nesting_transitions, false),
+    [S_QUOTE] = OUTGOING(s_quote_transitions, true),
+    [S_DOUBLE_QUOTE] = OUTGOING(s_double_quote_transitions, false),
+    [S_TRIPLE_QUOTE] = {.accepting = true},
+    [DOLLAR_SIGN] = OUTGOING(dollar_sign_transitions, false),
+    [QUOTE_1] = {.accepting = true},
+    [QUOTE_2] = OUTGOING(quote_2_transitions, false),
+    [DOUBLE_QUOTE] = OUTGOING(double_quote_transitions, false),
+    [TRIPLE_QUOTE] = {.accepting = true},
+    [DOLLAR_EXPRESSION_START] = {.accepting = true},
+    [DOLLAR_EXPRESSION_END] = {.accepting = true},
+    [TEXT_IN_STRING_2] = OUTGOING(text_in_string_2_transitions, true),
+    [ESCAPED_2] = OUTGOING(escaped_2_transitions, false),
+    [DOUBLE_DOLLAR_SIGN] = {.accepting = true},
+    [TRIPLE_S_STRING_STRING] =
+        OUTGOING(triple_s_string_string_transitions, true),
+    [UNIT_WITH_WHITESPACE] = OUTGOING(unit_with_whitespace_transitions, false),
 };
 
 // END GENERATED LEXER TRANSITIONS
+
+/**
+ * @brief Helper function for finding next transition if available
+ *
+ * @param state current state of the lexer
+ * @param character current character being processed
+ * @param top top of the stack
+ * @return pointer to the specific transition if found, NULL otherwise
+ */
+static const Transition* find_transition(int state, int character, int top) {
+  StateTransitions current_state = state_transitions[state];
+  for (size_t i = 0; i < current_state.count; i++) {
+    const Transition* transition = &current_state.transitions[i];
+    if (transition->matches(character) &&
+        (TOP(top) & transition->stack_top_mask)) {
+      return transition;
+    }
+  }
+  return NULL;
+}
+
+/**
+ * @brief Copies the contents of a stack from source to destination
+ *
+ * @param ctx[in] context
+ * @param destination[out] destination stack
+ * @param source[in] source stack
+ */
+static void copy_stack(Ctx* ctx,
+                       LexerStack* destination,
+                       const LexerStack* source) {
+  array_reserve(ctx, destination, source->count);
+  for (size_t i = 0; i < source->count; ++i) {
+    destination->data[i] = source->data[i];
+  }
+  destination->count = source->count;
+}
 
 /**
  * @brief provides next token from the stdin stream
@@ -772,517 +838,90 @@ static const StateTransitions state_transitions[UNIT_WITH_WHITESPACE + 1] = {
  * @return next token from the stdin stream
  */
 Token next_token(Ctx* ctx) {
-  LexerByteBuffer* buffer = &ctx->lexer_buffer;
-  Token token = {EOF_TOKEN, {0}, Input.line, Input.column};
-  current_state = START;
+  // buffer for pushback
+  LexerByteBuffer* buffer = &ctx->lexer.buffer;
+  Token token = {EOF_TOKEN, {0}, ctx->lexer.line, ctx->lexer.column};
+  State current_state = START;
+  State saved_state = START;
+  size_t saved_cursor = 0;
+  bool have_checkpoint = false;
 
-  LexerByteBuffer stack = ARRAY_EMPTY;
+  LexerStack* stack = &ctx->lexer.stack;
+  LexerStack* saved_stack = &ctx->lexer.saved_stack;
+  // Initialize stack if empty
+  if (stack->count == 0) {
+    array_append(ctx, stack, STACK_EMPTY);
+  }
+
+  const size_t token_start = ctx->lexer.cursor;
+
   while (true) {
     int current;
 
     // fetching next char, from buffer if possible, otherwise save new to buffer
-    if (buffer->count > Input.cursor) {
-      current = buffer->data[Input.cursor];
-      Input.cursor++;
+    if (buffer->count > ctx->lexer.cursor) {
+      current = buffer->data[ctx->lexer.cursor];
+      ctx->lexer.cursor++;
     } else {
       current = getchar();
       if (current >= 0) {
         array_append(ctx, buffer, current);
+        ctx->lexer.cursor++;
+      } else {
+        // EOF - no more characters
       }
     }
 
     // top of the stack
-    int top = stack.count == 0 ? STACK_EMPTY : stack.data[stack.count - 1];
+    int top = stack->count == 0 ? STACK_EMPTY : stack->data[stack->count - 1];
 
-    // tests for different transitions:
-    bool ascii = current >= 0 && current <= 127;
-    bool letter = (current >= 'A' && current <= 'Z') ||
-                  (current >= 'a' && current <= 'z');          // A16
-    bool digit = current >= '0' && current <= '9';             // A4
-    bool identifier_char = letter || digit || current == '_';  // A2
-    bool whitespace =
-        (current >= '\t' && current <= '\r') || current == ' ';  // A5
-    bool newline = current == '\r' || current == '\n';           // A10
-    bool string_char =
-        ascii && !newline && current != '"' && current != '\\';  // A6
-    bool triple_char = ascii && current != '"';                  // A7
-    bool exponent = current == 'e' || current == 'E';            // A8
-    bool sign = current == '+' || current == '-';                // A9
-    bool escape = current == '"' || current == '\\' || current == 'n' ||
-                  current == 'r' || current == 't';  // A12
-    bool suffix = current == 'd' || current == 'D';  // A13
-    bool comment_char =
-        ascii && !newline && current != '*' && current != '/';  // A14
+    const Transition* transition = find_transition(current_state, current, top);
+    if (transition == NULL) {
+      if (have_checkpoint) {
+        ctx->lexer.cursor = saved_cursor;
+        current_state = saved_state;
+        copy_stack(ctx, stack, saved_stack);
 
-    bool multiline_comment_char =
-        ascii && current != '*' && current != '/';              // A15
-    bool s_string_char = string_char && current != '$';         // A17
-    bool triple_s_string_char = triple_char && current != '$';  // A18
-    int next_state = -1;
+        // construct token from token_start and saved_cursor
+        return token;
+      }
 
-    switch (current_state) {
-      case START:
-        if (top == STACK_EMPTY || top == STACK_DOLLAR_EXPR) {
-          if (letter && current != 's') {  // A1
-            next_state = IDENTIFIER;
-          } else if (current >= '1' && current <= '9') {  // A3
-            next_state = INTEGER;
-          } else if (whitespace) {
-            next_state = WHITESPACE_STATE;
-          } else {
-            switch (current) {
-              case '"':
-                next_state = QUOTE_START;
-                break;
-              case '=':
-                next_state = EQUALS;
-                break;
-              case '<':
-                next_state = LESS_THEN;
-                break;
-              case '>':
-                next_state = GREATER_THEN;
-                break;
-              case '!':
-                next_state = NEGATION;
-                break;
-              case '(':
-                next_state = LEFT_PARENTHESIS;
-                break;
-              case ')':
-                next_state = RIGHT_PARENTHESIS;
-                break;
-              case '&':
-                next_state = AMPERSAND;
-                break;
-              case '|':
-                next_state = PIPE;
-                break;
-              case '+':
-                next_state = PLUS;
-                break;
-              case '-':
-                next_state = MINUS;
-                break;
-              case '*':
-                next_state = ASTERISK;
-                break;
-              case '/':
-                next_state = SLASH;
-                break;
-              case '.':
-                next_state = PERIOD_STATE;
-                break;
-              case ',':
-                next_state = COMMA_STATE;
-                break;
-              case ':':
-                next_state = COLON_STATE;
-                break;
-              case ';':
-                next_state = SEMICOLON_STATE;
-                break;
-              case '_':
-                next_state = UNDERSCORE_4;
-                break;
-              case '0':
-                next_state = ZERO;
-                break;
-              case 's':
-                next_state = S;
-                break;
-              case '@':
-                if (top == STACK_EMPTY)
-                  next_state = AT;
-                break;
-              case '}':
-                if (top == STACK_DOLLAR_EXPR) {
-                  array_remove(ctx, &stack, stack.count - 1);  // stack pop
-                  next_state = DOLLAR_EXPRESSION_END;
-                }
-                break;
-              default:
-                break;
-            }
-          }
-        }  //  if (top == STACK_EMPTY || top == STACK_DOLLAR_EXPR)
-        else if (current == '$') {
-          next_state = DOLLAR_SIGN;
-        } else if (top == STACK_S_STRING) {
-          if (current == '"') {
-            array_remove(ctx, &stack, stack.count - 1);  // stack pop
-            next_state = QUOTE_1;
-          } else if (s_string_char) {
-            next_state = TEXT_IN_STRING_2;
-          } else if (current == '\\') {
-            next_state = ESCAPED_2;
-          }
-        } else if (top == STACK_MULTILINE_S_STRING) {
-          if (current == '"') {
-            next_state = QUOTE_2;
-          } else if (triple_s_string_char) {
-            next_state = TRIPLE_S_STRING_STRING;
-          }
-        }
-        break;
+      if (current == EOF && current_state == START &&
+          ctx->lexer.cursor == token_start && stack->count == 1 &&
+          top == STACK_EMPTY) {
+        token.type = EOF_TOKEN;
+        return token;
+      }
+      THROW(E_LEXER_ERROR,
+            "Invalid or incomplete token");  // add line and column
+    } else {
+      switch (transition->stack_action) {
+        case TRANSITION_KEEP:
+          break;
+        case TRANSITION_PUSH:
+          array_append(ctx, stack, transition->stack_symbol);
+          break;
+        case TRANSITION_POP:
+          array_remove(ctx, stack, stack->count - 1);  // remove last
+          break;
+        case TRANSITION_REPLACE:
+          array_remove(ctx, stack, stack->count - 1);  // remove last
+          array_append(ctx, stack, transition->stack_symbol);
+          break;
+      }
 
-      case IDENTIFIER:
-        if (identifier_char)
-          next_state = IDENTIFIER;
-        break;
-      case INTEGER:
-        if (digit)
-          next_state = INTEGER;
-        else if (current == '.')
-          next_state = NUMBER_DOT;
-        else if (current == '_')
-          next_state = UNDERSCORE_1;
-        else if (exponent)
-          next_state = NUMBER_DOT_NUMBER_E;
-        break;
-      case WHITESPACE_STATE:
-        if (whitespace)
-          next_state = WHITESPACE_STATE;
-        break;
-      case QUOTE_START:
-        if (string_char)
-          next_state = TEXT_IN_STRING_1;
-        else if (current == '"')
-          next_state = EMPTY_STRING;
-        else if (current == '\\')
-          next_state = ESCAPED_1;
-        break;
-      case TEXT_IN_STRING_1:
-        if (current == '"')
-          next_state = STRING_WITH_TEXT;
-        else if (string_char)
-          next_state = TEXT_IN_STRING_1;
-        else if (current == '\\')
-          next_state = ESCAPED_1;
-        break;
-      case EQUALS:
-        if (current == '=')
-          next_state = ASSIGNMENT;
-        break;
-      case LESS_THEN:
-        if (current == '=')
-          next_state = LESS_THEN_OR_EQUAL;
-        else if (current == '-')
-          next_state = LEFT_ARROW;
-        break;
-      case GREATER_THEN:
-        if (current == '=')
-          next_state = GREATER_THEN_OR_EQUAL;
-        break;
-      case NEGATION:
-        if (current == '=')
-          next_state = NOT_EQUAL;
-        break;
-      case LEFT_PARENTHESIS:
-        if (current == ')')
-          next_state = UNIT;
-        else if (whitespace)
-          next_state = UNIT_WITH_WHITESPACE;
-        break;
-      case AMPERSAND:
-        if (current == '&')
-          next_state = DOUBLE_AMPERSAND;
-        break;
-      case PIPE:
-        if (current == '|')
-          next_state = DOUBLE_PIPE;
-        break;
-      case SLASH:
-        if (current == '/')
-          next_state = COMMENT;
-        else if (current == '*')
-          next_state = SLASH_ASTERISK;
-        break;
-      case EMPTY_STRING:
-        if (current == '"')
-          next_state = QUADRUPLE_QUOTE;
-        break;
-      case QUADRUPLE_QUOTE:
-        if (current == '"')
-          next_state = TRIPLE_QUOTE_TEXT_QUOTE;
-        else if (triple_char)
-          next_state = T_STRING_WITH_TEXT;
-        break;
-      case TRIPLE_QUOTE_TEXT_QUOTE:
-        if (current == '"')
-          next_state = TRIPLE_QUOTE_TEXT_DOUBLE_QUOTE;
-        else if (triple_char)
-          next_state = T_STRING_WITH_TEXT;
-        break;
-      case T_STRING_WITH_TEXT:
-        if (current == '"')
-          next_state = TRIPLE_QUOTE_TEXT_QUOTE;
-        else if (triple_char)
-          next_state = T_STRING_WITH_TEXT;
-        break;
-      case TRIPLE_QUOTE_TEXT_DOUBLE_QUOTE:
-        if (current == '"')
-          next_state = TRIPLE_STRING_STATE;
-        else if (triple_char)
-          next_state = T_STRING_WITH_TEXT;
-        break;
-      case NUMBER_DOT:
-      case PERIOD_STATE:
-        if (digit)
-          next_state = DOUBLE;
-        break;
-      case DOUBLE:
-        if (digit)
-          next_state = DOUBLE;
-        else if (exponent)
-          next_state = NUMBER_DOT_NUMBER_E;
-        else if (current == '_')
-          next_state = UNDERSCORE_2;
-        else if (suffix)
-          next_state = DOUBLE_WITH_D_SUFFIX_1;
-        break;
-      case NUMBER_DOT_NUMBER_E:
-        if (digit)
-          next_state = DOUBLE_WITH_EXPONENT;
-        else if (sign)
-          next_state = DOUBLE_WITH_SIGNED_EXPONENT;
-        break;
-      case DOUBLE_WITH_EXPONENT:
-        if (digit)
-          next_state = DOUBLE_WITH_EXPONENT;
-        else if (current == '_')
-          next_state = UNDERSCORE_3;
-        else if (suffix)
-          next_state = DOUBLE_WITH_D_SUFFIX_2;
-        break;
-      case UNDERSCORE_1:
-        if (digit)
-          next_state = INTEGER;
-        else if (current == '_')
-          next_state = UNDERSCORE_1;
-        break;
-      case UNDERSCORE_2:
-        if (digit)
-          next_state = DOUBLE;
-        else if (current == '_')
-          next_state = UNDERSCORE_2;
-        break;
-      case UNDERSCORE_3:
-        if (digit)
-          next_state = DOUBLE_WITH_EXPONENT;
-        else if (current == '_')
-          next_state = UNDERSCORE_3;
-        break;
-      case DOUBLE_WITH_SIGNED_EXPONENT:
-        if (digit)
-          next_state = DOUBLE_WITH_EXPONENT;
-        break;
-      case COMMENT:
-        if (newline)
-          next_state = EOL_OR_EOF;
-        else if (ascii)
-          next_state = COMMENT;  // A11
-        break;
-      case AT:
-        if (current == 'm')
-          next_state = AT_M;
-        break;
-      case UNDERSCORE_4:
-        if (identifier_char)
-          next_state = IDENTIFIER;
-        break;
-      case AT_M:
-        if (current == 'a')
-          next_state = AT_MA;
-        break;
-      case AT_MA:
-        if (current == 'i')
-          next_state = AT_MAI;
-        break;
-      case AT_MAI:
-        if (current == 'n')
-          next_state = AT_MAIN_STATE;
-        break;
-      case ZERO:
-        if (current == '.')
-          next_state = NUMBER_DOT;
-        break;
-      case ESCAPED_1:
-        if (escape)
-          next_state = TEXT_IN_STRING_1;
-        break;
-      case S:
-        if (identifier_char) {
-          next_state = IDENTIFIER;
-        } else if (current == '"') {
-          array_append(ctx, &stack, STACK_S_STRING);
-          next_state = S_QUOTE;
-        }
-        break;
+      current_state = transition->next_state;
 
-      case SLASH_ASTERISK:
-      case INSIDE_BLOCK_COMMENT:
-        if (comment_char)
-          next_state = INSIDE_BLOCK_COMMENT;
-        else if (current == '*')
-          next_state = SLASH_DOUBLE_ASTERISK_1;
-        else if (current == '/')
-          next_state = POTENTIAL_NESTING;
-        else if (newline)
-          next_state = INSIDE_MULTILINE_BLOCK_COMMENT;
-        break;
-      case SLASH_DOUBLE_ASTERISK_1:
-        if (current == '/') {
-          if (top == STACK_NESTED_COMMENT) {
-            array_remove(ctx, &stack, stack.count - 1);
-            next_state = INSIDE_BLOCK_COMMENT;
-          } else {
-            next_state = BLOCK_COMMENT;
-          }
-        } else if (comment_char)
-          next_state = INSIDE_BLOCK_COMMENT;
-        else if (current == '*')
-          next_state = SLASH_DOUBLE_ASTERISK_1;
-        else if (newline)
-          next_state = INSIDE_MULTILINE_BLOCK_COMMENT;
-        break;
-      case POTENTIAL_NESTING:
-        if (comment_char) {
-          next_state = INSIDE_BLOCK_COMMENT;
-        } else if (current == '*') {
-          array_append(ctx, &stack, STACK_NESTED_COMMENT);
-          next_state = INSIDE_BLOCK_COMMENT;
-        } else if (current == '/')
-          next_state = POTENTIAL_NESTING;
-        else if (newline)
-          next_state = INSIDE_MULTILINE_BLOCK_COMMENT;
-        break;
-      case INSIDE_MULTILINE_BLOCK_COMMENT:
-        if (multiline_comment_char)
-          next_state = INSIDE_MULTILINE_BLOCK_COMMENT;
-        else if (current == '*')
-          next_state = SLASH_DOUBLE_ASTERISK_2;
-        else if (current == '/')
-          next_state = NESTING;
-        break;
-      case SLASH_DOUBLE_ASTERISK_2:
-        if (current == '/') {
-          if (top == STACK_NESTED_COMMENT) {
-            array_remove(ctx, &stack, stack.count - 1);
-            next_state = INSIDE_MULTILINE_BLOCK_COMMENT;
-          } else {
-            next_state = MULTILINE_BLOCK_COMMENT;
-          }
-        } else if (current == '*')
-          next_state = SLASH_DOUBLE_ASTERISK_2;
-        else if (multiline_comment_char)
-          next_state = INSIDE_MULTILINE_BLOCK_COMMENT;
-        break;
-      case NESTING:
-        if (current == '/') {
-          next_state = NESTING;
-        } else if (current == '*') {
-          array_append(ctx, &stack, STACK_NESTED_COMMENT);
-          next_state = INSIDE_MULTILINE_BLOCK_COMMENT;
-        } else if (multiline_comment_char) {
-          next_state = INSIDE_MULTILINE_BLOCK_COMMENT;
-        }
-        break;
-
-      case S_QUOTE:
-        if (current == '"')
-          next_state = S_DOUBLE_QUOTE;
-        break;
-      case S_DOUBLE_QUOTE:
-        if (current == '"' && top != STACK_EMPTY) {
-          stack.data[stack.count - 1] = STACK_MULTILINE_S_STRING;
-          next_state = S_TRIPLE_QUOTE;
-        }
-        break;
-      case DOLLAR_SIGN:
-        if (letter) {
-          next_state = IDENTIFIER;
-        } else if (current == '{') {
-          array_append(ctx, &stack, STACK_DOLLAR_EXPR);
-          next_state = DOLLAR_EXPRESSION_START;
-        } else if (current == '_')
-          next_state = UNDERSCORE_4;
-        else if (current == '$')
-          next_state = DOUBLE_DOLLAR_SIGN;
-        break;
-      case QUOTE_2:
-        if (current == '"')
-          next_state = DOUBLE_QUOTE;
-        else if (triple_s_string_char)
-          next_state = TRIPLE_S_STRING_STRING;
-        break;
-      case DOUBLE_QUOTE:
-        if (current == '"' && top != STACK_EMPTY) {
-          array_remove(ctx, &stack, stack.count - 1);
-          next_state = TRIPLE_QUOTE;
-        } else if (triple_s_string_char) {
-          next_state = TRIPLE_S_STRING_STRING;
-        }
-        break;
-      case TEXT_IN_STRING_2:
-        if (s_string_char)
-          next_state = TEXT_IN_STRING_2;
-        else if (current == '\\')
-          next_state = ESCAPED_2;
-        break;
-      case ESCAPED_2:
-        if (escape)
-          next_state = TEXT_IN_STRING_2;
-        break;
-      case TRIPLE_S_STRING_STRING:
-        if (triple_s_string_char)
-          next_state = TRIPLE_S_STRING_STRING;
-        break;
-      case UNIT_WITH_WHITESPACE:
-        if (current == ')')
-          next_state = UNIT;
-        else if (whitespace)
-          next_state = UNIT_WITH_WHITESPACE;
-        break;
-
-      // These states have no outgoing transitions in R.
-      case STRING_WITH_TEXT:
-      case ASSIGNMENT:
-      case LESS_THEN_OR_EQUAL:
-      case GREATER_THEN_OR_EQUAL:
-      case NOT_EQUAL:
-      case UNIT:
-      case RIGHT_PARENTHESIS:
-      case DOUBLE_AMPERSAND:
-      case DOUBLE_PIPE:
-      case PLUS:
-      case MINUS:
-      case ASTERISK:
-      case TRIPLE_STRING_STATE:
-      case COMMA_STATE:
-      case COLON_STATE:
-      case SEMICOLON_STATE:
-      case LEFT_ARROW:
-      case EOL_OR_EOF:
-      case AT_MAIN_STATE:
-      case DOUBLE_WITH_D_SUFFIX_1:
-      case DOUBLE_WITH_D_SUFFIX_2:
-      case BLOCK_COMMENT:
-      case MULTILINE_BLOCK_COMMENT:
-      case S_TRIPLE_QUOTE:
-      case QUOTE_1:
-      case TRIPLE_QUOTE:
-      case DOLLAR_EXPRESSION_START:
-      case DOLLAR_EXPRESSION_END:
-      case DOUBLE_DOLLAR_SIGN:
-        break;
+      // update last_accepting state, save cursor and stack
+      // when going to accepting state
+      if (state_transitions[current_state].accepting) {
+        saved_state = current_state;
+        // save cursor
+        saved_cursor = ctx->lexer.cursor;
+        // save stack
+        copy_stack(ctx, saved_stack, stack);
+        have_checkpoint = true;
+      }
     }
-    // Token finalization and lookahead handling remain to be implemented.
-    if (next_state < 0)
-      break;
-    current_state = next_state;
   }
-
-  array_free(&stack);
-  return token;
 }
