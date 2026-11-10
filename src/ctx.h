@@ -16,7 +16,7 @@
 #define CTX_H
 
 #include "ir.h"        // IrProgram
-#include "lexer.h"     // LexerByteBuffer
+#include "lexer.h"     // LexerByteBuffer, LexerStack
 #include "symtable.h"  // Symtable
 
 #include <setjmp.h>   // jmp_buf
@@ -116,8 +116,8 @@ typedef struct Ctx {
 
   // Global symbol table
   Symtable global_symtable;
-  // Buffer for lexing lookahead
-  LexerByteBuffer lexer_buffer;
+  // Lexer state
+  LexerCtx lexer;
 
   // Intermediate representation of the program
   IrProgram ir;

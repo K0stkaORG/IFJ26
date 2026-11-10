@@ -113,6 +113,20 @@ typedef struct {
 ARRAY_TYPE(LexerByteBuffer, unsigned char);
 
 /**
+ * @brief Array type for lexer buffer
+ */
+ARRAY_TYPE(LexerStack, int);
+
+typedef struct {
+  LexerByteBuffer buffer;
+  LexerStack stack;
+  LexerStack saved_stack;
+  size_t line;
+  size_t column;
+  size_t cursor;
+} LexerCtx;
+
+/**
  * @brief Returns next token and deletes from the reel
  *
  * @return Next token
