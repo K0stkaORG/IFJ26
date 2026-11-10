@@ -11,6 +11,7 @@
 #define SNOW_ENABLED 1
 #include "snow/snow.h"
 
+#include "ast.h"
 #include "ctx.h"
 
 #include <stdbool.h>  // bool, true, false
@@ -48,6 +49,31 @@ describe(Ctx) {
       test_ctx.exit_code = E_LEXER_ERROR;
 
       asserteq(ctx_free(&test_ctx), E_LEXER_ERROR);
+    }
+
+    it("starts without an AST") {
+      Ctx test_ctx;
+
+      ctx_init(&test_ctx, DEFAULT_FLAGS);
+
+      assert(test_ctx.ast == NULL);
+      asserteq(ctx_free(&test_ctx), E_OK);
+    }
+
+    it("frees the registered AST and is safe to call twice") {
+      assertNoThrow({
+        AstNode* root = NULL;
+        AstNode* child = NULL;
+
+        ast_node_create(ctx, &root);
+        ctx->ast = root;
+        ast_node_create(ctx, &child);
+        ast_node_append_child(ctx, root, child);
+      });
+
+      asserteq(ctx_free(ctx), E_OK);
+      assert(ctx->ast == NULL);
+      asserteq(ctx_free(ctx), E_OK);
     }
   }
 
