@@ -272,7 +272,12 @@ void bst_insert(Ctx* ctx, Bst* tree, void* key, void* data) {
   if (key == NULL)
     THROW(E_INTERNAL_ERROR, "Attempted to insert NULL key into BST");
 
-  BstNode* node = TRY_MALLOC(sizeof(BstNode));
+  BstNode* node = TRY_MALLOC_OR(sizeof(BstNode), {
+    if (key != NULL && tree->key_destructor != NULL)
+      tree->key_destructor(key);
+    if (data != NULL && tree->data_destructor != NULL)
+      tree->data_destructor(data);
+  });
   bst_node_init(node, key, data);
 
   tree->root =
