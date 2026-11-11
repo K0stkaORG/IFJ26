@@ -21,6 +21,8 @@
 #include <stdbool.h>  // bool, true, false
 #include <stddef.h>   // NULL, size_t
 
+typedef struct AstNode AstNode;  // Forward declaration (ast.h includes ctx.h)
+
 /**
  * @brief Exit codes for the IFJ26 compiler
  */
@@ -109,6 +111,8 @@ typedef struct Ctx {
 
   // Intermediate representation of the program
   IrProgram ir;
+
+  AstNode* ast;
 } Ctx;
 
 /**

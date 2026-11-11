@@ -17,40 +17,182 @@
 
 typedef struct AstNode AstNode;
 
+/**
+ * @brief Kind of an AST node and the layout of its children.
+ *
+ * Layouts are written as [child, child...]. A child written as x|NONE is
+ * optional: when the source omits it, its slot holds a placeholder node of kind
+ * AST_NODE_NONE, so a given index always means the same thing. Only the last
+ * entry of a layout may repeat (written as x...).
+ *
+ * Single-line bodies (def, if, for, lambda) are wrapped in a BLOCK.
+ */
 typedef enum {
   AST_NODE_INVALID = -1,
+
+  // Placeholder for an omitted optional child, no children
   AST_NODE_NONE,
 
-  AST_NODE_IMPORT,
+  // === PROGRAM STRUCTURE ===
+
+  // [top-level...], top-level is DEF, TYPE_ALIAS, CLASS or EXTENSION
+  AST_NODE_PROGRAM,
+  // [ident, rettype|NONE, body, param_list...], flag AST_FLAG_MAIN for @main.
+  // Zero parameter lists is `def f`, one empty list is `def f()` (PARAMLISTS)
   AST_NODE_DEF,
-  AST_NODE_RETURN,
-  AST_NODE_CASE,
-  AST_NODE_MATCH,
-  AST_NODE_IF,
-  AST_NODE_ELSE,
-  AST_NODE_THEN,
-  AST_NODE_DO,
+  // [param...]
+  AST_NODE_PARAM_LIST,
+  // [ident, type]
+  AST_NODE_PARAM,
+  // [stmt...], its result is the result of its last statement
+  AST_NODE_BLOCK,
+
+  // === STATEMENTS ===
+
+  // [ident, type|NONE, init]
   AST_NODE_VAL,
+  // [ident, type|NONE, init]
   AST_NODE_VAR,
-  AST_NODE_FOR,
+  // [ident, expr]
+  AST_NODE_ASSIGN,
+  // [expr|NONE]
+  AST_NODE_RETURN,
+  // [cond, then, else|NONE], then is a BLOCK, else is a BLOCK, an IF for
+  // `else if`, or NONE. Flag AST_FLAG_EXPR when used as an expression
+  AST_NODE_IF,
+  // [cond, body]
   AST_NODE_WHILE,
+  // [ident, source, body, guard...], source is RANGE_TO, RANGE_UNTIL or any
+  // expression (a list in LISTS), every guard is a Boolean expression
+  AST_NODE_FOR,
+  // [from, to, step|NONE], `from to to [by step]`, also usable as expression
+  AST_NODE_RANGE_TO,
+  // [from, until], `from until until`, also usable as expression
+  AST_NODE_RANGE_UNTIL,
 
-  AST_NODE_TYPE_DOUBLE,
-  AST_NODE_TYPE_INT,
-  AST_NODE_TYPE_BOOLEAN,
-  AST_NODE_TYPE_STRING,
-  AST_NODE_TYPE_UNIT,
+  // === TYPE ANNOTATIONS ===
 
-  AST_NODE_CLASS,
-  AST_NODE_EXTENSION,
+  // Built-in type written in the source (e.g. val x: Int), no children, the
+  // type is in data_type
+  AST_NODE_TYPE_ANNOTATION,
+  // Type alias or class name, no children, the name is in name
+  AST_NODE_TYPE_NAME,
+  // [type, type...], `T1 | T2` (ALGEBDT)
+  AST_NODE_TYPE_UNION,
+  // [ret, param_type...], `(T1, T2) => R` (LAMBDAS)
+  AST_NODE_TYPE_FUNCTION,
+  // [elem], `List[T]` (LISTS)
   AST_NODE_TYPE_LIST,
-  AST_NODE_TYPE,
+
+  // === LEAVES ===
+
+  // Identifier, no children, the name is in name, the symbol in symbol
+  AST_NODE_IDENT,
+  // Literals, the only kinds that carry a value (see ast_node_type_has_value)
+  AST_NODE_INT_LIT,
+  AST_NODE_DOUBLE_LIT,
+  AST_NODE_STRING_LIT,
+  AST_NODE_BOOL_LIT,
+  // `()`, no children and no value
+  AST_NODE_UNIT_LIT,
+
+  // === EXPRESSIONS ===
+
+  // Binary operators, [left, right]
+  AST_NODE_ADD,
+  AST_NODE_SUB,
+  AST_NODE_MUL,
+  AST_NODE_DIV,
+  AST_NODE_EQ,
+  AST_NODE_NEQ,
+  AST_NODE_LT,
+  AST_NODE_GT,
+  AST_NODE_LE,
+  AST_NODE_GE,
+  AST_NODE_AND,
+  AST_NODE_OR,
+  // `++` (LISTS)
+  AST_NODE_CONCAT,
+
+  // Unary operators, [operand]
+  AST_NODE_NOT,
+  // Unary minus, also for negative literals
+  AST_NODE_NEG,
+
+  // [callee, arg...], every call form (functions, builtins, list indexing,
+  // constructors, methods). `f(a)(b)` is CALL [CALL [f, a], b]
+  AST_NODE_CALL,
+  // [receiver], `receiver.name`, the member name is in name
+  AST_NODE_MEMBER,
+
+  // === ALGEBDT ===
+
+  // [ident, type], `type Name = T1 | T2`
+  AST_NODE_TYPE_ALIAS,
+  // [ident, param_list], `case class Name(params)`
+  AST_NODE_CLASS,
+  // [scrutinee, case...]
+  AST_NODE_MATCH,
+  // [pattern, guard|NONE, body], pattern is a literal leaf or a PATTERN_* node
+  AST_NODE_CASE,
+  // [ident, type], `id: Type`
+  AST_NODE_PATTERN_TYPED,
+  // [ident, ident...], class name followed by the bound identifiers
+  AST_NODE_PATTERN_CTOR,
+  // `_`, no children
+  AST_NODE_PATTERN_WILDCARD,
+
+  // === LAMBDAS ===
+
+  // [param_list, body]
+  AST_NODE_LAMBDA,
+
+  // === EXTKW ===
+
+  // [receiver, def...], receiver is a PARAM
+  AST_NODE_EXTENSION,
 } AstNodeType;
 
+/**
+ * @brief Semantic data type of an expression, filled in by type checking.
+ *
+ * Not to be confused with AST_NODE_TYPE_ANNOTATION, which is a type written in
+ * the source code (its data_type holds the annotated type).
+ */
+typedef enum {
+  AST_DATA_TYPE_UNKNOWN,
+  AST_DATA_TYPE_INT,
+  AST_DATA_TYPE_DOUBLE,
+  AST_DATA_TYPE_BOOLEAN,
+  AST_DATA_TYPE_STRING,
+  AST_DATA_TYPE_UNIT,
+} AstDataType;
+
+typedef struct SymtableData SymtableData;
+
+/**
+ * @brief Modifiers of a node that do not change its child layout, combined
+ * with bitwise or.
+ */
+typedef enum {
+  AST_FLAG_NONE = 0,
+  // DEF annotated with @main
+  AST_FLAG_MAIN = 0x1U,
+  // IF used as an expression (CONTROL), its else branch is mandatory
+  AST_FLAG_EXPR = 0x2U,
+} AstNodeFlag;
+
+/**
+ * @brief Payload of a literal node, the valid member is given by the node type.
+ *
+ * INT_LIT -> int_value, DOUBLE_LIT -> double_value, STRING_LIT ->
+ * string_value, BOOL_LIT -> boolean_value. Other kinds carry no value.
+ *
+ * The node owns a copy of string_value, the caller keeps its own string.
+ */
 typedef union {
-  char char_value;
   int int_value;
-  double float_value;
+  double double_value;
   bool boolean_value;
   const char* string_value;
 } AstNodeValue;
@@ -76,6 +218,8 @@ void ast_node_destroy(Ctx* ctx, AstNode* node);
 /**
  * @brief Sets type for given node
  *
+ * Changing a STRING_LIT node to another kind releases its string value.
+ *
  * @pre Node pointer is not NULL!
  * @param node pointer to a AST node
  * @param type type to set for given node
@@ -85,11 +229,16 @@ void ast_node_set_type(AstNode* node, AstNodeType type);
 /**
  * @brief Sets value for given node
  *
+ * For a STRING_LIT node, the node stores its own copy of value.string_value
+ * and releases the previous one, the caller keeps ownership of its string.
+ * Set the type before the value.
+ *
  * @pre Node pointer is not NULL!
+ * @param ctx pointer to an initialized shared allocation and error context
  * @param node pointer to a AST node
  * @param value value to set for given node
  */
-void ast_node_set_value(AstNode* node, AstNodeValue value);
+void ast_node_set_value(Ctx* ctx, AstNode* node, AstNodeValue value);
 
 /**
  * @brief Returns node type
@@ -133,9 +282,9 @@ void ast_node_get_child(Ctx* ctx, AstNode* node, size_t index, AstNode** child);
  *
  * @pre Node pointer is not NULL!
  * @param node pointer to a AST node
- * @param parent pointer to a variable to store parent node
+ * @return parent node, NULL for a root
  */
-void ast_node_get_parent(AstNode* node, AstNode** parent);
+AstNode* ast_node_get_parent(const AstNode* node);
 
 /**
  * @brief Appends child to given parent node
@@ -171,5 +320,157 @@ void ast_node_detach_child(Ctx* ctx,
                            AstNode* node,
                            size_t index,
                            AstNode** child);
+
+// === AST NODE ATTRIBUTES ===
+
+/**
+ * @brief Tells whether nodes of given type carry a value
+ *
+ * @param type node type
+ * @return true for INT, DOUBLE, STRING and BOOL literals, false otherwise
+ */
+bool ast_node_type_has_value(AstNodeType type);
+
+/**
+ * @brief Sets semantic data type (result type of an expression) of given node
+ *
+ * @pre Node pointer is not NULL!
+ */
+void ast_node_set_data_type(AstNode* node, AstDataType data_type);
+
+/**
+ * @brief Returns semantic data type of given node
+ *
+ * @pre Node pointer is not NULL!
+ * @return AST_DATA_TYPE_UNKNOWN until type checking sets it
+ */
+AstDataType ast_node_get_data_type(const AstNode* node);
+
+/**
+ * @brief Sets source position the node originates from
+ *
+ * @pre Node pointer is not NULL!
+ * @param line line number from the token
+ * @param column column number from the token
+ */
+void ast_node_set_position(AstNode* node, int line, int column);
+
+/**
+ * @brief Returns source line of given node (0 if unset)
+ *
+ * @pre Node pointer is not NULL!
+ */
+int ast_node_get_line(const AstNode* node);
+
+/**
+ * @brief Returns source column of given node (0 if unset)
+ *
+ * @pre Node pointer is not NULL!
+ */
+int ast_node_get_column(const AstNode* node);
+
+/**
+ * @brief Sets the identifier name of given node (IDENT, MEMBER, TYPE_NAME)
+ *
+ * The node stores its own copy and releases the previous one, the caller keeps
+ * ownership of name.
+ *
+ * @pre Node pointer is not NULL!
+ * @param ctx pointer to an initialized shared allocation and error context
+ * @param node pointer to a AST node
+ * @param name identifier name, NULL clears it
+ */
+void ast_node_set_name(Ctx* ctx, AstNode* node, const char* name);
+
+/**
+ * @brief Returns the identifier name of given node
+ *
+ * @pre Node pointer is not NULL!
+ * @return name owned by the node, NULL if unset
+ */
+const char* ast_node_get_name(const AstNode* node);
+
+/**
+ * @brief Sets the symbol table entry the identifier of given node resolves to
+ *
+ * @pre Node pointer is not NULL!
+ * @param node pointer to a AST node
+ * @param symbol resolved symbol, not owned by the node
+ */
+void ast_node_set_symbol(AstNode* node, const SymtableData* symbol);
+
+/**
+ * @brief Returns the symbol of given node
+ *
+ * @pre Node pointer is not NULL!
+ * @return resolved symbol, NULL until semantic analysis sets it
+ */
+const SymtableData* ast_node_get_symbol(const AstNode* node);
+
+/**
+ * @brief Sets the flags of given node, replacing the previous ones
+ *
+ * @pre Node pointer is not NULL!
+ * @param node pointer to a AST node
+ * @param flags AstNodeFlag values combined with bitwise or
+ */
+void ast_node_set_flags(AstNode* node, unsigned flags);
+
+/**
+ * @brief Returns the flags of given node
+ *
+ * @pre Node pointer is not NULL!
+ * @return AstNodeFlag values combined with bitwise or, AST_FLAG_NONE by default
+ */
+unsigned ast_node_get_flags(const AstNode* node);
+
+// === AST CONSTRUCTION HELPERS (MakeLeaf / MakeTree) ===
+
+/**
+ * @brief Creates a leaf node with a value
+ *
+ * @param ctx pointer to an initialized shared allocation and error context
+ * @param type node type, must satisfy ast_node_type_has_value
+ * @param value value of the leaf
+ * @param node pointer to a variable to store the new node
+ */
+void ast_make_leaf(Ctx* ctx,
+                   AstNodeType type,
+                   AstNodeValue value,
+                   AstNode** node);
+
+/**
+ * @brief Creates a node with one child
+ *
+ * Takes ownership of operand on success. On a thrown error the operand stays
+ * owned by the caller.
+ *
+ * @param ctx pointer to an initialized shared allocation and error context
+ * @param type node type
+ * @param operand parentless child node
+ * @param node pointer to a variable to store the new node
+ */
+void ast_make_unary(Ctx* ctx,
+                    AstNodeType type,
+                    AstNode* operand,
+                    AstNode** node);
+
+/**
+ * @brief Creates a node with two children, in the order [left, right]
+ *
+ * Takes ownership of both children on success. On a thrown error the children
+ * stay owned by the caller.
+ *
+ * @param ctx pointer to an initialized shared allocation and error context
+ * @param type node type
+ * @param left parentless left child node
+ * @param right parentless right child node
+ * @param node pointer to a variable to store the new node
+ */
+void ast_make_binary(Ctx* ctx,
+                     AstNodeType type,
+                     AstNode* left,
+                     AstNode* right,
+                     AstNode** node);
 
 #endif

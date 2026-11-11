@@ -9,6 +9,8 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include "ast.h"
 #include "snow/snow.h"
 
@@ -58,7 +60,7 @@ describe(AST_NODE) {
       asserteq(ast_node_get_value(node).int_value, 0);
 
       AstNode* parent = node;
-      ast_node_get_parent(node, &parent);
+      parent = ast_node_get_parent(node);
       asserteq_ptr(parent, NULL);
     }
   }
@@ -148,7 +150,7 @@ describe(AST_NODE) {
             AstNode* actual = NULL;
             ast_node_get_child(ctx, root, remaining_index++, &actual);
             asserteq_ptr(actual, children[child_index]);
-            ast_node_get_parent(actual, &actual);
+            actual = ast_node_get_parent(actual);
             asserteq_ptr(actual, root);
           }
           AstNode* actual = NULL;
@@ -164,7 +166,7 @@ describe(AST_NODE) {
           asserteq(ast_node_get_child_count(root), child_count);
           ast_node_get_child(ctx, root, child_count - 1, &actual);
           asserteq_ptr(actual, replacement);
-          ast_node_get_parent(replacement, &actual);
+          actual = ast_node_get_parent(replacement);
           asserteq_ptr(actual, root);
 
           assertNoThrow({
@@ -219,9 +221,9 @@ describe(AST_NODE_OPERATIONS) {
         asserteq_ptr(actual, first);
         ast_node_get_child(ctx, parent, 1, &actual);
         asserteq_ptr(actual, second);
-        ast_node_get_parent(first, &actual);
+        actual = ast_node_get_parent(first);
         asserteq_ptr(actual, parent);
-        ast_node_get_parent(second, &actual);
+        actual = ast_node_get_parent(second);
         asserteq_ptr(actual, parent);
       }
     }
@@ -250,9 +252,9 @@ describe(AST_NODE_OPERATIONS) {
         asserteq_ptr(actual, child);
         ast_node_get_child(ctx, destination, 0, &actual);
         asserteq_ptr(actual, existing);
-        ast_node_get_parent(child, &actual);
+        actual = ast_node_get_parent(child);
         asserteq_ptr(actual, source);
-        ast_node_get_parent(existing, &actual);
+        actual = ast_node_get_parent(existing);
         asserteq_ptr(actual, destination);
       }
     }
@@ -271,7 +273,7 @@ describe(AST_NODE_OPERATIONS) {
         // Assert: leave the node detached and childless.
         asserteq(ast_node_get_child_count(node), 0);
         AstNode* actual = node;
-        ast_node_get_parent(node, &actual);
+        actual = ast_node_get_parent(node);
         asserteq_ptr(actual, NULL);
       }
     }
@@ -304,11 +306,11 @@ describe(AST_NODE_OPERATIONS) {
         asserteq_ptr(actual, middle);
         ast_node_get_child(ctx, middle, 0, &actual);
         asserteq_ptr(actual, leaf);
-        ast_node_get_parent(root, &actual);
+        actual = ast_node_get_parent(root);
         asserteq_ptr(actual, NULL);
-        ast_node_get_parent(middle, &actual);
+        actual = ast_node_get_parent(middle);
         asserteq_ptr(actual, root);
-        ast_node_get_parent(leaf, &actual);
+        actual = ast_node_get_parent(leaf);
         asserteq_ptr(actual, middle);
       }
     }
@@ -341,9 +343,9 @@ describe(AST_NODE_OPERATIONS) {
         asserteq_ptr(actual, child);
         ast_node_get_child(ctx, destination, operation == 1 ? 1 : 0, &actual);
         asserteq_ptr(actual, existing);
-        ast_node_get_parent(child, &actual);
+        actual = ast_node_get_parent(child);
         asserteq_ptr(actual, destination);
-        ast_node_get_parent(existing, &actual);
+        actual = ast_node_get_parent(existing);
         asserteq_ptr(actual, destination);
       }
     }
@@ -373,13 +375,13 @@ describe(AST_NODE_OPERATIONS) {
         asserteq_ptr(actual, existing);
         ast_node_get_child(ctx, subtree, 0, &actual);
         asserteq_ptr(actual, leaf);
-        ast_node_get_parent(subtree, &actual);
+        actual = ast_node_get_parent(subtree);
         asserteq_ptr(actual, parent);
-        ast_node_get_parent(leaf, &actual);
+        actual = ast_node_get_parent(leaf);
         asserteq_ptr(actual, subtree);
-        ast_node_get_parent(existing, &actual);
+        actual = ast_node_get_parent(existing);
         asserteq_ptr(actual, parent);
-        ast_node_get_parent(parent, &actual);
+        actual = ast_node_get_parent(parent);
         asserteq_ptr(actual, NULL);
       }
     }
@@ -432,12 +434,12 @@ describe(AST_NODE_OPERATIONS) {
           asserteq(ctx->flags.forceNthMallocFail, 0);
           asserteq(ast_node_get_child_count(parent), 3);
           AstNode* actual = NULL;
-          ast_node_get_parent(child, &actual);
+          actual = ast_node_get_parent(child);
           asserteq_ptr(actual, NULL);
           for (size_t index = 0; index < 3; index++) {
             ast_node_get_child(ctx, parent, index, &actual);
             asserteq_ptr(actual, existing[index]);
-            ast_node_get_parent(existing[index], &actual);
+            actual = ast_node_get_parent(existing[index]);
             asserteq_ptr(actual, parent);
           }
         }
@@ -463,7 +465,7 @@ describe(AST_NODE_OPERATIONS) {
           AstNode* actual = NULL;
           ast_node_get_child(ctx, parent, index, &actual);
           asserteq_ptr(actual, expected[index]);
-          ast_node_get_parent(expected[index], &actual);
+          actual = ast_node_get_parent(expected[index]);
           asserteq_ptr(actual, parent);
         }
       }
@@ -484,7 +486,7 @@ describe(AST_NODE_OPERATIONS) {
       ast_node_get_child(ctx, parent, 0, &actual);
       asserteq_ptr(actual, child);
       asserteq(ast_node_get_child_count(parent), 1);
-      ast_node_get_parent(child, &actual);
+      actual = ast_node_get_parent(child);
       asserteq_ptr(actual, parent);
     }
 
@@ -507,7 +509,7 @@ describe(AST_NODE_OPERATIONS) {
         AstNode* actual = NULL;
         ast_node_get_child(ctx, parent, index, &actual);
         asserteq_ptr(actual, children[index]);
-        ast_node_get_parent(children[index], &actual);
+        actual = ast_node_get_parent(children[index]);
         asserteq_ptr(actual, parent);
       }
     }
@@ -527,7 +529,7 @@ describe(AST_NODE_OPERATIONS) {
       ast_node_get_child(ctx, parent, 0, &actual);
       asserteq_ptr(actual, child);
       asserteq(ast_node_get_child_count(parent), 1);
-      ast_node_get_parent(child, &actual);
+      actual = ast_node_get_parent(child);
       asserteq_ptr(actual, parent);
     }
 
@@ -554,7 +556,7 @@ describe(AST_NODE_OPERATIONS) {
         asserteq_ptr(actual, expected);
       }
       AstNode* actual_parent = NULL;
-      ast_node_get_parent(child, &actual_parent);
+      actual_parent = ast_node_get_parent(child);
       asserteq_ptr(actual_parent, parent);
     }
 
@@ -581,7 +583,7 @@ describe(AST_NODE_OPERATIONS) {
         asserteq_ptr(actual, expected);
       }
       AstNode* actual_parent = NULL;
-      ast_node_get_parent(child, &actual_parent);
+      actual_parent = ast_node_get_parent(child);
       asserteq_ptr(actual_parent, parent);
     }
 
@@ -608,7 +610,7 @@ describe(AST_NODE_OPERATIONS) {
         asserteq_ptr(actual, expected);
       }
       AstNode* actual_parent = NULL;
-      ast_node_get_parent(child, &actual_parent);
+      actual_parent = ast_node_get_parent(child);
       asserteq_ptr(actual_parent, parent);
     }
 
@@ -629,7 +631,7 @@ describe(AST_NODE_OPERATIONS) {
       asserteq(ast_node_get_child_count(parent), 0);
 
       AstNode* actual = child;
-      ast_node_get_parent(child, &actual);
+      actual = ast_node_get_parent(child);
       asserteq_ptr(actual, NULL);
     }
   }
@@ -656,11 +658,11 @@ describe(AST_NODE_OPERATIONS) {
         ast_node_get_child(ctx, parent, index, &actual);
         asserteq_ptr(actual, children[index < 0 ? index : index + 1]);
         AstNode* actual_parent = NULL;
-        ast_node_get_parent(actual, &actual_parent);
+        actual_parent = ast_node_get_parent(actual);
         asserteq_ptr(actual_parent, parent);
       }
       AstNode* actual_parent = parent;
-      ast_node_get_parent(detached, &actual_parent);
+      actual_parent = ast_node_get_parent(detached);
       asserteq_ptr(actual_parent, NULL);
       ast_node_set_type(detached, AST_NODE_RETURN);
       asserteq(ast_node_get_type(detached), AST_NODE_RETURN);
@@ -687,11 +689,11 @@ describe(AST_NODE_OPERATIONS) {
         ast_node_get_child(ctx, parent, index, &actual);
         asserteq_ptr(actual, children[index < 0 ? index : index + 1]);
         AstNode* actual_parent = NULL;
-        ast_node_get_parent(actual, &actual_parent);
+        actual_parent = ast_node_get_parent(actual);
         asserteq_ptr(actual_parent, parent);
       }
       AstNode* actual_parent = parent;
-      ast_node_get_parent(detached, &actual_parent);
+      actual_parent = ast_node_get_parent(detached);
       asserteq_ptr(actual_parent, NULL);
       ast_node_set_type(detached, AST_NODE_RETURN);
       asserteq(ast_node_get_type(detached), AST_NODE_RETURN);
@@ -718,11 +720,11 @@ describe(AST_NODE_OPERATIONS) {
         ast_node_get_child(ctx, parent, index, &actual);
         asserteq_ptr(actual, children[index < 1 ? index : index + 1]);
         AstNode* actual_parent = NULL;
-        ast_node_get_parent(actual, &actual_parent);
+        actual_parent = ast_node_get_parent(actual);
         asserteq_ptr(actual_parent, parent);
       }
       AstNode* actual_parent = parent;
-      ast_node_get_parent(detached, &actual_parent);
+      actual_parent = ast_node_get_parent(detached);
       asserteq_ptr(actual_parent, NULL);
       ast_node_set_type(detached, AST_NODE_RETURN);
       asserteq(ast_node_get_type(detached), AST_NODE_RETURN);
@@ -749,11 +751,11 @@ describe(AST_NODE_OPERATIONS) {
         ast_node_get_child(ctx, parent, index, &actual);
         asserteq_ptr(actual, children[index < 2 ? index : index + 1]);
         AstNode* actual_parent = NULL;
-        ast_node_get_parent(actual, &actual_parent);
+        actual_parent = ast_node_get_parent(actual);
         asserteq_ptr(actual_parent, parent);
       }
       AstNode* actual_parent = parent;
-      ast_node_get_parent(detached, &actual_parent);
+      actual_parent = ast_node_get_parent(detached);
       asserteq_ptr(actual_parent, NULL);
       ast_node_set_type(detached, AST_NODE_RETURN);
       asserteq(ast_node_get_type(detached), AST_NODE_RETURN);
@@ -779,6 +781,249 @@ describe(AST_NODE_OPERATIONS) {
       AstNode* actual = NULL;
       ast_node_get_child(ctx, parent, 0, &actual);
       asserteq_ptr(actual, child);
+    }
+  }
+}
+
+describe(AST_EXPRESSIONS) {
+  subdesc(ATTRIBUTES) {
+    it("Should default data type and position of a new node") {
+      AstNode* node = NULL;
+      ast_node_create(ctx, &node);
+      defer({ ast_node_destroy(ctx, node); });
+
+      asserteq(ast_node_get_data_type(node), AST_DATA_TYPE_UNKNOWN);
+      asserteq(ast_node_get_line(node), 0);
+      asserteq(ast_node_get_column(node), 0);
+    }
+
+    it("Should store data type and position independently of the kind") {
+      AstNode* node = NULL;
+      ast_node_create(ctx, &node);
+      defer({ ast_node_destroy(ctx, node); });
+
+      ast_node_set_type(node, AST_NODE_ADD);
+      ast_node_set_data_type(node, AST_DATA_TYPE_DOUBLE);
+      ast_node_set_position(node, 3, 14);
+
+      asserteq(ast_node_get_type(node), AST_NODE_ADD);
+      asserteq(ast_node_get_data_type(node), AST_DATA_TYPE_DOUBLE);
+      asserteq(ast_node_get_line(node), 3);
+      asserteq(ast_node_get_column(node), 14);
+    }
+
+    it("Should report which node types carry a value") {
+      asserteq(ast_node_type_has_value(AST_NODE_IDENT), false);
+      asserteq(ast_node_type_has_value(AST_NODE_INT_LIT), true);
+      asserteq(ast_node_type_has_value(AST_NODE_DOUBLE_LIT), true);
+      asserteq(ast_node_type_has_value(AST_NODE_STRING_LIT), true);
+      asserteq(ast_node_type_has_value(AST_NODE_BOOL_LIT), true);
+      asserteq(ast_node_type_has_value(AST_NODE_ADD), false);
+      asserteq(ast_node_type_has_value(AST_NODE_IF), false);
+      asserteq(ast_node_type_has_value(AST_NODE_NONE), false);
+    }
+  }
+
+  subdesc(MAKE_LEAF) {
+    it("Should create a literal leaf with its value") {
+      AstNode* leaf = NULL;
+      ast_make_leaf(ctx, AST_NODE_INT_LIT, (AstNodeValue){.int_value = 42},
+                    &leaf);
+      defer({ ast_node_destroy(ctx, leaf); });
+
+      asserteq(ast_node_get_type(leaf), AST_NODE_INT_LIT);
+      asserteq(ast_node_get_value(leaf).int_value, 42);
+      asserteq(ast_node_get_child_count(leaf), 0);
+    }
+
+    it("Should reject node types without a value") {
+      AstNode* leaf = NULL;
+      assertThrow(E_INTERNAL_ERROR, {
+        ast_make_leaf(ctx, AST_NODE_ADD, (AstNodeValue){.int_value = 1}, &leaf);
+      });
+      asserteq_ptr(leaf, NULL);
+    }
+  }
+
+  subdesc(MAKE_TREE) {
+    it("Should build x = a + 1 with children in source order") {
+      AstNode* x = NULL;
+      AstNode* a = NULL;
+      AstNode* one = NULL;
+      AstNode* sum = NULL;
+      AstNode* assign = NULL;
+      ast_node_create(ctx, &x);
+      ast_node_set_type(x, AST_NODE_IDENT);
+      ast_node_create(ctx, &a);
+      ast_node_set_type(a, AST_NODE_IDENT);
+      ast_make_leaf(ctx, AST_NODE_INT_LIT, (AstNodeValue){.int_value = 1},
+                    &one);
+
+      ast_make_binary(ctx, AST_NODE_ADD, a, one, &sum);
+      ast_make_binary(ctx, AST_NODE_ASSIGN, x, sum, &assign);
+      defer({ ast_node_destroy(ctx, assign); });
+
+      asserteq(ast_node_get_type(assign), AST_NODE_ASSIGN);
+      asserteq(ast_node_get_child_count(assign), 2);
+      AstNode* child = NULL;
+      ast_node_get_child(ctx, assign, 0, &child);
+      asserteq_ptr(child, x);
+      ast_node_get_child(ctx, assign, 1, &child);
+      asserteq_ptr(child, sum);
+      ast_node_get_child(ctx, sum, 0, &child);
+      asserteq_ptr(child, a);
+      ast_node_get_child(ctx, sum, 1, &child);
+      asserteq_ptr(child, one);
+    }
+
+    it("Should leave children with the caller when a precondition fails") {
+      AstNode* left = NULL;
+      AstNode* right = NULL;
+      AstNode* parent = NULL;
+      AstNode* result = NULL;
+      ast_node_create(ctx, &left);
+      ast_node_create(ctx, &right);
+      ast_node_create(ctx, &parent);
+      ast_node_append_child(ctx, parent, right);
+      defer({
+        ast_node_destroy(ctx, parent);
+        ast_node_destroy(ctx, left);
+      });
+
+      assertThrow(E_INTERNAL_ERROR, {
+        ast_make_binary(ctx, AST_NODE_ADD, left, right, &result);
+      });
+      ctx->exit_code = E_OK;
+      assertThrow(E_INTERNAL_ERROR,
+                  { ast_make_binary(ctx, AST_NODE_ADD, left, NULL, &result); });
+
+      asserteq_ptr(result, NULL);
+      AstNode* actual_parent = left;
+      actual_parent = ast_node_get_parent(left);
+      asserteq_ptr(actual_parent, NULL);
+      actual_parent = ast_node_get_parent(right);
+      asserteq_ptr(actual_parent, parent);
+    }
+
+    it("Should build a unary node") {
+      AstNode* operand = NULL;
+      AstNode* negation = NULL;
+      ast_make_leaf(ctx, AST_NODE_BOOL_LIT,
+                    (AstNodeValue){.boolean_value = true}, &operand);
+      ast_make_unary(ctx, AST_NODE_NOT, operand, &negation);
+      defer({ ast_node_destroy(ctx, negation); });
+
+      asserteq(ast_node_get_type(negation), AST_NODE_NOT);
+      asserteq(ast_node_get_child_count(negation), 1);
+      AstNode* child = NULL;
+      ast_node_get_child(ctx, negation, 0, &child);
+      asserteq_ptr(child, operand);
+    }
+  }
+}
+
+describe(AST_NODE_DATA) {
+  subdesc(NAME) {
+    it("Should keep its own copy of the identifier name") {
+      AstNode* ident = NULL;
+      ast_node_create(ctx, &ident);
+      defer({ ast_node_destroy(ctx, ident); });
+      char token_text[] = "counter";
+
+      ast_node_set_name(ctx, ident, token_text);
+      token_text[0] = 'X';
+
+      assertneq_ptr(ast_node_get_name(ident), token_text);
+      asserteq_str(ast_node_get_name(ident), "counter");
+    }
+
+    it("Should replace the name and clear it with NULL") {
+      AstNode* ident = NULL;
+      ast_node_create(ctx, &ident);
+      defer({ ast_node_destroy(ctx, ident); });
+      asserteq_ptr(ast_node_get_name(ident), NULL);
+
+      ast_node_set_name(ctx, ident, "first");
+      ast_node_set_name(ctx, ident, "second");
+      asserteq_str(ast_node_get_name(ident), "second");
+
+      ast_node_set_name(ctx, ident, NULL);
+      asserteq_ptr(ast_node_get_name(ident), NULL);
+    }
+
+    it("Should keep the previous name when copying fails") {
+      AstNode* ident = NULL;
+      ast_node_create(ctx, &ident);
+      defer({ ast_node_destroy(ctx, ident); });
+      ast_node_set_name(ctx, ident, "kept");
+
+      ctx->flags.forceNthMallocFail = 1;
+      assertThrow(E_INTERNAL_ERROR,
+                  { ast_node_set_name(ctx, ident, "replacement"); });
+      ctx->exit_code = E_OK;
+
+      asserteq_str(ast_node_get_name(ident), "kept");
+    }
+  }
+
+  subdesc(SYMBOL) {
+    it("Should resolve the symbol later without touching the name") {
+      static int symbol_storage;
+      const SymtableData* symbol = (const SymtableData*)&symbol_storage;
+      AstNode* ident = NULL;
+      ast_node_create(ctx, &ident);
+      defer({ ast_node_destroy(ctx, ident); });
+      ast_node_set_name(ctx, ident, "factorial");
+      asserteq_ptr(ast_node_get_symbol(ident), NULL);
+
+      ast_node_set_symbol(ident, symbol);
+
+      asserteq_ptr(ast_node_get_symbol(ident), symbol);
+      asserteq_str(ast_node_get_name(ident), "factorial");
+    }
+  }
+
+  subdesc(STRING_VALUE) {
+    it("Should keep its own copy of a string literal after the token is "
+       "freed") {
+      char* token_text = malloc(sizeof("hello"));
+      assertneq_ptr(token_text, NULL);
+      memcpy(token_text, "hello", sizeof("hello"));
+      AstNode* literal = NULL;
+
+      ast_make_leaf(ctx, AST_NODE_STRING_LIT,
+                    (AstNodeValue){.string_value = token_text}, &literal);
+      defer({ ast_node_destroy(ctx, literal); });
+      token_text[0] = 'X';
+      free(token_text);
+
+      asserteq_str(ast_node_get_value(literal).string_value, "hello");
+    }
+
+    it("Should not own a value set before the node became a string literal") {
+      AstNode* node = NULL;
+      ast_node_create(ctx, &node);
+      defer({ ast_node_destroy(ctx, node); });
+      ast_node_set_type(node, AST_NODE_INT_LIT);
+      ast_node_set_value(ctx, node, (AstNodeValue){.int_value = 42});
+
+      ast_node_set_type(node, AST_NODE_STRING_LIT);
+
+      asserteq_ptr(ast_node_get_value(node).string_value, NULL);
+    }
+  }
+
+  subdesc(FLAGS) {
+    it("Should start without flags and store combined flags") {
+      AstNode* def = NULL;
+      ast_node_create(ctx, &def);
+      defer({ ast_node_destroy(ctx, def); });
+      asserteq(ast_node_get_flags(def), 0);
+
+      ast_node_set_flags(def, AST_FLAG_MAIN | AST_FLAG_EXPR);
+
+      asserteq(ast_node_get_flags(def) & AST_FLAG_MAIN, AST_FLAG_MAIN);
+      asserteq(ast_node_get_flags(def) & AST_FLAG_EXPR, AST_FLAG_EXPR);
     }
   }
 }

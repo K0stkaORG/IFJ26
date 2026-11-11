@@ -13,7 +13,8 @@
 
 #include "ctx.h"
 
-#include "ir.h"  // ir_init, ir_free
+#include "ast.h"  // ast_node_destroy
+#include "ir.h"   // ir_init, ir_free
 
 #include <errno.h>   // errno, ERANGE
 #include <limits.h>  // INT_MAX
@@ -32,6 +33,8 @@ void ctx_init(Ctx* ctx, Flags flags) {
 
   // Initialize IR program
   ir_init(&ctx->ir);
+
+  ctx->ast = NULL;
 }
 
 bool parse_cli_args(int argc, char* argv[], Flags* flags) {
@@ -91,6 +94,13 @@ bool parse_cli_args(int argc, char* argv[], Flags* flags) {
 ExitCode ctx_free(Ctx* ctx) {
   // Free allocated memory
   ir_free(&ctx->ir);
+
+  // Free the AST
+  if (ctx->ast != NULL) {
+    AstNode* ast = ctx->ast;
+    ctx->ast = NULL;
+    ast_node_destroy(ctx, ast);
+  }
 
   // Return the exit code
   return ctx->exit_code;

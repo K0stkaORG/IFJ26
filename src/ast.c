@@ -2,11 +2,18 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "ctx.h"
 
 struct AstNode {
   AstNodeType type;
   AstNodeValue value;
+  AstDataType data_type;
+  char* name;
+  const SymtableData* symbol;
+  unsigned flags;
+  int line;
+  int column;
 
   AstNode* parent;
   AstNode** child_nodes;
@@ -17,6 +24,13 @@ struct AstNode {
 /**
  * HELPERS
  */
+
+static char* ast_string_copy(Ctx* ctx, const char* source) {
+  size_t size = strlen(source) + 1;
+  char* copy = TRY_MALLOC(size);
+  memcpy(copy, source, size);
+  return copy;
+}
 
 // NOLINTNEXTLINE(misc-no-recursion)
 static bool ast_node_is_ancestor(const AstNode* node,
@@ -42,12 +56,20 @@ void ast_node_create(Ctx* ctx, AstNode** node) {
   AstNode** children =
       TRY_MALLOC_OR(sizeof(*temp->child_nodes), { free(temp); });
 
+  // The first slot is allocated up front because TRY_REALLOC rejects
+  // NULL, so the capacity counts it
   *temp = (AstNode){.type = AST_NODE_NONE,
                     .value = {.int_value = 0},
+                    .data_type = AST_DATA_TYPE_UNKNOWN,
+                    .name = NULL,
+                    .symbol = NULL,
+                    .flags = AST_FLAG_NONE,
+                    .line = 0,
+                    .column = 0,
                     .parent = NULL,
                     .child_nodes = children,
                     .child_count = 0,
-                    .child_capacity = 0};
+                    .child_capacity = 1};
   *node = temp;
 }
 
@@ -63,7 +85,8 @@ void ast_node_destroy(Ctx* ctx, AstNode* node) {
       child_index--;
     }
     if (child_index == 0) {
-      THROW(E_INTERNAL_ERROR, "Cannot destroy AST node: parent does not own node");
+      THROW(E_INTERNAL_ERROR,
+            "Cannot destroy AST node: parent does not own node");
     }
     AstNode* detached = NULL;
     ast_node_detach_child(ctx, parent, child_index - 1, &detached);
@@ -71,17 +94,38 @@ void ast_node_destroy(Ctx* ctx, AstNode* node) {
   while (node->child_count > 0) {
     ast_node_destroy(ctx, node->child_nodes[node->child_count - 1]);
   }
+  free(node->name);
+  if (node->type == AST_NODE_STRING_LIT) {
+    free((char*)node->value.string_value);
+  }
   free(node->child_nodes);
   free(node);
   return;
 }
 
 void ast_node_set_type(AstNode* node, AstNodeType type) {
+  bool was_string = node->type == AST_NODE_STRING_LIT;
+  bool is_string = type == AST_NODE_STRING_LIT;
+  if (was_string && !is_string) {
+    free((char*)node->value.string_value);
+    node->value = (AstNodeValue){.int_value = 0};
+  } else if (!was_string && is_string) {
+    node->value = (AstNodeValue){.string_value = NULL};
+  }
   node->type = type;
 }
 
-void ast_node_set_value(AstNode* node, AstNodeValue value) {
-  node->value = value;
+void ast_node_set_value(Ctx* ctx, AstNode* node, AstNodeValue value) {
+  if (node->type != AST_NODE_STRING_LIT) {
+    node->value = value;
+    return;
+  }
+  char* copy = NULL;
+  if (value.string_value != NULL) {
+    copy = ast_string_copy(ctx, value.string_value);
+  }
+  free((char*)node->value.string_value);
+  node->value.string_value = copy;
 }
 
 AstNodeType ast_node_get_type(const AstNode* node) {
@@ -106,8 +150,8 @@ void ast_node_get_child(Ctx* ctx,
   *child = node->child_nodes[index];
 }
 
-void ast_node_get_parent(AstNode* node, AstNode** parent) {
-  *parent = node->parent;
+AstNode* ast_node_get_parent(const AstNode* node) {
+  return node->parent;
 }
 
 void ast_node_append_child(Ctx* ctx, AstNode* node, AstNode* child) {
@@ -126,8 +170,7 @@ void ast_node_append_child(Ctx* ctx, AstNode* node, AstNode* child) {
   }
   if (node->child_count == node->child_capacity) {
     size_t new_capacity = node->child_capacity * 2 + 1;
-    TRY_REALLOC(node->child_nodes,
-                new_capacity * sizeof(*node->child_nodes));
+    TRY_REALLOC(node->child_nodes, new_capacity * sizeof(*node->child_nodes));
     node->child_capacity = new_capacity;
   }
   node->child_nodes[node->child_count++] = child;
@@ -146,18 +189,17 @@ void ast_node_insert_child(Ctx* ctx,
   }
   if (child->parent != NULL) {
     THROW(E_INTERNAL_ERROR,
-          "Cannot append child: child already has node as parent");
+          "Cannot insert child: child already has node as parent");
   }
   if (ast_node_is_ancestor(node, child)) {
-    THROW(E_INTERNAL_ERROR, "Cannot append child: child is ancestor of node");
+    THROW(E_INTERNAL_ERROR, "Cannot insert child: child is ancestor of node");
   }
   if (index > node->child_count) {
     THROW(E_INTERNAL_ERROR, "Cannot insert child: index out of bounds");
   }
   if (node->child_count == node->child_capacity) {
     size_t new_capacity = node->child_capacity * 2 + 1;
-    TRY_REALLOC(node->child_nodes,
-                new_capacity * sizeof(*node->child_nodes));
+    TRY_REALLOC(node->child_nodes, new_capacity * sizeof(*node->child_nodes));
     node->child_capacity = new_capacity;
   }
   for (size_t i = node->child_count; i > index; i--) {
@@ -189,4 +231,119 @@ void ast_node_detach_child(Ctx* ctx,
   }
   node->child_count--;
   node->child_nodes[node->child_count] = NULL;
+}
+
+bool ast_node_type_has_value(AstNodeType type) {
+  switch (type) {
+    case AST_NODE_INT_LIT:
+    case AST_NODE_DOUBLE_LIT:
+    case AST_NODE_STRING_LIT:
+    case AST_NODE_BOOL_LIT:
+      return true;
+    default:
+      return false;
+  }
+}
+
+void ast_node_set_data_type(AstNode* node, AstDataType data_type) {
+  node->data_type = data_type;
+}
+
+AstDataType ast_node_get_data_type(const AstNode* node) {
+  return node->data_type;
+}
+
+void ast_node_set_position(AstNode* node, int line, int column) {
+  node->line = line;
+  node->column = column;
+}
+
+int ast_node_get_line(const AstNode* node) {
+  return node->line;
+}
+
+int ast_node_get_column(const AstNode* node) {
+  return node->column;
+}
+
+void ast_node_set_name(Ctx* ctx, AstNode* node, const char* name) {
+  char* copy = NULL;
+  if (name != NULL) {
+    copy = ast_string_copy(ctx, name);
+  }
+  free(node->name);
+  node->name = copy;
+}
+
+const char* ast_node_get_name(const AstNode* node) {
+  return node->name;
+}
+
+void ast_node_set_symbol(AstNode* node, const SymtableData* symbol) {
+  node->symbol = symbol;
+}
+
+const SymtableData* ast_node_get_symbol(const AstNode* node) {
+  return node->symbol;
+}
+
+void ast_node_set_flags(AstNode* node, unsigned flags) {
+  node->flags = flags;
+}
+
+unsigned ast_node_get_flags(const AstNode* node) {
+  return node->flags;
+}
+
+void ast_make_leaf(Ctx* ctx,
+                   AstNodeType type,
+                   AstNodeValue value,
+                   AstNode** node) {
+  if (!ast_node_type_has_value(type)) {
+    THROW(E_INTERNAL_ERROR, "Cannot make leaf: node type carries no value");
+  }
+  ast_node_create(ctx, node);
+  ast_node_set_type(*node, type);
+  ast_node_set_value(ctx, *node, value);
+}
+
+void ast_make_unary(Ctx* ctx,
+                    AstNodeType type,
+                    AstNode* operand,
+                    AstNode** node) {
+  if (operand == NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot make node: operand pointer is NULL");
+  }
+  if (operand->parent != NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot make node: operand already has a parent");
+  }
+  // Preconditions are checked above, so a later failure can only be an
+  // allocation failure, which ends the compilation anyway.
+  AstNode* result = NULL;
+  ast_node_create(ctx, &result);
+  ast_node_set_type(result, type);
+  ast_node_append_child(ctx, result, operand);
+  *node = result;
+}
+
+void ast_make_binary(Ctx* ctx,
+                     AstNodeType type,
+                     AstNode* left,
+                     AstNode* right,
+                     AstNode** node) {
+  if (left == NULL || right == NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot make node: child pointer is NULL");
+  }
+  if (left == right) {
+    THROW(E_INTERNAL_ERROR, "Cannot make node: both children are the same");
+  }
+  if (left->parent != NULL || right->parent != NULL) {
+    THROW(E_INTERNAL_ERROR, "Cannot make node: child already has a parent");
+  }
+  AstNode* result = NULL;
+  ast_node_create(ctx, &result);
+  ast_node_set_type(result, type);
+  ast_node_append_child(ctx, result, left);
+  ast_node_append_child(ctx, result, right);
+  *node = result;
 }
