@@ -98,11 +98,21 @@ typedef union {
 } TokenValue;
 
 /**
+ * @brief Enum defining the value type of a token
+ */
+typedef enum {
+  INTEGER,
+  DECIMAL,
+  TEXT,
+} TokenValueType;
+
+/**
  * @brief structure defining the tokens
  */
 typedef struct {
   TokenType type;
   TokenValue value;
+  TokenValueType value_type;
   size_t line;
   size_t column;
 } Token;
