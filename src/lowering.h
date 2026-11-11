@@ -19,8 +19,7 @@
  * @brief Lower the AST to IR
  *
  * This function takes the AST stored in the context and lowers it to IR (also
- * stored it in the context). It does not do any optimization. It does type
- * checking.
+ * stored it in the context). It does not do any optimization nor type checking.
  *
  * @param[in,out] ctx Context of the compiler
  */
