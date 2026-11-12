@@ -60,6 +60,7 @@ typedef struct SymtableData {
  * @param ctx Context
  * @param table Table to initialize
  * @param parent Parent table or NULL if global
+ * @pre table != NULL
  */
 void symtable_init(Ctx* ctx, Symtable* table, Symtable* parent);
 
