@@ -56,7 +56,7 @@ typedef struct SymtableData {
 
 typedef struct SymtableResult SymtableResult;
 
-void symtable_init(Symtable* table, Symtable* parent);
+void symtable_init(Ctx* ctx, Symtable* table, Symtable* parent);
 void symtable_destroy(Symtable* table);
 void symtable_insert(Symtable* table, SymtableData data);
 SymtableResult symtable_lookup(Symtable* table);  // + lookup key

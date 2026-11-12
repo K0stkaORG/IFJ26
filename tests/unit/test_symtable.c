@@ -19,19 +19,19 @@ describe(symtable) {
     Symtable table;
     Symtable table2;
     it("symtable initialization") {
-      symtable_init(&table, NULL);
+      symtable_init(ctx, &table, NULL);
       asserteq_ptr(table.tree.root, NULL);
       asserteq_ptr(table.parent, NULL);
     }
     it("symtable initialization with parent") {
-      symtable_init(&table2, &table);
+      symtable_init(ctx, &table2, &table);
       asserteq_ptr(table2.tree.root, NULL);
       asserteq_ptr(table2.parent, &table);
       asserteq_ptr(table2.parent->tree.root, NULL);
       asserteq_ptr(table2.parent->parent, NULL);
     }
     it("symtable init with NULL as table") {
-      assertThrow(E_INTERNAL_ERROR, { symtable_init(NULL, NULL); });
+      assertThrow(E_INTERNAL_ERROR, { symtable_init(ctx, NULL, NULL); });
     }
   }
 
@@ -39,8 +39,8 @@ describe(symtable) {
     it("initialized non-empty symtable destruction") {
       Symtable table;
       Symtable table2;
-      symtable_init(&table, NULL);
-      symtable_init(&table2, &table);
+      symtable_init(ctx, &table, NULL);
+      symtable_init(ctx, &table2, &table);
       symtable_destroy(&table2);
       asserteq_ptr(table2.tree.root, NULL);
       asserteq_ptr(table2.parent, NULL);
