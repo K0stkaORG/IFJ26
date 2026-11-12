@@ -11,7 +11,7 @@
 #ifndef BST_H
 #define BST_H
 
-#include "ctx.h"
+typedef struct Ctx Ctx;
 
 /**
  * @brief Type for function that compares keys and returns result in int.
