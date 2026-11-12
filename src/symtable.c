@@ -54,13 +54,10 @@ void symtable_insert(Ctx* ctx,
           "attempted to insert NULL identifier into symtable");
 
   SymtableData* dataptr = TRY_MALLOC(sizeof(SymtableData));
-
-  char* identptr = TRY_MALLOC_OR(strlen(identifier) + 1, {
-    if (dataptr != NULL)
-      free(dataptr);
-  });
-
   *dataptr = data;
+
+  char* identptr = TRY_MALLOC_OR(strlen(identifier) + 1,
+                                 { symtabledata_destructor(dataptr); });
   strcpy(identptr, identifier);
 
   bst_insert(ctx, &table->tree, identptr, dataptr);
