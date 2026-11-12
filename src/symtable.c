@@ -28,3 +28,10 @@ void symtable_init(Ctx* ctx, Symtable* table, Symtable* parent) {
            (BstDataDestructor)symtabledata_destructor);
   table->parent = parent;
 }
+
+void symtable_destroy(Symtable* table) {
+  if (table == NULL)
+    return;
+  bst_destroy(&table->tree);
+  table->parent = NULL;
+}
