@@ -552,13 +552,13 @@ describe(bst) {
     }
 
     it("test malloc failure in bst_insert and verify tree remains empty") {
-      ctx->flags.forceNthMallocFail = 1;
-
-      char key[] = "a";
-      int data = 1;
+      char* key = heapStr(ctx, "a");
+      int* data = TRY_MALLOC(sizeof(int));
+      *data = 1;
 
       asserteq_ptr(tree.root, NULL);
-      assertThrow(E_INTERNAL_ERROR, { bst_insert(ctx, &tree, key, &data); });
+      ctx->flags.forceNthMallocFail = 1;
+      assertThrow(E_INTERNAL_ERROR, { bst_insert(ctx, &tree, key, data); });
       asserteq_ptr(tree.root, NULL);
     }
   }
