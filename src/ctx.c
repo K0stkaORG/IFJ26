@@ -13,8 +13,9 @@
 
 #include "ctx.h"
 
-#include "ast.h"  // ast_node_destroy
-#include "ir.h"   // ir_init, ir_free
+#include "ast.h"       // ast_node_destroy
+#include "ir.h"        // ir_init, ir_free
+#include "symtable.h"  // symtable_init, symtable_destroy
 
 #include <errno.h>   // errno, ERANGE
 #include <limits.h>  // INT_MAX
