@@ -11,7 +11,8 @@
 #include "ir_helpers.h"
 
 #include "array.h"
-#include "ir_internal.h"
+#include "ir.h"
+#include "ir_free_helpers.h"
 
 #include <stdbool.h>  // bool
 #include <string.h>   // strlen, memcpy, size_t
@@ -34,17 +35,7 @@ static IrFunction* ir_get_function(Ctx* ctx, IrFunctionId function) {
   return &ctx->ir.functions.data[function];
 }
 
-/**
- * @brief Creates a copy of a string
- *
- * Allocates memory for the string, including its terminating null character.
- * The caller owns the returned string and must free it.
- *
- * @param[in,out] ctx The shared context used for memory and error handling
- * @param[in] source The string to copy
- * @return Pointer to the copied string
- */
-static char* copy_string(Ctx* ctx, const char* source) {
+char* copy_string(Ctx* ctx, const char* source) {
   // Check for NULL source
   if (source == NULL)
     THROW(E_INTERNAL_ERROR, "Cannot copy a NULL string");
@@ -58,17 +49,7 @@ static char* copy_string(Ctx* ctx, const char* source) {
   return copy;
 }
 
-/**
- * @brief Creates a copy of an IR operand
- *
- * Copies string values into a separate allocation. Other operand values are
- * copied directly. The original operand is not modified.
- *
- * @param[in,out] ctx The shared context used for memory and error handling
- * @param[in] operand The operand to copy
- * @return Copy of the operand
- */
-static IrOperand ir_copy_operand(Ctx* ctx, IrOperand operand) {
+IrOperand ir_copy_operand(Ctx* ctx, IrOperand operand) {
   if (operand.type < IR_OP_VALUE || operand.type > IR_OP_UNIT)
     THROW(E_INTERNAL_ERROR, "Invalid IR operand type: %d", operand.type);
 
