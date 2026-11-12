@@ -1,5 +1,5 @@
 /**
- * @file symtable.c
+ * @file symtable.h
  * Project: IFJ26
  *
  * @author David Daniel Slapal (xslapad00)
