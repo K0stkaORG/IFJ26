@@ -15,6 +15,7 @@
 
 #include "array.h"
 #include "ir.h"
+#include "ir_helpers.h"
 
 #include <stdlib.h>  // free
 
@@ -34,38 +35,21 @@ void ir_free_instruction(IrInstruction* instruction) {
     return;
 
   // Free the operands
-  switch (instruction->type) {
-    // Unary instructions
-    case IR_INST_FLOOR:
-    case IR_INST_NOT:
-    case IR_INST_INT2DOUBLE:
+  switch (ir_get_instruction_class(instruction)) {
+    case IR_INST_CLASS_UNARY:
       ir_free_operand(&instruction->operands.unary.operand);
       break;
 
-    // Binary instructions
-    case IR_INST_ADD:
-    case IR_INST_SUB:
-    case IR_INST_MUL:
-    case IR_INST_IDIV:
-    case IR_INST_DIV:
-    case IR_INST_EQ:
-    case IR_INST_NE:
-    case IR_INST_LT:
-    case IR_INST_LE:
-    case IR_INST_GT:
-    case IR_INST_GE:
-    case IR_INST_CONCAT:
+    case IR_INST_CLASS_BINARY:
       ir_free_operand(&instruction->operands.binary.left);
       ir_free_operand(&instruction->operands.binary.right);
       break;
 
-    // Store instruction
-    case IR_INST_STORE:
+    case IR_INST_CLASS_STORE:
       ir_free_operand(&instruction->operands.store.source);
       break;
 
-    // Call instruction
-    case IR_INST_CALL:
+    case IR_INST_CLASS_CALL:
       if (instruction->operands.call.args != NULL) {
         // Free each argument
         for (size_t oid = 0; oid < instruction->operands.call.arg_count; oid++)
@@ -76,6 +60,7 @@ void ir_free_instruction(IrInstruction* instruction) {
       }
       break;
 
+    // Only LOAD remains and it does not have any operands
     default:
       break;
   }

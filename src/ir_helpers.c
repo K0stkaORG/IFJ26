@@ -18,6 +18,49 @@
 #include <string.h>   // strlen, memcpy, size_t
 
 /**
+ * @brief Returns the class of an instruction
+ *
+ * @param[in] inst The instruction to get the class of
+ * @return The class of the instruction
+ */
+IrInstructionClass ir_get_instruction_class(IrInstruction* instruction) {
+  switch (instruction->type) {
+    // Unary operations
+    case IR_INST_NOT:
+    case IR_INST_INT2DOUBLE:
+    case IR_INST_FLOOR:
+      return IR_INST_CLASS_UNARY;
+
+    // Binary operations
+    case IR_INST_ADD:
+    case IR_INST_SUB:
+    case IR_INST_MUL:
+    case IR_INST_IDIV:
+    case IR_INST_DIV:
+    case IR_INST_EQ:
+    case IR_INST_NE:
+    case IR_INST_LT:
+    case IR_INST_LE:
+    case IR_INST_GT:
+    case IR_INST_GE:
+    case IR_INST_CONCAT:
+      return IR_INST_CLASS_BINARY;
+
+    // Store
+    case IR_INST_STORE:
+      return IR_INST_CLASS_STORE;
+
+    // Load
+    case IR_INST_LOAD:
+      return IR_INST_CLASS_LOAD;
+
+      // Function calls
+    case IR_INST_CALL:
+      return IR_INST_CLASS_CALL;
+  }
+}
+
+/**
  * @brief Gets a function from the IR by its id
  *
  * Throws E_INTERNAL_ERROR if the function id is invalid.
