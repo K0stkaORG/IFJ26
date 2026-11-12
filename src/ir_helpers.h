@@ -12,6 +12,14 @@
 #include "ir.h"
 
 /**
+ * @brief Returns the class of an instruction
+ *
+ * @param[in] inst The instruction to get the class of
+ * @return The class of the instruction
+ */
+IrInstructionClass ir_get_instruction_class(IrInstruction* instruction);
+
+/**
  * @brief Creates a copy of a string
  *
  * Allocates memory for the string, including its terminating null character.

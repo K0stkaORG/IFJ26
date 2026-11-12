@@ -93,29 +93,14 @@ size_t optimizer_replace_value_with_constant(Ctx* ctx,
     for (size_t instId = 0; instId < block->instructions.count; instId++) {
       IrInstruction* instruction = &block->instructions.data[instId];
 
-      switch (instruction->type) {
-        // Unary operations
-        case IR_INST_NOT:
-        case IR_INST_INT2DOUBLE:
-        case IR_INST_FLOOR:
+      switch (ir_get_instruction_class(instruction)) {
+        case IR_INST_CLASS_UNARY:
           replacements += replace_operand_with_constant(
               ctx, &instruction->operands.unary.operand, value_id, &constant,
               move_ownership, &ownership_taken);
           break;
 
-        // Binary operations
-        case IR_INST_ADD:
-        case IR_INST_SUB:
-        case IR_INST_MUL:
-        case IR_INST_IDIV:
-        case IR_INST_DIV:
-        case IR_INST_EQ:
-        case IR_INST_NE:
-        case IR_INST_LT:
-        case IR_INST_LE:
-        case IR_INST_GT:
-        case IR_INST_GE:
-        case IR_INST_CONCAT:
+        case IR_INST_CLASS_BINARY:
           replacements += replace_operand_with_constant(
               ctx, &instruction->operands.binary.left, value_id, &constant,
               move_ownership, &ownership_taken);
@@ -124,15 +109,13 @@ size_t optimizer_replace_value_with_constant(Ctx* ctx,
               move_ownership, &ownership_taken);
           break;
 
-        // Store
-        case IR_INST_STORE:
+        case IR_INST_CLASS_STORE:
           replacements += replace_operand_with_constant(
               ctx, &instruction->operands.store.source, value_id, &constant,
               move_ownership, &ownership_taken);
           break;
 
-        // Function calls
-        case IR_INST_CALL:
+        case IR_INST_CLASS_CALL:
           for (size_t opId = 0; opId < instruction->operands.call.arg_count;
                opId++)
             replacements += replace_operand_with_constant(
