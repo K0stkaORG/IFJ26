@@ -122,12 +122,14 @@ size_t optimizer_replace_value_with_constant(Ctx* ctx,
           replacements += replace_operand_with_constant(
               ctx, &instruction->operands.binary.right, value_id, &constant,
               move_ownership, &ownership_taken);
+          break;
 
         // Store
         case IR_INST_STORE:
           replacements += replace_operand_with_constant(
               ctx, &instruction->operands.store.source, value_id, &constant,
               move_ownership, &ownership_taken);
+          break;
 
         // Function calls
         case IR_INST_CALL:
@@ -136,6 +138,7 @@ size_t optimizer_replace_value_with_constant(Ctx* ctx,
             replacements += replace_operand_with_constant(
                 ctx, &instruction->operands.call.args[opId], value_id,
                 &constant, move_ownership, &ownership_taken);
+          break;
 
         // Only load remains and that has no operands
         default:
