@@ -10,6 +10,7 @@
 
 #include "array.h"
 #define SNOW_ENABLED 1
+#include "ctx.h"
 #include "snow/snow.h"
 #include "symtable.h"
 
@@ -29,8 +30,26 @@ describe(symtable) {
       asserteq_ptr(table2.parent->tree.root, NULL);
       asserteq_ptr(table2.parent->parent, NULL);
     }
+    it("symtable init with NULL as table") {
+      assertThrow(E_INTERNAL_ERROR, { symtable_init(NULL, NULL); });
+    }
   }
-  subdesc(symtable_destroy) {}
+
+  subdesc(symtable_destroy) {
+    it("initialized non-empty symtable destruction") {
+      Symtable table;
+      Symtable table2;
+      symtable_init(&table, NULL);
+      symtable_init(&table2, &table);
+      symtable_destroy(&table2);
+      asserteq_ptr(table2.tree.root, NULL);
+      asserteq_ptr(table2.parent, NULL);
+    }
+    it("NULL symtable destruction") {
+      symtable_destroy(NULL);
+    }
+  }
+
   subdesc(symtable_insert) {}
   subdesc(symtable_lookup) {}
 }
