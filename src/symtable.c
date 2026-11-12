@@ -65,3 +65,19 @@ void symtable_insert(Ctx* ctx,
 
   bst_insert(ctx, &table->tree, identptr, dataptr);
 }
+
+SymtableData* symtable_lookup(Symtable* table,
+                              char* identifier,
+                              bool recursive) {
+  if (table == NULL || identifier == NULL)
+    return NULL;
+  if (recursive) {
+    SymtableData* dataptr = (SymtableData*)bst_search(&table->tree, identifier);
+    if (dataptr == NULL && table->parent != NULL)
+      dataptr = symtable_lookup(table->parent, identifier, true);
+    return dataptr;
+  } else {
+    SymtableData* dataptr = (SymtableData*)bst_search(&table->tree, identifier);
+    return dataptr;
+  }
+}

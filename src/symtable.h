@@ -55,8 +55,6 @@ typedef struct SymtableData {
   bool is_val;
 } SymtableData;
 
-typedef struct SymtableResult SymtableResult;
-
 /**
  * @brief Initializes symbol table
  * @param ctx Context
@@ -84,6 +82,8 @@ void symtable_insert(Ctx* ctx,
                      Symtable* table,
                      char* identifier,
                      SymtableData data);
-SymtableResult symtable_lookup(Symtable* table);  // + lookup key
+SymtableData* symtable_lookup(Symtable* table,
+                              char* identifier,
+                              bool recursive);
 
 #endif
