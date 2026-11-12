@@ -35,6 +35,9 @@ void ctx_init(Ctx* ctx, Flags flags) {
   ir_init(&ctx->ir);
 
   ctx->ast = NULL;
+
+  // Initialize global symbol table
+  symtable_init(ctx, &ctx->global_symtable, NULL);
 }
 
 bool parse_cli_args(int argc, char* argv[], Flags* flags) {
@@ -101,6 +104,9 @@ ExitCode ctx_free(Ctx* ctx) {
     ctx->ast = NULL;
     ast_node_destroy(ctx, ast);
   }
+
+  // Destroy global symbol table
+  symtable_destroy(&ctx->global_symtable);
 
   // Return the exit code
   return ctx->exit_code;

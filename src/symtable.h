@@ -14,8 +14,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "bst.h"
-#include "ctx.h"
 #include "ir.h"
+
+typedef struct Ctx Ctx;
 
 /**
  * @brief Type of symbol stored in the symbol table
