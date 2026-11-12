@@ -62,11 +62,13 @@ typedef struct SymtableData {
  * @param parent Parent table or NULL if global
  */
 void symtable_init(Ctx* ctx, Symtable* table, Symtable* parent);
+
 /**
  * @brief Destroys symbol table
  * @param table Table to destroy
  */
 void symtable_destroy(Symtable* table);
+
 /**
  * @brief Inserts data into symbol table
  * @param ctx Context
@@ -82,6 +84,16 @@ void symtable_insert(Ctx* ctx,
                      Symtable* table,
                      char* identifier,
                      SymtableData data);
+
+/**
+ * @brief Lookups data in the symbol table
+ * @param table Table for lookup start
+ * @param identifier String identifier to look up
+ * @param recursive false if searching only local scope, true for recursive
+ * search in all scopes
+ * @pre If table is not NULL, it must be initialized
+ * @return Pointer to SymtableData if found or NULL. Symtable retains ownership.
+ */
 SymtableData* symtable_lookup(Symtable* table,
                               char* identifier,
                               bool recursive);
