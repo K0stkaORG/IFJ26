@@ -12,10 +12,10 @@
  */
 
 #include "ctx.h"
-
-#include "ast.h"       // ast_node_destroy
-#include "ir.h"        // ir_init, ir_free
-#include "symtable.h"  // symtable_init, symtable_destroy
+#include "ast.h"                // ast_node_destroy
+#include "ir.h"                 // ir_init, ir_free
+#include "symtable.h"           // symtable_init, symtable_destroy
+#include "symtable_builtins.h"  // symtable_builtins_populate
 
 #include <errno.h>   // errno, ERANGE
 #include <limits.h>  // INT_MAX
