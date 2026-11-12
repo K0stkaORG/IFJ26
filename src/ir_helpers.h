@@ -12,6 +12,30 @@
 #include "ir.h"
 
 /**
+ * @brief Creates a copy of a string
+ *
+ * Allocates memory for the string, including its terminating null character.
+ * The caller owns the returned string and must free it.
+ *
+ * @param[in,out] ctx The shared context used for memory and error handling
+ * @param[in] source The string to copy
+ * @return Pointer to the copied string
+ */
+char* copy_string(Ctx* ctx, const char* source);
+
+/**
+ * @brief Creates a copy of an IR operand
+ *
+ * Copies string values into a separate allocation. Other operand values are
+ * copied directly. The original operand is not modified.
+ *
+ * @param[in,out] ctx The shared context used for memory and error handling
+ * @param[in] operand The operand to copy
+ * @return Copy of the operand
+ */
+IrOperand ir_copy_operand(Ctx* ctx, IrOperand operand);
+
+/**
  * @brief Adds a function to the IR
  *
  * Copies the function name and initializes the function to default values.
@@ -22,8 +46,8 @@
  * @param[in] return_type Return type of the function
  * @return Id of the added function
  *
- * @warning Adding a function may invalidate pointers into the function array.
- * Invalid arguments or allocation failure throw E_INTERNAL_ERROR.
+ * @warning Adding a function may invalidate pointers into the function
+ * array. Invalid arguments or allocation failure throw E_INTERNAL_ERROR.
  */
 IrFunctionId ir_add_function(Ctx* ctx, const char* name, IrType return_type);
 
