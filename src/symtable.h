@@ -57,8 +57,29 @@ typedef struct SymtableData {
 
 typedef struct SymtableResult SymtableResult;
 
+/**
+ * @brief Initializes symbol table
+ * @param ctx Context
+ * @param table Table to initialize
+ * @param parent Parent table or NULL if global
+ */
 void symtable_init(Ctx* ctx, Symtable* table, Symtable* parent);
+/**
+ * @brief Destroys symbol table
+ * @param table Table to destroy
+ */
 void symtable_destroy(Symtable* table);
+/**
+ * @brief Inserts data into symbol table
+ * @param ctx Context
+ * @param table Table to insert into
+ * @param identifier String identifier
+ * @param data Symbol table data
+ * @pre Table must be initialized
+ * @pre Caller retains ownership of identifier string
+ * @pre Data passed by value. param_types in the struct must be allocated on
+ * heap by caller and ownership is transferred to symtable.
+ */
 void symtable_insert(Ctx* ctx,
                      Symtable* table,
                      char* identifier,

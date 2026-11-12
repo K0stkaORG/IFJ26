@@ -14,6 +14,11 @@
 #include "bst.h"
 #include "ctx.h"
 
+/**
+ * @brief Destructs symtable data
+ * @param data Data to destruct
+ * @pre param_types in function data must be on heap
+ */
 static void symtabledata_destructor(void* data) {
   SymtableData* dataptr = (SymtableData*)data;
   if (dataptr != NULL) {
