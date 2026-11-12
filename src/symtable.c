@@ -14,11 +14,13 @@
 #include "bst.h"
 #include "ctx.h"
 
-static void symtabledata_create(SymtableData* data) {
-  void;
-}
 static void symtabledata_destructor(void* data) {
-  void;
+  SymtableData* dataptr = (SymtableData*)data;
+  if (dataptr != NULL) {
+    if (dataptr->symbol_type == SYMBOL_FUNCTION && dataptr->param_types != NULL)
+      free(dataptr->param_types);
+    free(dataptr);
+  }
 }
 
 void symtable_init(Ctx* ctx, Symtable* table, Symtable* parent) {
@@ -34,4 +36,27 @@ void symtable_destroy(Symtable* table) {
     return;
   bst_destroy(&table->tree);
   table->parent = NULL;
+}
+
+void symtable_insert(Ctx* ctx,
+                     Symtable* table,
+                     char* identifier,
+                     SymtableData data) {
+  if (table == NULL)
+    THROW(E_INTERNAL_ERROR, "attempted to insert into NULL symtable");
+  if (identifier == NULL)
+    THROW(E_INTERNAL_ERROR,
+          "attempted to insert NULL identifier into symtable");
+
+  SymtableData* dataptr = TRY_MALLOC(sizeof(SymtableData));
+
+  char* identptr = TRY_MALLOC_OR(strlen(identifier) + 1, {
+    if (dataptr != NULL)
+      free(dataptr);
+  });
+
+  *dataptr = data;
+  strcpy(identptr, identifier);
+
+  bst_insert(ctx, &table->tree, identptr, dataptr);
 }

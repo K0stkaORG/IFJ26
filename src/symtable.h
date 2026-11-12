@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "bst.h"
+#include "ctx.h"
 #include "ir.h"
 
 /**
@@ -58,7 +59,10 @@ typedef struct SymtableResult SymtableResult;
 
 void symtable_init(Ctx* ctx, Symtable* table, Symtable* parent);
 void symtable_destroy(Symtable* table);
-void symtable_insert(Symtable* table, SymtableData data);
+void symtable_insert(Ctx* ctx,
+                     Symtable* table,
+                     char* identifier,
+                     SymtableData data);
 SymtableResult symtable_lookup(Symtable* table);  // + lookup key
 
 #endif
