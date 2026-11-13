@@ -43,7 +43,8 @@ void ctx_init(Ctx* ctx, Flags flags) {
 }
 
 void ctx_allocate(Ctx* ctx) {
-  (void)ctx;  // To suppress unused variable warning
+  // Populate global symbol table with IFJ26 built-in functions
+  symtable_builtins_populate(ctx, &ctx->global_symtable);
 }
 
 bool parse_cli_args(int argc, char* argv[], Flags* flags) {
