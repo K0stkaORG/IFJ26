@@ -32,13 +32,18 @@ void ctx_init(Ctx* ctx, Flags flags) {
   // Flags
   ctx->flags = flags;
 
-  // Initialize IR program
-  ir_init(&ctx->ir);
-
+  // Initialize AST
   ctx->ast = NULL;
 
-  // Initialize global symbol table
+  // Initialize global symtable
   symtable_init(ctx, &ctx->global_symtable, NULL);
+
+  // Initialize IR program
+  ir_init(&ctx->ir);
+}
+
+void ctx_allocate(Ctx* ctx) {
+  (void)ctx;  // To suppress unused variable warning
 }
 
 bool parse_cli_args(int argc, char* argv[], Flags* flags) {
@@ -96,9 +101,6 @@ bool parse_cli_args(int argc, char* argv[], Flags* flags) {
 }
 
 ExitCode ctx_free(Ctx* ctx) {
-  // Free allocated memory
-  ir_free(&ctx->ir);
-
   // Free the AST
   if (ctx->ast != NULL) {
     AstNode* ast = ctx->ast;
@@ -108,6 +110,9 @@ ExitCode ctx_free(Ctx* ctx) {
 
   // Destroy global symbol table
   symtable_destroy(&ctx->global_symtable);
+
+  // Free allocated memory
+  ir_free(&ctx->ir);
 
   // Return the exit code
   return ctx->exit_code;

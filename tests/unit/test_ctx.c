@@ -40,6 +40,8 @@ describe(Ctx) {
     }
   }
 
+  subdesc(ctx_allocate) {}
+
   subdesc(ctx_free) {
     it("returns correct ExitCode") {
       Ctx test_ctx;
@@ -103,6 +105,14 @@ describe(Ctx) {
       assert(parse_cli_args(2, argv, &flags));
       asserteq(flags.forceNthMallocFail, 0);
       assert(flags.verbose);
+    }
+
+    it("parses the disable optimizations option") {
+      Flags flags;
+      char* argv[] = {"ifj26", "-o0"};
+
+      assert(parse_cli_args(2, argv, &flags));
+      assert(flags.disableOptimizations);
     }
 
     it("accepts supported options in either order") {

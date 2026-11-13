@@ -165,7 +165,7 @@ static void ir_free_function(IrFunction* function) {
   // If allocated, free function slots
   if (function->slots.data != NULL) {
     // Free slot names
-    for (size_t sid = 0; sid < function->slots.count; sid++)
+    for (IrStackSlotId sid = 0; sid < function->slots.count; sid++)
       if (function->slots.data[sid].name != NULL)
         free(function->slots.data[sid].name);
 
@@ -176,7 +176,7 @@ static void ir_free_function(IrFunction* function) {
   // Free function blocks
   if (function->blocks.data != NULL) {
     // Free each block
-    for (size_t bid = 0; bid < function->blocks.count; bid++)
+    for (IrBlockId bid = 0; bid < function->blocks.count; bid++)
       ir_free_block(&function->blocks.data[bid]);
 
     // Free block array
@@ -185,8 +185,12 @@ static void ir_free_function(IrFunction* function) {
 }
 
 void ir_free(IrProgram* ir) {
+  // Check the pointer is valid
+  if (ir->functions.data == NULL)
+    return;
+
   // Free contents of each function
-  for (size_t fid = 0; fid < ir->functions.count; fid++)
+  for (IrFunctionId fid = 0; fid < ir->functions.count; fid++)
     ir_free_function(&ir->functions.data[fid]);
 
   // Free functions array

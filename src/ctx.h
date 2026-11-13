@@ -110,22 +110,34 @@ typedef struct Ctx {
   // Flags for the compiler
   Flags flags;
 
-  // Intermediate representation of the program
-  IrProgram ir;
-
+  // Abstract syntax tree of the program
   AstNode* ast;
 
   // Global symbol table
   Symtable global_symtable;
+
+  // Intermediate representation of the program
+  IrProgram ir;
 } Ctx;
 
 /**
  * @brief Initializes the shared context using the provided flags
  *
+ * Initializes the context with the given flags, sets default values but doesn't
+ * allocate any memory do anything that could THROW as error context was not yet
+ * initialized.
+ *
  * @param[out] ctx Address of the context to initialize
  * @param[in] flags Flags for the compiler
  */
 void ctx_init(Ctx* ctx, Flags flags);
+
+/**
+ * @brief Allocates memory for the shared context.
+ *
+ * @param[out] ctx Address of the context to allocate shared memory for
+ */
+void ctx_allocate(Ctx* ctx);
 
 /**
  * @brief Parses supported command-line options into a Flags value.

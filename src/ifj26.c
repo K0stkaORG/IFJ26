@@ -11,7 +11,7 @@
  * errors, shared memory context and orchestrates the compilation process.
  *
  * Usage:
- *  ifj26 [--debugForceNthMallocFail <n>] [--verbose]
+ *  ifj26 [--debugForceNthMallocFail <n>] [--verbose] [-o0]
  */
 
 #include <stdio.h>  // fprintf, stderr
@@ -40,6 +40,9 @@ int main(int argc, char** argv) {
   int jump_result = setjmp(context.error_target);
   if (jump_result != 0)
     return ctx_free(&context);
+
+  // Allocate memory for the shared context
+  ctx_allocate(&context);
 
   // Run the compiler
 
