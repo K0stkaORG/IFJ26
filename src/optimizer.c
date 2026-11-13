@@ -13,4 +13,14 @@
 
 #include "optimizer.h"
 
-void optimize_ir(Ctx* ctx) {}
+#include "ir.h"
+#include "optimizer_constant_folding.h"
+
+#include <stdbool.h>  // bool
+
+void optimize_ir(Ctx* ctx) {
+  // For all functions, fold constants until no more can be folded
+  for (IrFunctionId fid = 0; fid < ctx->ir.functions.count; fid++)
+    do {
+    } while (optimizer_fold_function(ctx, fid));
+}
