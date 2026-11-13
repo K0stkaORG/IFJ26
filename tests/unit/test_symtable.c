@@ -250,6 +250,7 @@ describe(symtable) {
        "ctx_free") {
       Ctx test_ctx;
       ctx_init(&test_ctx, DEFAULT_TEST_FLAGS);
+      ctx_allocate(&test_ctx);
 
       struct {
         char* name;
