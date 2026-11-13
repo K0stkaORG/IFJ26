@@ -15,7 +15,8 @@
 #ifndef CTX_H
 #define CTX_H
 
-#include "ir.h"  // IrProgram
+#include "ir.h"        // IrProgram
+#include "symtable.h"  // Symtable
 
 #include <setjmp.h>   // jmp_buf
 #include <stdbool.h>  // bool, true, false
@@ -113,6 +114,9 @@ typedef struct Ctx {
   IrProgram ir;
 
   AstNode* ast;
+
+  // Global symbol table
+  Symtable global_symtable;
 } Ctx;
 
 /**
