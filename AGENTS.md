@@ -13,6 +13,12 @@
 - ALWAYS do this even for one-line edits. If you touch a human-written function,
   add the block above the changed lines.
 
+## Design notes
+
+- Glossaries and ADRs live in `guidance/<topic>/`, indexed by `GLOSSARY-MAP.md`.
+  Read the map before naming domain concepts or recording a design decision,
+  and add new notes there.
+
 ## STOP — never do this
 
 - NEVER write or edit documentation prose/diagrams for `dokumentace.pdf` or `/docs`.
