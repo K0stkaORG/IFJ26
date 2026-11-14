@@ -12,10 +12,10 @@
  */
 
 #include "ctx.h"
-
-#include "ast.h"       // ast_node_destroy
-#include "ir.h"        // ir_init, ir_free
-#include "symtable.h"  // symtable_init, symtable_destroy
+#include "ast.h"                // ast_node_destroy
+#include "ir.h"                 // ir_init, ir_free
+#include "symtable.h"           // symtable_init, symtable_destroy
+#include "symtable_builtins.h"  // symtable_builtins_populate
 
 #include <errno.h>   // errno, ERANGE
 #include <limits.h>  // INT_MAX
@@ -43,7 +43,8 @@ void ctx_init(Ctx* ctx, Flags flags) {
 }
 
 void ctx_allocate(Ctx* ctx) {
-  (void)ctx;  // To suppress unused variable warning
+  // Populate global symbol table with IFJ26 built-in functions
+  symtable_builtins_populate(ctx, &ctx->global_symtable);
 }
 
 bool parse_cli_args(int argc, char* argv[], Flags* flags) {

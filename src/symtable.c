@@ -53,7 +53,10 @@ void symtable_insert(Ctx* ctx,
     THROW(E_INTERNAL_ERROR,
           "attempted to insert NULL identifier into symtable");
 
-  SymtableData* dataptr = TRY_MALLOC(sizeof(SymtableData));
+  SymtableData* dataptr = TRY_MALLOC_OR(sizeof(SymtableData), {
+    if (data.param_types != NULL)
+      free(data.param_types);
+  });
   *dataptr = data;
 
   char* identptr = TRY_MALLOC_OR(strlen(identifier) + 1,
