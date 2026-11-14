@@ -26,6 +26,7 @@
 #include "ir.h"   // ir_init, ir_free
 #include "lexer.h"
 #include "optimizer.h"
+#include "parser.h"             // parser_cleanup
 #include "symtable.h"           // symtable_init, symtable_destroy
 #include "symtable_builtins.h"  // symtable_builtins_populate
 
@@ -41,6 +42,9 @@ void ctx_init(Ctx* ctx, Flags flags) {
 
   // Initialize AST
   ctx->ast = NULL;
+
+  // Initialize parser state
+  ctx->parser = NULL;
 
   // Initialize global symtable
   symtable_init(ctx, &ctx->global_symtable, NULL);
@@ -128,6 +132,8 @@ bool parse_cli_args(int argc, char* argv[], Flags* flags) {
 }
 
 ExitCode ctx_free(Ctx* ctx) {
+  parser_cleanup(ctx);
+
   // Free allocated memory
   array_free(&ctx->lexer.buffer);
   array_free(&ctx->lexer.stack);
