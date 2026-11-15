@@ -114,6 +114,14 @@ static Token fake_next(Ctx* ctx, void* state) {
 #define PROLOG \
   LINE(0), TOK(IMPORT), ID("ifj26"), TOK(PERIOD), TOK(OPERATOR_MULTIPLY), EOL
 
+// `def f() = <expression>` after the prolog
+#define BODY(...) \
+  PROLOG, LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), __VA_ARGS__, EOL
+
+// The AST of BODY with the given expression subtree
+#define BODY_AST(expr) \
+  "(PROGRAM (DEF (IDENT f) NONE (BLOCK " expr ") (PARAM_LIST)))"
+
 /**
  * @brief Parses the given tokens as a whole program into ctx->ast
  */
@@ -538,6 +546,238 @@ describe(parser) {
       // def f() = 1 (end of file, no end of line)
       ASSERT_SYNTAX_ERROR(
           PROLOG, LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), INT(1));
+    }
+  }
+
+  subdesc(operators) {
+    it("follows precedence and left associativity") {
+      // def f() = 40 - n * 3 - 2
+      ASSERT_AST(
+          BODY_AST("(SUB (SUB (INT_LIT 40) (MUL (IDENT n) (INT_LIT 3))) "
+                   "(INT_LIT 2))"),
+          BODY(INT(40), TOK(OPERATOR_MINUS), ID("n"), TOK(OPERATOR_MULTIPLY),
+               INT(3), TOK(OPERATOR_MINUS), INT(2)));
+    }
+
+    it("groups with parentheses without leaving a node") {
+      // def f() = (40 - n) * (3 - 2)
+      ASSERT_AST(
+          BODY_AST("(MUL (SUB (INT_LIT 40) (IDENT n)) "
+                   "(SUB (INT_LIT 3) (INT_LIT 2)))"),
+          BODY(TOK(L_PAREN), INT(40), TOK(OPERATOR_MINUS), ID("n"),
+               TOK(R_PAREN), TOK(OPERATOR_MULTIPLY), TOK(L_PAREN), INT(3),
+               TOK(OPERATOR_MINUS), INT(2), TOK(R_PAREN)));
+    }
+
+    it("reads - at the start and after ( as unary minus") {
+      // def f() = -(-n)
+      ASSERT_AST(BODY_AST("(NEG (NEG (IDENT n)))"),
+                 BODY(TOK(OPERATOR_MINUS), TOK(L_PAREN), TOK(OPERATOR_MINUS),
+                      ID("n"), TOK(R_PAREN)));
+    }
+
+    it("reads - after an operator as unary minus") {
+      // def f() = a - -b
+      ASSERT_AST(BODY_AST("(SUB (IDENT a) (NEG (IDENT b)))"),
+                 BODY(ID("a"), TOK(OPERATOR_MINUS), TOK(OPERATOR_MINUS),
+                      ID("b")));
+    }
+
+    it("keeps a negative literal as NEG of the literal") {
+      // def f() = -7 * 2
+      ASSERT_AST(BODY_AST("(MUL (NEG (INT_LIT 7)) (INT_LIT 2))"),
+                 BODY(TOK(OPERATOR_MINUS), INT(7), TOK(OPERATOR_MULTIPLY),
+                      INT(2)));
+    }
+
+    it("binds ! tighter than &&") {
+      // def f() = !x && y
+      ASSERT_AST(BODY_AST("(AND (NOT (IDENT x)) (IDENT y))"),
+                 BODY(TOK(BOOL_NEG), ID("x"), TOK(BOOL_AND), ID("y")));
+    }
+
+    it("reads .name as member access of the operand before it") {
+      // def f() = word.length
+      ASSERT_AST(BODY_AST("(MEMBER length (IDENT word))"),
+                 BODY(ID("word"), TOK(PERIOD), ID("length")));
+    }
+
+    it("chains member access left to right after parentheses") {
+      // def f() = (-3.75).toInt.toString
+      ASSERT_AST(
+          BODY_AST("(MEMBER toString (MEMBER toInt (NEG (DOUBLE_LIT 3.75))))"),
+          BODY(TOK(L_PAREN), TOK(OPERATOR_MINUS), DBL(3.75), TOK(R_PAREN),
+               TOK(PERIOD), ID("toInt"), TOK(PERIOD), ID("toString")));
+    }
+
+    it("binds member access tighter than unary minus") {
+      // def f() = -x.length
+      ASSERT_AST(BODY_AST("(NEG (MEMBER length (IDENT x)))"),
+                 BODY(TOK(OPERATOR_MINUS), ID("x"), TOK(PERIOD), ID("length")));
+    }
+
+    it("reads - after member access as subtraction") {
+      // def f() = word.length - 1
+      ASSERT_AST(BODY_AST("(SUB (MEMBER length (IDENT word)) (INT_LIT 1))"),
+                 BODY(ID("word"), TOK(PERIOD), ID("length"),
+                      TOK(OPERATOR_MINUS), INT(1)));
+    }
+
+    it("reads - after ) as subtraction") {
+      // def f() = (a) - b
+      ASSERT_AST(BODY_AST("(SUB (IDENT a) (IDENT b))"),
+                 BODY(TOK(L_PAREN), ID("a"), TOK(R_PAREN),
+                      TOK(OPERATOR_MINUS), ID("b")));
+    }
+
+    it("binds && tighter than ||") {
+      // def f() = a && b || c
+      ASSERT_AST(BODY_AST("(OR (AND (IDENT a) (IDENT b)) (IDENT c))"),
+                 BODY(ID("a"), TOK(BOOL_AND), ID("b"), TOK(BOOL_OR), ID("c")));
+    }
+
+    it("binds + tighter than == and == tighter than &&") {
+      // def f() = n == 4.0 && "ab" == "a" + "b"
+      ASSERT_AST(
+          BODY_AST("(AND (EQ (IDENT n) (DOUBLE_LIT 4)) "
+                   "(EQ (STRING_LIT \"ab\") "
+                   "(ADD (STRING_LIT \"a\") (STRING_LIT \"b\"))))"),
+          BODY(ID("n"), TOK(COMPARISON_EQ), DBL(4.0), TOK(BOOL_AND), STR("ab"),
+               TOK(COMPARISON_EQ), STR("a"), TOK(OPERATOR_PLUS), STR("b")));
+    }
+
+    it("chains comparisons joined by && from the everything program") {
+      // def f() = "ab" < "ac" && "ab" <= "ab" && "b" > "ab" && "b" >= "b"
+      ASSERT_AST(
+          BODY_AST("(AND (AND (AND "
+                   "(LT (STRING_LIT \"ab\") (STRING_LIT \"ac\")) "
+                   "(LE (STRING_LIT \"ab\") (STRING_LIT \"ab\"))) "
+                   "(GT (STRING_LIT \"b\") (STRING_LIT \"ab\"))) "
+                   "(GE (STRING_LIT \"b\") (STRING_LIT \"b\")))"),
+          BODY(STR("ab"), TOK(COMPARISON_L), STR("ac"), TOK(BOOL_AND),
+               STR("ab"), TOK(COMPARISON_LE), STR("ab"), TOK(BOOL_AND),
+               STR("b"), TOK(COMPARISON_G), STR("ab"), TOK(BOOL_AND),
+               STR("b"), TOK(COMPARISON_GE), STR("b")));
+    }
+
+    it("mixes !, && and != from the everything program") {
+      // def f() = !skippedAnd && skippedOr && active != false
+      ASSERT_AST(
+          BODY_AST("(AND (AND (NOT (IDENT skippedAnd)) (IDENT skippedOr)) "
+                   "(NEQ (IDENT active) (BOOL_LIT false)))"),
+          BODY(TOK(BOOL_NEG), ID("skippedAnd"), TOK(BOOL_AND), ID("skippedOr"),
+               TOK(BOOL_AND), ID("active"), TOK(COMPARISON_NEQ),
+               TOK(BOOL_FALSE)));
+    }
+
+    it("parses a parenthesised || inside && from the everything program") {
+      // def f() = false && (bad || 1 / zero > 0)
+      ASSERT_AST(
+          BODY_AST("(AND (BOOL_LIT false) (OR (IDENT bad) "
+                   "(GT (DIV (INT_LIT 1) (IDENT zero)) (INT_LIT 0))))"),
+          BODY(TOK(BOOL_FALSE), TOK(BOOL_AND), TOK(L_PAREN), ID("bad"),
+               TOK(BOOL_OR), INT(1), TOK(OPERATOR_DIVIDE), ID("zero"),
+               TOK(COMPARISON_G), INT(0), TOK(R_PAREN)));
+    }
+
+    it("gives an operator node the position of its operator token") {
+      // def f() = a+-b, + at 2:12 and - at 2:13
+      static const Token program[] = {
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
+          {.type = IDENT, .value.text = "a", .line = 2, .column = 11},
+          {.type = OPERATOR_PLUS, .line = 2, .column = 12},
+          {.type = OPERATOR_MINUS, .line = 2, .column = 13},
+          {.type = IDENT, .value.text = "b", .line = 2, .column = 14},
+          {.type = PERIOD, .line = 2, .column = 15},
+          {.type = IDENT, .value.text = "m", .line = 2, .column = 16},
+          EOL,
+      };
+      FakeSource source = {.tokens = program,
+                           .count = sizeof(program) / sizeof(*program)};
+      parser_run(ctx, fake_next, &source);
+
+      // DEF [ident, rettype, BLOCK [ADD [a, NEG [MEMBER m [b]]]], PARAM_LIST]
+      AstNode* node;
+      ast_node_get_child(ctx, ctx->ast, 0, &node);
+      ast_node_get_child(ctx, node, 2, &node);
+      ast_node_get_child(ctx, node, 0, &node);  // ADD
+      asserteq(ast_node_get_line(node), 2);
+      asserteq(ast_node_get_column(node), 12);
+      ast_node_get_child(ctx, node, 1, &node);  // NEG
+      asserteq(ast_node_get_column(node), 13);
+      ast_node_get_child(ctx, node, 0, &node);  // MEMBER
+      asserteq(ast_node_get_column(node), 15);
+    }
+  }
+
+  subdesc(expression_errors) {
+    it("rejects two binary operators in a row") {
+      // def f() = 1 + * 2
+      ASSERT_SYNTAX_ERROR(BODY(INT(1), TOK(OPERATOR_PLUS),
+                               TOK(OPERATOR_MULTIPLY), INT(2)));
+    }
+
+    it("rejects an unclosed parenthesis") {
+      // def f() = (a + b
+      ASSERT_SYNTAX_ERROR(BODY(TOK(L_PAREN), ID("a"), TOK(OPERATOR_PLUS),
+                               ID("b")));
+    }
+
+    it("rejects an operator at the end of the line after a reduced one") {
+      // def f() = -a * b +, NEG and MUL are already built on the stack
+      ASSERT_SYNTAX_ERROR(BODY(TOK(OPERATOR_MINUS), ID("a"),
+                               TOK(OPERATOR_MULTIPLY), ID("b"),
+                               TOK(OPERATOR_PLUS)));
+    }
+
+    it("rejects a binary operator at the end of the line") {
+      // def f() = a +
+      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(OPERATOR_PLUS)));
+    }
+
+    it("rejects chained comparisons the precedence table leaves empty") {
+      // def f() = a < b < c
+      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(COMPARISON_L), ID("b"),
+                               TOK(COMPARISON_L), ID("c")));
+    }
+
+    it("rejects chained equalities the precedence table leaves empty") {
+      // def f() = a == b != c
+      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(COMPARISON_EQ), ID("b"),
+                               TOK(COMPARISON_NEQ), ID("c")));
+    }
+
+    it("rejects empty parentheses inside an expression") {
+      // def f() = 1 + ( )
+      ASSERT_SYNTAX_ERROR(BODY(INT(1), TOK(OPERATOR_PLUS), TOK(L_PAREN),
+                               TOK(R_PAREN)));
+    }
+
+    it("rejects a . not followed by a member name") {
+      // def f() = a.1
+      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(PERIOD), INT(1)));
+    }
+
+    it("rejects member access with no receiver") {
+      // def f() = .m
+      ASSERT_SYNTAX_ERROR(BODY(TOK(PERIOD), ID("m")));
+    }
+
+    it("leaves a ) closing no ( of the expression to the caller") {
+      // def f() = a), the function body then expects the end of the line
+      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(R_PAREN)));
+    }
+
+    it("ends the expression at ! after an operand") {
+      // def f() = a !b
+      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(BOOL_NEG), ID("b")));
+    }
+
+    it("ends the expression at ( after a )") {
+      // def f() = (a) (b)
+      ASSERT_SYNTAX_ERROR(BODY(TOK(L_PAREN), ID("a"), TOK(R_PAREN),
+                               TOK(L_PAREN), ID("b"), TOK(R_PAREN)));
     }
   }
 
