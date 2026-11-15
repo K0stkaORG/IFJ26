@@ -49,6 +49,8 @@ typedef enum {
   NUMBER_INT,
   NUMBER_DOUBLE,
 
+  UNIT,
+
   STRING,
   TRIPLE_STRING,
   S_STRING_START,

@@ -36,7 +36,7 @@ typedef enum {
   NEGATION,                        // q13
   NOT_EQUAL,                       // q14
   LEFT_PARENTHESIS,                // q15
-  UNIT,                            // q16
+  UNIT_STATE,                      // q16
   RIGHT_PARENTHESIS,               // q17
   DOUBLE_AMPERSAND,                // q18
   AMPERSAND,                       // q19
