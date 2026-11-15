@@ -92,7 +92,8 @@ static void stack_insert_handle(Ctx* ctx, PrecStack* stack, size_t index) {
 
 /**
  * @brief Returns whether the top of the frame is a complete operand or `)`,
- * after which a token starting an operand ends the expression
+ * after which a token starting an operand ends the expression and `-` is
+ * subtraction
  */
 static bool stack_ends_with_operand(const PrecStack* stack, size_t base) {
   const PrecEntry* top = &stack->data[stack->count - 1];
@@ -101,7 +102,8 @@ static bool stack_ends_with_operand(const PrecStack* stack, size_t base) {
   if (top->kind == PREC_ENTRY_EXPR)
     return true;
   return top->kind == PREC_ENTRY_TERMINAL &&
-         (top->terminal == PREC_OPERAND || top->terminal == PREC_RPAREN);
+         (top->terminal == PREC_OPERAND || top->terminal == PREC_RPAREN ||
+          top->terminal == PREC_MEMBER);
 }
 
 // === OPERANDS ===
@@ -134,6 +136,83 @@ static AstNodeType literal_kind(TokenType type) {
  */
 static bool starts_operand(TokenType type) {
   return type == IDENT || literal_kind(type) != AST_NODE_INVALID;
+}
+
+// === OPERATORS ===
+
+/**
+ * @brief Returns the precedence terminal of a binary operator token, or
+ * PREC_END when the token is not one (`-` is classified separately)
+ */
+static PrecTerminal binary_class(TokenType type) {
+  switch (type) {
+    case OPERATOR_MULTIPLY:
+    case OPERATOR_DIVIDE:
+      return PREC_MUL;
+    case OPERATOR_PLUS:
+      return PREC_ADD;
+    case COMPARISON_L:
+    case COMPARISON_G:
+    case COMPARISON_LE:
+    case COMPARISON_GE:
+      return PREC_REL;
+    case COMPARISON_EQ:
+    case COMPARISON_NEQ:
+      return PREC_EQ;
+    case BOOL_AND:
+      return PREC_AND;
+    case BOOL_OR:
+      return PREC_OR;
+    default:
+      return PREC_END;
+  }
+}
+
+/**
+ * @brief Returns the node kind an operator token builds when shifted as given
+ * precedence terminal
+ */
+static AstNodeType operator_kind(TokenType type, PrecTerminal terminal) {
+  switch (type) {
+    case OPERATOR_MINUS:
+      return terminal == PREC_PREFIX ? AST_NODE_NEG : AST_NODE_SUB;
+    case BOOL_NEG:
+      return AST_NODE_NOT;
+    case OPERATOR_PLUS:
+      return AST_NODE_ADD;
+    case OPERATOR_MULTIPLY:
+      return AST_NODE_MUL;
+    case OPERATOR_DIVIDE:
+      return AST_NODE_DIV;
+    case COMPARISON_EQ:
+      return AST_NODE_EQ;
+    case COMPARISON_NEQ:
+      return AST_NODE_NEQ;
+    case COMPARISON_L:
+      return AST_NODE_LT;
+    case COMPARISON_G:
+      return AST_NODE_GT;
+    case COMPARISON_LE:
+      return AST_NODE_LE;
+    case COMPARISON_GE:
+      return AST_NODE_GE;
+    case BOOL_AND:
+      return AST_NODE_AND;
+    case BOOL_OR:
+      return AST_NODE_OR;
+    case PERIOD:
+      return AST_NODE_MEMBER;
+    default:
+      return AST_NODE_INVALID;
+  }
+}
+
+/**
+ * @brief Returns whether a precedence terminal is a binary operator class
+ */
+static bool is_binary(PrecTerminal terminal) {
+  return terminal == PREC_MUL || terminal == PREC_ADD || terminal == PREC_REL ||
+         terminal == PREC_EQ || terminal == PREC_AND || terminal == PREC_OR;
 }
 
 /**
@@ -194,23 +273,59 @@ static void shift(Ctx* ctx, Parser* parser, PrecTerminal input) {
     shift_operand(ctx, parser);
     return;
   }
-  THROW(E_INTERNAL_ERROR, "%d:%d: precedence terminal %d cannot be shifted",
-        parser->current.line, parser->current.column, (int)input);
+
+  PrecStack* stack = &parser->prec_stack;
+  size_t index = stack_push(ctx, stack, PREC_ENTRY_TERMINAL, input);
+
+  const Token* token = &parser->current;
+  AstNodeType kind = operator_kind(token->type, input);
+  if (kind != AST_NODE_INVALID) {
+    AstNode* node;
+    ast_node_create(ctx, &node);
+    stack->data[index].node = node;
+    ast_node_set_type(node, kind);
+    ast_node_set_position(node, token->line, token->column);
+  }
+
+  parser_advance(ctx, parser);
+
+  // .m is PERIOD IDENT, the member name is the IDENT's text
+  if (input == PREC_MEMBER) {
+    if (parser->current.type != IDENT)
+      parser_syntax_error(ctx, parser, "member name");
+    ast_node_set_name(ctx, stack->data[index].node, parser->current.value.text);
+    parser_advance(ctx, parser);
+  }
+}
+
+/**
+ * @brief Returns how many `(` of the frame starting at base are still open
+ */
+static size_t open_parens(const PrecStack* stack, size_t base) {
+  size_t open = 0;
+  for (size_t i = base + 1; i < stack->count; i++) {
+    const PrecEntry* entry = &stack->data[i];
+    if (entry->kind != PREC_ENTRY_TERMINAL)
+      continue;
+    if (entry->terminal == PREC_LPAREN)
+      open++;
+    else if (entry->terminal == PREC_RPAREN)
+      open--;
+  }
+  return open;
 }
 
 /**
  * @brief Maps the current token to the precedence terminal it stands for, or
  * PREC_END at the expression end (GLOSSARY.md, Expression end)
- *
- * @param after_operand Whether the frame ends with a complete operand or `)`
  */
-static PrecTerminal classify(Ctx* ctx,
-                             const Parser* parser,
-                             bool after_operand) {
+static PrecTerminal classify(Ctx* ctx, const Parser* parser, size_t base) {
+  const PrecStack* stack = &parser->prec_stack;
   TokenType type = parser->current.type;
+  bool after_operand = stack_ends_with_operand(stack, base);
 
   // A token that could start an operand ends the expression right after a
-  // complete operand
+  // complete operand or `)`
   if (starts_operand(type))
     return after_operand ? PREC_END : PREC_OPERAND;
 
@@ -222,8 +337,62 @@ static PrecTerminal classify(Ctx* ctx,
           parser->current.line, parser->current.column);
   }
 
-  // Not a precedence terminal
-  return PREC_END;
+  switch (type) {
+    case PERIOD:
+      return PREC_MEMBER;
+    case L_PAREN:
+      return after_operand ? PREC_END : PREC_LPAREN;
+    case R_PAREN:
+      // A `)` with no `(` of this expression open closes an enclosing one
+      return open_parens(stack, base) > 0 ? PREC_RPAREN : PREC_END;
+    case OPERATOR_MINUS:
+      return after_operand ? PREC_ADD : PREC_PREFIX;
+    case BOOL_NEG:
+      // `!` starts an operand, so it ends the expression after one
+      return after_operand ? PREC_END : PREC_PREFIX;
+    default:
+      // A binary operator, or PREC_END when not a precedence terminal
+      return binary_class(type);
+  }
+}
+
+/**
+ * @brief Returns whether a stack entry is the given precedence terminal
+ */
+static bool is_terminal(const PrecEntry* entry, PrecTerminal terminal) {
+  return entry->kind == PREC_ENTRY_TERMINAL && entry->terminal == terminal;
+}
+
+/**
+ * @brief Replaces the handle starting at index handle (and everything above
+ * it) by E with given node
+ */
+static void replace_handle(PrecStack* stack, size_t handle, AstNode* node) {
+  stack->data[handle] = (PrecEntry){.kind = PREC_ENTRY_EXPR, .node = node};
+  stack->count = handle + 1;
+}
+
+/**
+ * @brief Replaces the handle starting at index handle by E whose node is the
+ * operator node at op_index, with the other entries of the handle (operand
+ * expressions, in order) attached as its children
+ *
+ * Each operand's entry gives up its node only once it is attached, so a THROW
+ * in between leaves every subtree owned exactly once (ADR-0004).
+ */
+static void reduce_to_operator(Ctx* ctx,
+                               PrecStack* stack,
+                               size_t handle,
+                               size_t op_index) {
+  AstNode* node = stack->data[op_index].node;
+  for (size_t i = handle + 1; i < stack->count; i++) {
+    if (i == op_index)
+      continue;
+    ast_node_append_child(ctx, node, stack->data[i].node);
+    stack->data[i].node = NULL;
+  }
+  stack->data[op_index].node = NULL;
+  replace_handle(stack, handle, node);
 }
 
 /**
@@ -243,11 +412,38 @@ static void reduce(Ctx* ctx, Parser* parser, size_t base) {
   size_t length = stack->count - handle - 1;
 
   // E -> i
-  if (length == 1 && symbols[0].kind == PREC_ENTRY_TERMINAL &&
-      symbols[0].terminal == PREC_OPERAND) {
-    AstNode* node = symbols[0].node;
-    stack->data[handle] = (PrecEntry){.kind = PREC_ENTRY_EXPR, .node = node};
-    stack->count = handle + 1;
+  if (length == 1 && is_terminal(&symbols[0], PREC_OPERAND)) {
+    replace_handle(stack, handle, symbols[0].node);
+    return;
+  }
+
+  // E -> E .m (MEMBER)
+  if (length == 2 && symbols[0].kind == PREC_ENTRY_EXPR &&
+      is_terminal(&symbols[1], PREC_MEMBER)) {
+    reduce_to_operator(ctx, stack, handle, handle + 2);
+    return;
+  }
+
+  // E -> pre E (NEG or NOT)
+  if (length == 2 && is_terminal(&symbols[0], PREC_PREFIX) &&
+      symbols[1].kind == PREC_ENTRY_EXPR) {
+    reduce_to_operator(ctx, stack, handle, handle + 1);
+    return;
+  }
+
+  // E -> E mul E | E add E | E rel E | E eq E | E and E | E or E
+  if (length == 3 && symbols[0].kind == PREC_ENTRY_EXPR &&
+      symbols[1].kind == PREC_ENTRY_TERMINAL &&
+      is_binary(symbols[1].terminal) && symbols[2].kind == PREC_ENTRY_EXPR) {
+    reduce_to_operator(ctx, stack, handle, handle + 2);
+    return;
+  }
+
+  // E -> ( E ), leaves no node
+  if (length == 3 && is_terminal(&symbols[0], PREC_LPAREN) &&
+      symbols[1].kind == PREC_ENTRY_EXPR &&
+      is_terminal(&symbols[2], PREC_RPAREN)) {
+    replace_handle(stack, handle, symbols[1].node);
     return;
   }
 
@@ -263,8 +459,7 @@ AstNode* expr_parse(Ctx* ctx, Parser* parser) {
   while (true) {
     size_t top = stack_top_terminal(stack, base);
     PrecTerminal row = stack->data[top].terminal;
-    PrecTerminal input =
-        classify(ctx, parser, stack_ends_with_operand(stack, base));
+    PrecTerminal input = classify(ctx, parser, base);
 
     if (row == PREC_END && input == PREC_END)
       break;
