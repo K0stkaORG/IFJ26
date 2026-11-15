@@ -24,6 +24,7 @@
 #define PARSER_INTERNAL_H
 
 #include "array.h"  // ARRAY_TYPE
+#include "ast.h"    // AstNode
 #include "ctx.h"    // Ctx
 #include "lexer.h"  // Token, TokenType
 
@@ -42,6 +43,57 @@ typedef Token (*TokenSourceNext)(Ctx* ctx, void* source);
  * @brief Stack of indentations of the currently open blocks
  */
 ARRAY_TYPE(IndentStack, int);
+
+/**
+ * @brief Terminals of the precedence table (its rows and columns), in the
+ * table's order
+ */
+typedef enum {
+  PREC_MEMBER,   // .m, PERIOD IDENT
+  PREC_PREFIX,   // pre, unary - and !
+  PREC_MUL,      // mul, * /
+  PREC_ADD,      // add, binary + -
+  PREC_REL,      // rel, < > <= >=
+  PREC_EQ,       // eq, == !=
+  PREC_AND,      // and, &&
+  PREC_OR,       // or, ||
+  PREC_LPAREN,   // (
+  PREC_RPAREN,   // )
+  PREC_OPERAND,  // i, a whole operand (GLOSSARY.md, Operand)
+  PREC_END,      // $, the bottom of a frame and the expression end
+  PREC_TERMINAL_COUNT,
+} PrecTerminal;
+
+/**
+ * @brief Kind of an entry of the precedence stack
+ */
+typedef enum {
+  // A precedence terminal (terminal is valid)
+  PREC_ENTRY_TERMINAL,
+  // A reduced expression E (node is valid)
+  PREC_ENTRY_EXPR,
+  // The `<` marking where a handle starts
+  PREC_ENTRY_HANDLE,
+} PrecEntryKind;
+
+/**
+ * @brief Entry of the precedence stack
+ */
+typedef struct {
+  PrecEntryKind kind;
+  PrecTerminal terminal;
+  // Subtree owned by the stack until it is attached (NULL when the entry has
+  // none): the operand's node for i, the operator's node (children not yet
+  // attached) for an operator, the expression for E
+  AstNode* node;
+} PrecEntry;
+
+/**
+ * @brief The precedence stack (GLOSSARY.md, Precedence stack), shared by all
+ * expressions being parsed at once, each using its own frame above where it
+ * started (guidance/parser-structure/adr/0004)
+ */
+ARRAY_TYPE(PrecStack, PrecEntry);
 
 /**
  * @brief State of a running parse, owned by ctx->parser
@@ -64,7 +116,30 @@ struct Parser {
   // Block closes still to be delivered as INDENT tokens, and their position
   size_t pending_closes;
   Token pending_close;
+
+  // Precedence stack; parser_cleanup destroys the subtrees left on it
+  PrecStack prec_stack;
 };
+
+// === ENTRY POINT ===
+
+/**
+ * @brief Parses the whole program read from a token source into ctx->ast.
+ *
+ * Creates the parser state and the PROGRAM root (stored in ctx->ast before
+ * parsing starts), parses from the start nonterminal of the LL table to the end
+ * of input and frees the parser state. parser_parse is this function with the
+ * lexer as the token source; unit tests pass a fixed token array.
+ *
+ * Syntax errors are reported with THROW(E_SYNTAX_ERROR, ...). After a THROW,
+ * ctx_free releases the parser state and the partly built AST.
+ *
+ * @param[in,out] ctx Non-null pointer to an initialized context, ctx->ast and
+ * ctx->parser must be NULL
+ * @param[in] next Token source function
+ * @param[in] source State passed to next
+ */
+void parser_run(Ctx* ctx, TokenSourceNext next, void* source);
 
 // === TOKEN LAYER ===
 

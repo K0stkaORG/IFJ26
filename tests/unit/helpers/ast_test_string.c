@@ -1,0 +1,291 @@
+/**
+ * @file ast_test_string.c
+ * Project: IFJ26
+ *
+ * @author Lukáš Pollák (xpollal00)
+ * @date 15. 11. 2026
+ *
+ * @brief Test-only printer rendering an AST as a compact S-expression
+ */
+
+#include "ast_test_string.h"
+
+#include <stdarg.h>  // va_list
+#include <stdio.h>   // vsnprintf
+#include <stdlib.h>  // malloc, realloc, abort
+#include <string.h>  // strlen
+
+/**
+ * @brief Growable output buffer
+ */
+typedef struct {
+  char* data;
+  size_t length;
+  size_t capacity;
+} Buffer;
+
+static void buffer_printf(Buffer* buffer, const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  va_list copy;
+  va_copy(copy, args);
+  int needed = vsnprintf(NULL, 0, format, copy);
+  va_end(copy);
+  if (needed < 0)
+    abort();
+
+  size_t required = buffer->length + (size_t)needed + 1;
+  if (required > buffer->capacity) {
+    size_t capacity =
+        buffer->capacity * 2 > required ? buffer->capacity * 2 : required;
+    char* data = realloc(buffer->data, capacity);
+    if (data == NULL)
+      abort();
+    buffer->data = data;
+    buffer->capacity = capacity;
+  }
+
+  vsnprintf(buffer->data + buffer->length, buffer->capacity - buffer->length,
+            format, args);
+  buffer->length += (size_t)needed;
+  va_end(args);
+}
+
+static const char* kind_name(AstNodeType type) {
+  switch (type) {
+    case AST_NODE_INVALID:
+      return "INVALID";
+    case AST_NODE_NONE:
+      return "NONE";
+    case AST_NODE_PROGRAM:
+      return "PROGRAM";
+    case AST_NODE_DEF:
+      return "DEF";
+    case AST_NODE_PARAM_LIST:
+      return "PARAM_LIST";
+    case AST_NODE_PARAM:
+      return "PARAM";
+    case AST_NODE_BLOCK:
+      return "BLOCK";
+    case AST_NODE_VAL:
+      return "VAL";
+    case AST_NODE_VAR:
+      return "VAR";
+    case AST_NODE_ASSIGN:
+      return "ASSIGN";
+    case AST_NODE_RETURN:
+      return "RETURN";
+    case AST_NODE_IF:
+      return "IF";
+    case AST_NODE_WHILE:
+      return "WHILE";
+    case AST_NODE_FOR:
+      return "FOR";
+    case AST_NODE_RANGE_TO:
+      return "RANGE_TO";
+    case AST_NODE_RANGE_UNTIL:
+      return "RANGE_UNTIL";
+    case AST_NODE_TYPE_ANNOTATION:
+      return "TYPE_ANNOTATION";
+    case AST_NODE_TYPE_NAME:
+      return "TYPE_NAME";
+    case AST_NODE_TYPE_UNION:
+      return "TYPE_UNION";
+    case AST_NODE_TYPE_FUNCTION:
+      return "TYPE_FUNCTION";
+    case AST_NODE_TYPE_LIST:
+      return "TYPE_LIST";
+    case AST_NODE_IDENT:
+      return "IDENT";
+    case AST_NODE_INT_LIT:
+      return "INT_LIT";
+    case AST_NODE_DOUBLE_LIT:
+      return "DOUBLE_LIT";
+    case AST_NODE_STRING_LIT:
+      return "STRING_LIT";
+    case AST_NODE_BOOL_LIT:
+      return "BOOL_LIT";
+    case AST_NODE_UNIT_LIT:
+      return "UNIT_LIT";
+    case AST_NODE_ADD:
+      return "ADD";
+    case AST_NODE_SUB:
+      return "SUB";
+    case AST_NODE_MUL:
+      return "MUL";
+    case AST_NODE_DIV:
+      return "DIV";
+    case AST_NODE_EQ:
+      return "EQ";
+    case AST_NODE_NEQ:
+      return "NEQ";
+    case AST_NODE_LT:
+      return "LT";
+    case AST_NODE_GT:
+      return "GT";
+    case AST_NODE_LE:
+      return "LE";
+    case AST_NODE_GE:
+      return "GE";
+    case AST_NODE_AND:
+      return "AND";
+    case AST_NODE_OR:
+      return "OR";
+    case AST_NODE_CONCAT:
+      return "CONCAT";
+    case AST_NODE_NOT:
+      return "NOT";
+    case AST_NODE_NEG:
+      return "NEG";
+    case AST_NODE_CALL:
+      return "CALL";
+    case AST_NODE_MEMBER:
+      return "MEMBER";
+    case AST_NODE_TYPE_ALIAS:
+      return "TYPE_ALIAS";
+    case AST_NODE_CLASS:
+      return "CLASS";
+    case AST_NODE_MATCH:
+      return "MATCH";
+    case AST_NODE_CASE:
+      return "CASE";
+    case AST_NODE_PATTERN_TYPED:
+      return "PATTERN_TYPED";
+    case AST_NODE_PATTERN_CTOR:
+      return "PATTERN_CTOR";
+    case AST_NODE_PATTERN_WILDCARD:
+      return "PATTERN_WILDCARD";
+    case AST_NODE_LAMBDA:
+      return "LAMBDA";
+    case AST_NODE_EXTENSION:
+      return "EXTENSION";
+  }
+  return "UNKNOWN_KIND";
+}
+
+static const char* data_type_name(AstDataType type) {
+  switch (type) {
+    case AST_DATA_TYPE_UNKNOWN:
+      return "?";
+    case AST_DATA_TYPE_INT:
+      return "Int";
+    case AST_DATA_TYPE_DOUBLE:
+      return "Double";
+    case AST_DATA_TYPE_BOOLEAN:
+      return "Boolean";
+    case AST_DATA_TYPE_STRING:
+      return "String";
+    case AST_DATA_TYPE_UNIT:
+      return "Unit";
+  }
+  return "UNKNOWN_TYPE";
+}
+
+static void print_string(Buffer* buffer, const char* text) {
+  if (text == NULL) {
+    buffer_printf(buffer, " NULL");
+    return;
+  }
+  buffer_printf(buffer, " \"");
+  for (const char* c = text; *c != '\0'; c++) {
+    switch (*c) {
+      case '"':
+        buffer_printf(buffer, "\\\"");
+        break;
+      case '\\':
+        buffer_printf(buffer, "\\\\");
+        break;
+      case '\n':
+        buffer_printf(buffer, "\\n");
+        break;
+      case '\t':
+        buffer_printf(buffer, "\\t");
+        break;
+      default:
+        buffer_printf(buffer, "%c", *c);
+        break;
+    }
+  }
+  buffer_printf(buffer, "\"");
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+static void print_node(Buffer* buffer, const AstNode* node) {
+  if (node == NULL) {
+    buffer_printf(buffer, "NULL");
+    return;
+  }
+
+  AstNodeType type = ast_node_get_type(node);
+  size_t count = ast_node_get_child_count(node);
+  unsigned flags = ast_node_get_flags(node);
+  const char* name = ast_node_get_name(node);
+
+  if (type == AST_NODE_NONE && count == 0 && flags == 0 && name == NULL) {
+    buffer_printf(buffer, "NONE");
+    return;
+  }
+
+  buffer_printf(buffer, "(%s", kind_name(type));
+
+  if (name != NULL)
+    buffer_printf(buffer, " %s", name);
+
+  AstNodeValue value = ast_node_get_value(node);
+  switch (type) {
+    case AST_NODE_INT_LIT:
+      buffer_printf(buffer, " %d", value.int_value);
+      break;
+    case AST_NODE_DOUBLE_LIT:
+      buffer_printf(buffer, " %g", value.double_value);
+      break;
+    case AST_NODE_STRING_LIT:
+      print_string(buffer, value.string_value);
+      break;
+    case AST_NODE_BOOL_LIT:
+      buffer_printf(buffer, " %s", value.boolean_value ? "true" : "false");
+      break;
+    case AST_NODE_TYPE_ANNOTATION:
+      buffer_printf(buffer, " %s",
+                    data_type_name(ast_node_get_data_type(node)));
+      break;
+    default:
+      break;
+  }
+
+  if (flags != 0) {
+    buffer_printf(buffer, " [");
+    const char* separator = "";
+    if (flags & (unsigned)AST_FLAG_MAIN) {
+      buffer_printf(buffer, "%sMAIN", separator);
+      separator = " ";
+    }
+    if (flags & (unsigned)AST_FLAG_EXPR) {
+      buffer_printf(buffer, "%sEXPR", separator);
+      separator = " ";
+    }
+    unsigned unknown =
+        flags & ~((unsigned)AST_FLAG_MAIN | (unsigned)AST_FLAG_EXPR);
+    if (unknown != 0)
+      buffer_printf(buffer, "%s0x%x", separator, unknown);
+    buffer_printf(buffer, "]");
+  }
+
+  for (size_t i = 0; i < count; i++) {
+    buffer_printf(buffer, " ");
+    // ast_node_get_child needs a Ctx only to report a bad index, which the
+    // loop bound rules out; read the child through a const-dropping cast
+    AstNode* child = NULL;
+    ast_node_get_child(NULL, (AstNode*)node, i, &child);
+    print_node(buffer, child);
+  }
+
+  buffer_printf(buffer, ")");
+}
+
+char* ast_to_test_string(const AstNode* node) {
+  Buffer buffer = {.data = NULL, .length = 0, .capacity = 0};
+  buffer_printf(&buffer, "%s", "");
+  print_node(&buffer, node);
+  return buffer.data;
+}
