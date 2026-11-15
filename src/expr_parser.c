@@ -13,13 +13,283 @@
  * @date 14. 11. 2026
  *
  * @brief Precedence parser for expressions
+ *
+ * Bottom-up operator precedence parsing driven by the precedence table and the
+ * reduction rules of the IFJ26 Table Maker project. A whole operand is one `i`
+ * (GLOSSARY.md, Operand). The precedence stack lives in the parser state and
+ * each call uses its own frame above where it started
+ * (guidance/parser-structure/adr/0004).
  */
 
 #include "expr_parser.h"
 
+#include <string.h>  // memmove
+
+// === PRECEDENCE TABLE ===
+
+// Relations of the precedence table: the terminal on top of the stack (row)
+// against the input terminal (column), in PrecTerminal order
+#define SHF '<'  // `<`, start a handle and shift
+#define EQL '='  // `=`, shift
+#define RED '>'  // `>`, reduce the handle
+#define ERR 0    // empty cell, a syntax error
+
+// clang-format off
+static const char prec_table[PREC_TERMINAL_COUNT][PREC_TERMINAL_COUNT] = {
+  //               .m   pre  mul  add  rel  eq   and  or   (    )    i    $
+  [PREC_MEMBER]  = {RED, ERR, RED, RED, RED, RED, RED, RED, ERR, RED, ERR, RED},
+  [PREC_PREFIX]  = {SHF, SHF, RED, RED, RED, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_MUL]     = {SHF, SHF, RED, RED, RED, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_ADD]     = {SHF, SHF, SHF, RED, RED, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_REL]     = {SHF, SHF, SHF, SHF, ERR, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_EQ]      = {SHF, SHF, SHF, SHF, SHF, ERR, RED, RED, SHF, RED, SHF, RED},
+  [PREC_AND]     = {SHF, SHF, SHF, SHF, SHF, SHF, RED, RED, SHF, RED, SHF, RED},
+  [PREC_OR]      = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, RED, SHF, RED, SHF, RED},
+  [PREC_LPAREN]  = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, EQL, SHF, ERR},
+  [PREC_RPAREN]  = {RED, ERR, RED, RED, RED, RED, RED, RED, ERR, RED, ERR, RED},
+  [PREC_OPERAND] = {RED, ERR, RED, RED, RED, RED, RED, RED, ERR, RED, ERR, RED},
+  [PREC_END]     = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, ERR, SHF, ERR},
+};
+// clang-format on
+
+// === PRECEDENCE STACK ===
+
+/**
+ * @brief Pushes an entry onto the precedence stack and returns its index
+ */
+static size_t stack_push(Ctx* ctx,
+                         PrecStack* stack,
+                         PrecEntryKind kind,
+                         PrecTerminal terminal) {
+  PrecEntry entry = {.kind = kind, .terminal = terminal, .node = NULL};
+  array_append(ctx, stack, entry);
+  return stack->count - 1;
+}
+
+/**
+ * @brief Returns the index of the topmost terminal in the frame starting at
+ * base (the frame's `$` is at base, so there always is one)
+ */
+static size_t stack_top_terminal(const PrecStack* stack, size_t base) {
+  size_t index = stack->count - 1;
+  while (index > base && stack->data[index].kind != PREC_ENTRY_TERMINAL)
+    index--;
+  return index;
+}
+
+/**
+ * @brief Inserts the handle start `<` right after the entry at index
+ */
+static void stack_insert_handle(Ctx* ctx, PrecStack* stack, size_t index) {
+  // Grow by one first; data may move, so only indices are kept
+  stack_push(ctx, stack, PREC_ENTRY_HANDLE, PREC_END);
+  PrecEntry* data = stack->data;
+  size_t after = index + 1;
+  memmove(&data[after + 1], &data[after],
+          (stack->count - 1 - after) * sizeof(*data));
+  data[after] = (PrecEntry){.kind = PREC_ENTRY_HANDLE, .node = NULL};
+}
+
+/**
+ * @brief Returns whether the top of the frame is a complete operand or `)`,
+ * after which a token starting an operand ends the expression
+ */
+static bool stack_ends_with_operand(const PrecStack* stack, size_t base) {
+  const PrecEntry* top = &stack->data[stack->count - 1];
+  if (stack->count - 1 == base)
+    return false;
+  if (top->kind == PREC_ENTRY_EXPR)
+    return true;
+  return top->kind == PREC_ENTRY_TERMINAL &&
+         (top->terminal == PREC_OPERAND || top->terminal == PREC_RPAREN);
+}
+
+// === OPERANDS ===
+
+/**
+ * @brief Returns the node kind of the literal a token stands for, or
+ * AST_NODE_INVALID when the token is not one
+ */
+static AstNodeType literal_kind(TokenType type) {
+  switch (type) {
+    case NUMBER_INT:
+      return AST_NODE_INT_LIT;
+    case NUMBER_DOUBLE:
+      return AST_NODE_DOUBLE_LIT;
+    case STRING:
+    case TRIPLE_STRING:
+      return AST_NODE_STRING_LIT;
+    case BOOL_TRUE:
+    case BOOL_FALSE:
+      return AST_NODE_BOOL_LIT;
+    case TYPE_UNIT:  // the unit value `()` (GLOSSARY.md, Unit value)
+      return AST_NODE_UNIT_LIT;
+    default:
+      return AST_NODE_INVALID;
+  }
+}
+
+/**
+ * @brief Returns whether the token starts an operand
+ */
+static bool starts_operand(TokenType type) {
+  return type == IDENT || literal_kind(type) != AST_NODE_INVALID;
+}
+
+/**
+ * @brief Shifts the operand starting at the current token as one `i`
+ *
+ * The entry is pushed before its node is created, so the node is owned by the
+ * stack from the moment it exists.
+ */
+static void shift_operand(Ctx* ctx, Parser* parser) {
+  PrecStack* stack = &parser->prec_stack;
+  size_t index = stack_push(ctx, stack, PREC_ENTRY_TERMINAL, PREC_OPERAND);
+
+  const Token* token = &parser->current;
+  AstNode* node;
+  ast_node_create(ctx, &node);
+  stack->data[index].node = node;
+  ast_node_set_position(node, token->line, token->column);
+
+  if (token->type == IDENT) {
+    ast_node_set_type(node, AST_NODE_IDENT);
+    ast_node_set_name(ctx, node, token->value.text);
+  } else {
+    AstNodeType kind = literal_kind(token->type);
+    ast_node_set_type(node, kind);
+    switch (kind) {
+      case AST_NODE_INT_LIT:
+        ast_node_set_value(ctx, node,
+                           (AstNodeValue){.int_value = token->value.integer});
+        break;
+      case AST_NODE_DOUBLE_LIT:
+        ast_node_set_value(
+            ctx, node, (AstNodeValue){.double_value = token->value.decimal});
+        break;
+      case AST_NODE_STRING_LIT:
+        ast_node_set_value(ctx, node,
+                           (AstNodeValue){.string_value = token->value.text});
+        break;
+      case AST_NODE_BOOL_LIT:
+        ast_node_set_value(
+            ctx, node,
+            (AstNodeValue){.boolean_value = token->type == BOOL_TRUE});
+        break;
+      default:  // UNIT_LIT carries no value
+        break;
+    }
+  }
+
+  parser_advance(ctx, parser);
+}
+
+// === PRECEDENCE PARSER ===
+
+/**
+ * @brief Shifts the current token as the given precedence terminal
+ */
+static void shift(Ctx* ctx, Parser* parser, PrecTerminal input) {
+  if (input == PREC_OPERAND) {
+    shift_operand(ctx, parser);
+    return;
+  }
+  THROW(E_INTERNAL_ERROR, "%d:%d: precedence terminal %d cannot be shifted",
+        parser->current.line, parser->current.column, (int)input);
+}
+
+/**
+ * @brief Maps the current token to the precedence terminal it stands for, or
+ * PREC_END at the expression end (GLOSSARY.md, Expression end)
+ *
+ * @param after_operand Whether the frame ends with a complete operand or `)`
+ */
+static PrecTerminal classify(Ctx* ctx,
+                             const Parser* parser,
+                             bool after_operand) {
+  TokenType type = parser->current.type;
+
+  // A token that could start an operand ends the expression right after a
+  // complete operand
+  if (starts_operand(type))
+    return after_operand ? PREC_END : PREC_OPERAND;
+
+  if (type == S_STRING_START || type == TRIPLE_S_STRING_START) {
+    if (after_operand)
+      return PREC_END;
+    THROW(E_INTERNAL_ERROR,
+          "%d:%d: interpolated strings are not implemented yet",
+          parser->current.line, parser->current.column);
+  }
+
+  // Not a precedence terminal
+  return PREC_END;
+}
+
+/**
+ * @brief Reduces the handle on top of the frame starting at base by a
+ * reduction rule; a handle matching no rule is a syntax error
+ */
+static void reduce(Ctx* ctx, Parser* parser, size_t base) {
+  PrecStack* stack = &parser->prec_stack;
+
+  size_t handle = stack->count - 1;
+  while (handle > base && stack->data[handle].kind != PREC_ENTRY_HANDLE)
+    handle--;
+  if (handle == base)
+    parser_syntax_error(ctx, parser, "expression");
+
+  const PrecEntry* symbols = &stack->data[handle + 1];
+  size_t length = stack->count - handle - 1;
+
+  // E -> i
+  if (length == 1 && symbols[0].kind == PREC_ENTRY_TERMINAL &&
+      symbols[0].terminal == PREC_OPERAND) {
+    AstNode* node = symbols[0].node;
+    stack->data[handle] = (PrecEntry){.kind = PREC_ENTRY_EXPR, .node = node};
+    stack->count = handle + 1;
+    return;
+  }
+
+  parser_syntax_error(ctx, parser, "expression");
+}
+
 AstNode* expr_parse(Ctx* ctx, Parser* parser) {
-  (void)parser;
-  // TODO(parser author): precedence table and the precedence parser
-  THROW(E_INTERNAL_ERROR, "expr_parse is not implemented yet");
-  return NULL;  // unreachable
+  PrecStack* stack = &parser->prec_stack;
+
+  // This expression's frame: its `$` at base and everything above it
+  size_t base = stack_push(ctx, stack, PREC_ENTRY_TERMINAL, PREC_END);
+
+  while (true) {
+    size_t top = stack_top_terminal(stack, base);
+    PrecTerminal row = stack->data[top].terminal;
+    PrecTerminal input =
+        classify(ctx, parser, stack_ends_with_operand(stack, base));
+
+    if (row == PREC_END && input == PREC_END)
+      break;
+
+    switch (prec_table[row][input]) {
+      case SHF:
+        stack_insert_handle(ctx, stack, top);
+        shift(ctx, parser, input);
+        break;
+      case EQL:
+        shift(ctx, parser, input);
+        break;
+      case RED:
+        reduce(ctx, parser, base);
+        break;
+      default:
+        parser_syntax_error(ctx, parser, "expression");
+    }
+  }
+
+  // The frame must have reduced to `$ E`
+  if (stack->count != base + 2 || stack->data[base + 1].kind != PREC_ENTRY_EXPR)
+    parser_syntax_error(ctx, parser, "expression");
+
+  AstNode* result = stack->data[base + 1].node;
+  stack->count = base;
+  return result;
 }

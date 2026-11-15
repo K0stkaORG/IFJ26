@@ -23,7 +23,9 @@
 #include "parser.h"
 #include "parser_internal.h"
 
-#include <stdlib.h>  // malloc
+#include "helpers/ast_test_string.h"  // ast_to_test_string
+
+#include <stdlib.h>  // malloc, free
 #include <string.h>  // strcpy, strlen
 
 /**
@@ -39,8 +41,23 @@ typedef struct {
  * @brief Returns whether a token of given type carries heap text
  */
 static bool fake_has_text(TokenType type) {
-  return type == IDENT || type == STRING;
+  switch (type) {
+    case IDENT:
+    case STRING:
+    case TRIPLE_STRING:
+    case S_STRING_START:
+    case S_STRING_END:
+    case TRIPLE_S_STRING_START:
+    case TRIPLE_S_STRING_END:
+      return true;
+    default:
+      return false;
+  }
 }
+
+// Token type the fake source answers by throwing a lexical error, as the lexer
+// does on a malformed lexeme
+#define FAKE_LEXICAL_ERROR ((TokenType)1000)
 
 /**
  * @brief TokenSourceNext over a FakeSource, hands out heap copies of the text
@@ -53,6 +70,8 @@ static Token fake_next(Ctx* ctx, void* state) {
     return (Token){.type = EOF_TOKEN};
 
   Token token = source->tokens[source->position++];
+  if (token.type == FAKE_LEXICAL_ERROR)
+    THROW(E_LEXER_ERROR, "fake lexical error");
   if (fake_has_text(token.type)) {
     char* copy = malloc(strlen(token.value.text) + 1);
     strcpy(copy, token.value.text);
@@ -75,6 +94,54 @@ static Token fake_next(Ctx* ctx, void* state) {
                             .count = sizeof(tokens_) / sizeof(*tokens_)}; \
     parser_init(ctx, fake_next, &(source));                               \
   } while (0)
+
+// === PROGRAM TOKENS ===
+//
+// A program is written one source line per row: every line starts with its
+// raw indent LINE(n), as the lexer emits it, and ends with EOL.
+
+#define LINE(n) INDENT_TOK(n)
+#define EOL TOK(EOL_TOKEN)
+#define ID(name) IDENT_TOK(name)
+#define INT(n) ((Token){.type = NUMBER_INT, .value.integer = (n)})
+#define DBL(d) ((Token){.type = NUMBER_DOUBLE, .value.decimal = (d)})
+#define LEX_ERROR TOK(FAKE_LEXICAL_ERROR)
+#define STR(s) ((Token){.type = STRING, .value.text = (s)})
+#define TSTR(s) ((Token){.type = TRIPLE_STRING, .value.text = (s)})
+#define UNIT_VALUE TOK(TYPE_UNIT)
+
+// `import ifj26.*` on its own line
+#define PROLOG \
+  LINE(0), TOK(IMPORT), ID("ifj26"), TOK(PERIOD), TOK(OPERATOR_MULTIPLY), EOL
+
+/**
+ * @brief Parses the given tokens as a whole program into ctx->ast
+ */
+#define PARSE(...)                                                          \
+  do {                                                                      \
+    static const Token program_[] = {__VA_ARGS__};                          \
+    static FakeSource program_source_;                                      \
+    program_source_ = (FakeSource){                                         \
+        .tokens = program_, .count = sizeof(program_) / sizeof(*program_)}; \
+    parser_run(ctx, fake_next, &program_source_);                           \
+  } while (0)
+
+/**
+ * @brief Parses the given tokens and asserts the AST renders as expected
+ */
+#define ASSERT_AST(expected, ...)        \
+  do {                                   \
+    PARSE(__VA_ARGS__);                  \
+    char* actual_ = ast_to_test_string(ctx->ast); \
+    defer(free(actual_));                \
+    asserteq_str(actual_, (expected));   \
+  } while (0)
+
+/**
+ * @brief Asserts that parsing the given tokens is a syntax error
+ */
+#define ASSERT_SYNTAX_ERROR(...) \
+  assertThrow(E_SYNTAX_ERROR, { PARSE(__VA_ARGS__); })
 
 describe(parser) {
   subdesc(reading_tokens) {
@@ -196,7 +263,296 @@ describe(parser) {
     }
   }
 
+  // Token arrays below keep one source line per row
+  // clang-format off
+  subdesc(programs) {
+    it("parses a function with a parameter and a return type") {
+      ASSERT_AST(
+          "(PROGRAM (DEF (IDENT f) (TYPE_ANNOTATION Int) (BLOCK (IDENT a)) "
+          "(PARAM_LIST (PARAM (IDENT a) (TYPE_ANNOTATION Int)))))",
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), ID("a"), EOL);
+    }
+  }
+
+  subdesc(functions) {
+    it("marks a function annotated with @main") {
+      ASSERT_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main) NONE (BLOCK (IDENT run)) "
+          "(PARAM_LIST)))",
+          PROLOG,
+          LINE(0), TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE, TOK(ASSIGN),
+            ID("run"), EOL);
+    }
+
+    it("marks a function with @main on the line before def") {
+      ASSERT_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main) NONE (BLOCK (IDENT run)) "
+          "(PARAM_LIST)))",
+          PROLOG,
+          LINE(0), TOK(AT_MAIN), EOL,
+          LINE(0), TOK(DEF), ID("main"), UNIT_VALUE, TOK(ASSIGN), ID("run"),
+            EOL);
+    }
+
+    it("leaves an omitted return type as NONE") {
+      // def empty() = ()
+      ASSERT_AST(
+          "(PROGRAM (DEF (IDENT empty) NONE (BLOCK (UNIT_LIT)) (PARAM_LIST)))",
+          PROLOG,
+          LINE(0), TOK(DEF), ID("empty"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE,
+            EOL);
+    }
+
+    it("gives def f() written with parentheses an empty parameter list") {
+      ASSERT_AST(
+          "(PROGRAM (DEF (IDENT f) NONE (BLOCK (INT_LIT 1)) (PARAM_LIST)))",
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), TOK(R_PAREN),
+            TOK(ASSIGN), INT(1), EOL);
+    }
+
+    it("keeps parameters in order and accepts a trailing comma") {
+      // def pack(a: Int, b: String, c: Boolean,): Unit = ()
+      ASSERT_AST(
+          "(PROGRAM (DEF (IDENT pack) (TYPE_ANNOTATION Unit) "
+          "(BLOCK (UNIT_LIT)) "
+          "(PARAM_LIST (PARAM (IDENT a) (TYPE_ANNOTATION Int)) "
+          "(PARAM (IDENT b) (TYPE_ANNOTATION String)) "
+          "(PARAM (IDENT c) (TYPE_ANNOTATION Boolean)))))",
+          PROLOG,
+          LINE(0), TOK(DEF), ID("pack"), TOK(L_PAREN),
+            ID("a"), TOK(COLON), TOK(TYPE_INT), TOK(COMMA),
+            ID("b"), TOK(COLON), TOK(TYPE_STRING), TOK(COMMA),
+            ID("c"), TOK(COLON), TOK(TYPE_BOOL), TOK(COMMA), TOK(R_PAREN),
+            TOK(COLON), TOK(TYPE_UNIT), TOK(ASSIGN), UNIT_VALUE, EOL);
+    }
+
+    it("keeps several functions in source order") {
+      ASSERT_AST(
+          "(PROGRAM "
+          "(DEF (IDENT one) (TYPE_ANNOTATION Int) (BLOCK (INT_LIT 1)) "
+          "(PARAM_LIST)) "
+          "(DEF [MAIN] (IDENT main) NONE (BLOCK (IDENT one)) (PARAM_LIST)) "
+          "(DEF (IDENT half) (TYPE_ANNOTATION Double) (BLOCK (DOUBLE_LIT 0.5)) "
+          "(PARAM_LIST (PARAM (IDENT x) (TYPE_ANNOTATION Double)))))",
+          PROLOG,
+          LINE(0), TOK(DEF), ID("one"), UNIT_VALUE, TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), INT(1), EOL,
+          LINE(0), TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE, TOK(ASSIGN),
+            ID("one"), EOL,
+          LINE(0), TOK(DEF), ID("half"), TOK(L_PAREN), ID("x"), TOK(COLON),
+            TOK(TYPE_DOUBLE), TOK(R_PAREN), TOK(COLON), TOK(TYPE_DOUBLE),
+            TOK(ASSIGN), DBL(0.5), EOL);
+    }
+
+    it("accepts a program with no functions") {
+      ASSERT_AST("(PROGRAM)", PROLOG);
+    }
+  }
+
+  subdesc(operands) {
+    it("parses literals of every kind as a function body") {
+      ASSERT_AST(
+          "(PROGRAM "
+          "(DEF (IDENT a) NONE (BLOCK (INT_LIT 42)) (PARAM_LIST)) "
+          "(DEF (IDENT b) NONE (BLOCK (DOUBLE_LIT 2.5)) (PARAM_LIST)) "
+          "(DEF (IDENT c) NONE (BLOCK (STRING_LIT \"hi\")) (PARAM_LIST)) "
+          "(DEF (IDENT d) NONE (BLOCK (STRING_LIT \"x\\ny\")) (PARAM_LIST)) "
+          "(DEF (IDENT e) NONE (BLOCK (BOOL_LIT true)) (PARAM_LIST)) "
+          "(DEF (IDENT f) NONE (BLOCK (BOOL_LIT false)) (PARAM_LIST)) "
+          "(DEF (IDENT g) NONE (BLOCK (UNIT_LIT)) (PARAM_LIST)))",
+          PROLOG,
+          LINE(0), TOK(DEF), ID("a"), UNIT_VALUE, TOK(ASSIGN), INT(42), EOL,
+          LINE(0), TOK(DEF), ID("b"), UNIT_VALUE, TOK(ASSIGN), DBL(2.5), EOL,
+          LINE(0), TOK(DEF), ID("c"), UNIT_VALUE, TOK(ASSIGN), STR("hi"), EOL,
+          LINE(0), TOK(DEF), ID("d"), UNIT_VALUE, TOK(ASSIGN), TSTR("x\ny"),
+            EOL,
+          LINE(0), TOK(DEF), ID("e"), UNIT_VALUE, TOK(ASSIGN), TOK(BOOL_TRUE),
+            EOL,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
+            TOK(BOOL_FALSE), EOL,
+          LINE(0), TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL);
+    }
+
+    it("ends the expression at an operand right after an operand") {
+      // def f() = a b
+      ASSERT_SYNTAX_ERROR(
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), ID("a"), ID("b"),
+            EOL);
+    }
+
+    it("rejects an expression with no operand") {
+      // def f() = -, the expression ends before any operand
+      ASSERT_SYNTAX_ERROR(
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
+            TOK(OPERATOR_MINUS), EOL);
+    }
+
+    it("rejects a function body starting with no expression") {
+      // def f() = :
+      ASSERT_SYNTAX_ERROR(
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), TOK(COLON), EOL);
+    }
+  }
+
+  subdesc(positions) {
+    it("gives every node the position of the token it starts at") {
+      // import ifj26.*
+      // @main def f(a: Int): Int = a
+      static const Token program[] = {
+          {.type = INDENT, .value.integer = 0, .line = 1, .column = 1},
+          {.type = IMPORT, .line = 1, .column = 1},
+          {.type = IDENT, .value.text = "ifj26", .line = 1, .column = 8},
+          {.type = PERIOD, .line = 1, .column = 13},
+          {.type = OPERATOR_MULTIPLY, .line = 1, .column = 14},
+          {.type = EOL_TOKEN, .line = 1, .column = 15},
+          {.type = INDENT, .value.integer = 0, .line = 2, .column = 1},
+          {.type = AT_MAIN, .line = 2, .column = 1},
+          {.type = DEF, .line = 2, .column = 7},
+          {.type = IDENT, .value.text = "f", .line = 2, .column = 11},
+          {.type = L_PAREN, .line = 2, .column = 12},
+          {.type = IDENT, .value.text = "a", .line = 2, .column = 13},
+          {.type = COLON, .line = 2, .column = 14},
+          {.type = TYPE_INT, .line = 2, .column = 16},
+          {.type = R_PAREN, .line = 2, .column = 19},
+          {.type = COLON, .line = 2, .column = 20},
+          {.type = TYPE_INT, .line = 2, .column = 22},
+          {.type = ASSIGN, .line = 2, .column = 26},
+          {.type = IDENT, .value.text = "a", .line = 2, .column = 28},
+          {.type = EOL_TOKEN, .line = 2, .column = 29},
+      };
+      FakeSource source = {.tokens = program,
+                           .count = sizeof(program) / sizeof(*program)};
+      parser_run(ctx, fake_next, &source);
+
+      // DEF [ident, rettype, BLOCK, PARAM_LIST [PARAM [ident, type]]]
+      AstNode* def;
+      AstNode* child;
+      AstNode* param;
+      ast_node_get_child(ctx, ctx->ast, 0, &def);
+      asserteq(ast_node_get_line(def), 2);
+      asserteq(ast_node_get_column(def), 1);
+
+      ast_node_get_child(ctx, def, 0, &child);  // f
+      asserteq(ast_node_get_column(child), 11);
+      ast_node_get_child(ctx, def, 1, &child);  // return type
+      asserteq(ast_node_get_column(child), 22);
+      ast_node_get_child(ctx, def, 2, &child);  // BLOCK
+      asserteq(ast_node_get_column(child), 28);
+      ast_node_get_child(ctx, child, 0, &child);  // a
+      asserteq(ast_node_get_line(child), 2);
+      asserteq(ast_node_get_column(child), 28);
+
+      ast_node_get_child(ctx, def, 3, &child);  // PARAM_LIST
+      asserteq(ast_node_get_column(child), 12);
+      ast_node_get_child(ctx, child, 0, &param);
+      asserteq(ast_node_get_column(param), 13);
+      ast_node_get_child(ctx, param, 0, &child);  // a
+      asserteq(ast_node_get_column(child), 13);
+      ast_node_get_child(ctx, param, 1, &child);  // Int
+      asserteq(ast_node_get_column(child), 16);
+    }
+  }
+
+  subdesc(syntax_errors) {
+    it("rejects a prolog importing anything but ifj26") {
+      ASSERT_SYNTAX_ERROR(
+          LINE(0), TOK(IMPORT), ID("foo"), TOK(PERIOD),
+            TOK(OPERATOR_MULTIPLY), EOL,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL);
+    }
+
+    it("rejects a program without a prolog") {
+      ASSERT_SYNTAX_ERROR(
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL);
+    }
+
+    it("rejects a prolog not ending the line") {
+      ASSERT_SYNTAX_ERROR(
+          LINE(0), TOK(IMPORT), ID("ifj26"), TOK(PERIOD),
+            TOK(OPERATOR_MULTIPLY), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
+            UNIT_VALUE, EOL);
+    }
+
+    it("rejects a parameter without a type") {
+      // def f(a: Int, b) = a
+      ASSERT_SYNTAX_ERROR(
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+            TOK(TYPE_INT), TOK(COMMA), ID("b"), TOK(R_PAREN), TOK(ASSIGN),
+            ID("a"), EOL);
+    }
+
+    it("rejects a parameter list with two commas in a row") {
+      // def f(a: Int,, b: Int) = a
+      ASSERT_SYNTAX_ERROR(
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+            TOK(TYPE_INT), TOK(COMMA), TOK(COMMA), ID("b"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(ASSIGN), ID("a"), EOL);
+    }
+
+    it("rejects a parameter type that is not a type") {
+      // def f(a: a) = a
+      ASSERT_SYNTAX_ERROR(
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+            ID("a"), TOK(R_PAREN), TOK(ASSIGN), ID("a"), EOL);
+    }
+
+    it("rejects a function without parameters in parentheses") {
+      // def f = 1
+      ASSERT_SYNTAX_ERROR(
+          PROLOG, LINE(0), TOK(DEF), ID("f"), TOK(ASSIGN), INT(1), EOL);
+    }
+
+    it("rejects a missing = before the body") {
+      // def f(): Int 1
+      ASSERT_SYNTAX_ERROR(
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON), TOK(TYPE_INT),
+            INT(1), EOL);
+    }
+
+    it("rejects @main not followed by def") {
+      ASSERT_SYNTAX_ERROR(
+          PROLOG,
+          LINE(0), TOK(AT_MAIN), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE,
+            EOL);
+    }
+
+    it("rejects a stray token between functions") {
+      ASSERT_SYNTAX_ERROR(
+          PROLOG,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL,
+          LINE(0), ID("g"), EOL);
+    }
+
+    it("rejects a single-line body not ending the line") {
+      // def f() = 1 (end of file, no end of line)
+      ASSERT_SYNTAX_ERROR(
+          PROLOG, LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), INT(1));
+    }
+  }
+
+  // clang-format on
+
   subdesc(cleanup) {
+    it("frees an operand left on the precedence stack by an error") {
+      // def f() = a, the lexer fails on the token after `a` while `a` is
+      // still on the precedence stack (ADR-0004)
+      assertThrow(E_LEXER_ERROR, {
+        PARSE(PROLOG, LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
+              STR("still on the stack"), LEX_ERROR);
+      });
+    }
+
     it("frees owned tokens when an error is thrown mid-parse") {
       FakeSource source;
       START(source, IDENT_TOK("a"), IDENT_TOK("b"));
