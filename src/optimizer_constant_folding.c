@@ -22,6 +22,8 @@
 #include "ir_free_helpers.h"
 #include "ir_helpers.h"
 #include "optimizer_constant_propagation.h"
+#include "optimizer_fold_branches.h"
+#include "optimizer_fold_identities.h"
 
 #include <math.h>     // floor
 #include <stdbool.h>  // bool
@@ -29,13 +31,40 @@
 #include <string.h>   // strcmp
 
 /**
+ * @brief Finds the definition of a value in the IR
+ *
+ * @param[in] function The function to search in
+ * @param[in] value The value to search for
+ * @return The instruction that defines the value, or NULL if not found
+ */
+static IrInstruction* optimizer_find_definition(IrFunction* function,
+                                                IrValueId value) {
+  // Go through each block and instruction
+  for (IrBlockId bid = 0; bid < function->blocks.count; bid++) {
+    IrBlock* block = &function->blocks.data[bid];
+
+    for (size_t instId = 0; instId < block->instructions.count; instId++) {
+      IrInstruction* instruction = &block->instructions.data[instId];
+
+      if (instruction->result == value)
+        return instruction;  // Return the instruction if it defines the value
+    }
+  }
+
+  // No such instruction found, return NULL
+  return NULL;
+}
+
+/**
  * @brief Tries to fold a constant in the IR
  *
+ * @param[in] function The function containing the instruction
  * @param[in] instruction The instruction to fold
  * @param[out] result The result of the fold
  * @return Whether the fold was successful
  */
 static bool optimizer_fold_instruction(Ctx* ctx,
+                                       IrFunction* function,
                                        IrInstruction* instruction,
                                        IrOperand* result) {
   // Handle each instruction class separately
@@ -77,6 +106,10 @@ static bool optimizer_fold_instruction(Ctx* ctx,
     }
 
     case IR_INST_CLASS_BINARY: {
+      // First try to fold instructions with only one operand being constant
+      if (optimizer_fold_identity(instruction, result))
+        return true;  // Fold was successful, exit
+
       IrOperand* left = &instruction->operands.binary.left;
       IrOperand* right = &instruction->operands.binary.right;
 
@@ -158,6 +191,7 @@ static bool optimizer_fold_instruction(Ctx* ctx,
           return true;
 
         // Handle all comparison operations at once
+        // 0. (check for special case with 2 IR_OP_VALUE operands)
         // 1. Calculate the "order" of the operands
         // 2. Based on the instruction type and the order, return true or false
         case IR_INST_EQ:
@@ -168,6 +202,23 @@ static bool optimizer_fold_instruction(Ctx* ctx,
         case IR_INST_GE: {
           if (left->type != right->type)
             return false;  // TODO: optimize as throw
+
+          // If both operands are the same value
+          if (left->type == IR_OP_VALUE && left->value.id == right->value.id) {
+            IrInstruction* definition =
+                optimizer_find_definition(function, left->value.id);
+
+            // They will always be equal if they are not doubles
+            if (definition != NULL && definition->result_type != IR_DOUBLE) {
+              *result = (IrOperand){
+                  .type = IR_OP_BOOL,
+                  .value.bool_value = instruction->type == IR_INST_EQ ||
+                                      instruction->type == IR_INST_LE ||
+                                      instruction->type == IR_INST_GE};
+
+              return true;
+            }
+          }
 
           int order = 0;
 
@@ -287,11 +338,11 @@ bool optimizer_fold_function(Ctx* ctx, IrFunctionId function_id) {
       IrOperand result;
 
       // Try to fold the instruction
-      if (!optimizer_fold_instruction(ctx, instruction, &result))
+      if (!optimizer_fold_instruction(ctx, function, instruction, &result))
         continue;  // Unable to fold, go to next instruction
 
       // Replace the value with the constant
-      size_t replacements = optimizer_replace_value_with_constant(
+      size_t replacements = optimizer_replace_value(
           ctx, function_id, instruction->result, result, true);
 
       // If the result is a string and it's not used anywhere, free it
@@ -308,6 +359,9 @@ bool optimizer_fold_function(Ctx* ctx, IrFunctionId function_id) {
       // Mark the function as modified
       modified = true;
     }
+
+    // Attempt to fold the block terminator
+    modified |= optimizer_fold_branch(&block->terminator);
   }
 
   // Return whether the function was modified
