@@ -176,9 +176,8 @@ bool lexer_populate_token(Ctx* ctx,
     case LEFT_PARENTHESIS:
       token->type = L_PAREN;
       return true;
-    // TokenType currently uses TYPE_UNIT for both Unit and its sole value ().
-    case UNIT:
-      token->type = TYPE_UNIT;
+    case UNIT_STATE:
+      token->type = UNIT;
       return true;
     case RIGHT_PARENTHESIS:
       token->type = R_PAREN;

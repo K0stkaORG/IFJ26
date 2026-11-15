@@ -354,7 +354,7 @@ static const Transition negation_transitions[] = {
 };  // q13
 
 static const Transition left_parenthesis_transitions[] = {
-    KEEP(literal_right_parenthesis, ALL_STACK_TOPS, UNIT),
+    KEEP(literal_right_parenthesis, ALL_STACK_TOPS, UNIT_STATE),
     KEEP(a5_whitespace, ALL_STACK_TOPS, UNIT_WITH_WHITESPACE),
 };  // q15
 
@@ -591,7 +591,7 @@ static const Transition triple_s_string_string_transitions[] = {
 };  // q80
 
 static const Transition unit_with_whitespace_transitions[] = {
-    KEEP(literal_right_parenthesis, ALL_STACK_TOPS, UNIT),
+    KEEP(literal_right_parenthesis, ALL_STACK_TOPS, UNIT_STATE),
     KEEP(a5_whitespace, ALL_STACK_TOPS, UNIT_WITH_WHITESPACE),
 };  // q81
 
@@ -613,7 +613,7 @@ static const StateTransitions state_transitions[UNIT_WITH_WHITESPACE + 1] = {
     [NEGATION] = OUTGOING(negation_transitions, true),
     [NOT_EQUAL] = {.accepting = true},
     [LEFT_PARENTHESIS] = OUTGOING(left_parenthesis_transitions, true),
-    [UNIT] = {.accepting = true},
+    [UNIT_STATE] = {.accepting = true},
     [RIGHT_PARENTHESIS] = {.accepting = true},
     [DOUBLE_AMPERSAND] = {.accepting = true},
     [AMPERSAND] = OUTGOING(ampersand_transitions, false),
