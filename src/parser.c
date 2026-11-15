@@ -18,9 +18,11 @@
 
 #include "parser.h"
 #include "ast.h"              // AstNode
+#include "expr_parser.h"      // expr_parse
 #include "parser_internal.h"  // Parser, token layer
 
 #include <stdlib.h>  // free
+#include <string.h>  // strcmp
 
 // === PARSER STATE ===
 
@@ -62,6 +64,7 @@ void parser_init(Ctx* ctx, TokenSourceNext next, void* source) {
       .has_peeked = false,
       .indents = ARRAY_EMPTY,
       .pending_closes = 0,
+      .prec_stack = ARRAY_EMPTY,
   };
 
   // Registered before anything that can throw, so ctx_free can release it
@@ -83,6 +86,15 @@ void parser_cleanup(Ctx* ctx) {
   if (parser->has_peeked)
     token_free(&parser->peeked);
   array_free(&parser->indents);
+
+  // Subtrees still owned by the precedence stack after a THROW (ADR-0004)
+  PrecStack* stack = &parser->prec_stack;
+  for (size_t i = 0; i < stack->count; i++) {
+    if (stack->data[i].node != NULL)
+      ast_node_destroy(ctx, stack->data[i].node);
+  }
+  array_free(stack);
+
   free(parser);
 }
 
@@ -248,23 +260,20 @@ const Token* parser_peek(Ctx* ctx, Parser* parser) {
 
 // === NONTERMINAL FUNCTIONS ===
 //
-// One function per nonterminal of the LL table. Template (no real grammar):
+// One function per nonterminal of the LL table (IFJ26 Table Maker project),
+// except the expression nonterminals, which the precedence parser stands in
+// for (guidance/parser-structure/adr/0003). Rule numbers are the table's.
+// Template:
 //
 //   // <NONTERMINAL> -> ...   (LL table rules N, M)
 //   static void parse_<nonterminal>(Ctx* ctx, Parser* parser, AstNode* parent)
 //   {
 //     switch (parser->current.type) {
 //       // Rule N: <NONTERMINAL> -> <terminal A> <OTHER_NONTERMINAL>
-//       case <terminal in the predict set of rule N>:
-//       case <another terminal in the predict set of rule N>: {
+//       case <terminal in the predict set of rule N>: {
 //         // Create the node and attach it to parent right away, before
 //         // parsing its children, so ctx_free frees it after a THROW
-//         AstNode* node;
-//         ast_node_create(ctx, &node);
-//         ast_node_set_type(node, AST_NODE_...);
-//         ast_node_set_position(node, parser->current.line,
-//                               parser->current.column);
-//         ast_node_append_child(ctx, parent, node);
+//         AstNode* node = attach_node(ctx, parser, parent, AST_NODE_...);
 //
 //         // Copy token text before consuming the token (it is freed)
 //         ast_node_set_name(ctx, node, parser->current.value.text);
@@ -284,6 +293,307 @@ const Token* parser_peek(Ctx* ctx, Parser* parser) {
 //
 // Expressions are handed to the precedence parser: expr_parse (expr_parser.h)
 // returns the expression's subtree, to be attached to the parent node.
+
+/**
+ * @brief Creates a node of given kind at the current token's position and
+ * attaches it to parent
+ */
+static AstNode* attach_node(Ctx* ctx,
+                            const Parser* parser,
+                            AstNode* parent,
+                            AstNodeType type) {
+  AstNode* node;
+  ast_node_create(ctx, &node);
+  ast_node_set_type(node, type);
+  ast_node_set_position(node, parser->current.line, parser->current.column);
+  ast_node_append_child(ctx, parent, node);
+  return node;
+}
+
+/**
+ * @brief Attaches an IDENT node for the current token and consumes it
+ */
+static void attach_ident(Ctx* ctx, Parser* parser, AstNode* parent) {
+  if (parser->current.type != IDENT)
+    parser_syntax_error(ctx, parser, "identifier");
+  AstNode* ident = attach_node(ctx, parser, parent, AST_NODE_IDENT);
+  ast_node_set_name(ctx, ident, parser->current.value.text);
+  parser_advance(ctx, parser);
+}
+
+/**
+ * @brief Parses an expression with the precedence parser and attaches it
+ */
+static void attach_expr(Ctx* ctx, Parser* parser, AstNode* parent) {
+  AstNode* expr = expr_parse(ctx, parser);
+  ast_node_append_child(ctx, parent, expr);
+}
+
+// Expected terminals of the predict sets shared by several functions
+#define EXPECTED_TYPE "Int, Double, String, Unit or Boolean"
+
+// TYPE -> TYPE_INT | TYPE_DOUBLE | TYPE_STRING | TYPE_UNIT | TYPE_BOOL
+// (rules 9 to 13)
+static void parse_type(Ctx* ctx, Parser* parser, AstNode* parent) {
+  AstDataType data_type;
+  switch (parser->current.type) {
+    case TYPE_INT:
+      data_type = AST_DATA_TYPE_INT;
+      break;
+    case TYPE_DOUBLE:
+      data_type = AST_DATA_TYPE_DOUBLE;
+      break;
+    case TYPE_STRING:
+      data_type = AST_DATA_TYPE_STRING;
+      break;
+    case TYPE_UNIT:
+      data_type = AST_DATA_TYPE_UNIT;
+      break;
+    case TYPE_BOOL:
+      data_type = AST_DATA_TYPE_BOOLEAN;
+      break;
+    default:
+      parser_syntax_error(ctx, parser, EXPECTED_TYPE);
+      return;  // unreachable
+  }
+
+  AstNode* type = attach_node(ctx, parser, parent, AST_NODE_TYPE_ANNOTATION);
+  ast_node_set_data_type(type, data_type);
+  parser_advance(ctx, parser);
+}
+
+// PARAM -> IDENT COLON TYPE (rule 23)
+static void parse_param(Ctx* ctx, Parser* parser, AstNode* parent) {
+  if (parser->current.type != IDENT)
+    parser_syntax_error(ctx, parser, "identifier");
+
+  AstNode* param = attach_node(ctx, parser, parent, AST_NODE_PARAM);
+  attach_ident(ctx, parser, param);
+  parser_expect(ctx, parser, COLON);
+  parse_type(ctx, parser, param);
+}
+
+static void parse_param_tail(Ctx* ctx, Parser* parser, AstNode* parent);
+
+// PARAM_NEXT -> PARAM PARAM_TAIL | ε (rules 21, 22)
+static void parse_param_next(Ctx* ctx, Parser* parser, AstNode* parent) {
+  switch (parser->current.type) {
+    case IDENT:
+      parse_param(ctx, parser, parent);
+      parse_param_tail(ctx, parser, parent);
+      return;
+    case R_PAREN:
+      return;
+    default:
+      parser_syntax_error(ctx, parser, "identifier or )");
+  }
+}
+
+// PARAM_TAIL -> COMMA PARAM_NEXT | ε (rules 19, 20)
+static void parse_param_tail(Ctx* ctx, Parser* parser, AstNode* parent) {
+  switch (parser->current.type) {
+    case COMMA:
+      parser_advance(ctx, parser);
+      parse_param_next(ctx, parser, parent);
+      return;
+    case R_PAREN:
+      return;
+    default:
+      parser_syntax_error(ctx, parser, ", or )");
+  }
+}
+
+// PARAM_LIST -> PARAM PARAM_TAIL | ε (rules 17, 18)
+static void parse_param_list(Ctx* ctx, Parser* parser, AstNode* parent) {
+  switch (parser->current.type) {
+    case IDENT:
+      parse_param(ctx, parser, parent);
+      parse_param_tail(ctx, parser, parent);
+      return;
+    case R_PAREN:
+      return;
+    default:
+      parser_syntax_error(ctx, parser, "identifier or )");
+  }
+}
+
+// FUNC_PARAMS -> TYPE_UNIT | L_PAREN PARAM_LIST R_PAREN (rules 15, 16)
+// Attaches the PARAM_LIST, empty for `def f()`.
+static void parse_func_params(Ctx* ctx, Parser* parser, AstNode* parent) {
+  switch (parser->current.type) {
+    // `()` is one token, the unit value (GLOSSARY.md, Unit value)
+    case TYPE_UNIT:
+      attach_node(ctx, parser, parent, AST_NODE_PARAM_LIST);
+      parser_advance(ctx, parser);
+      return;
+    case L_PAREN: {
+      AstNode* list = attach_node(ctx, parser, parent, AST_NODE_PARAM_LIST);
+      parser_advance(ctx, parser);
+      parse_param_list(ctx, parser, list);
+      parser_expect(ctx, parser, R_PAREN);
+      return;
+    }
+    default:
+      parser_syntax_error(ctx, parser, "( or ()");
+  }
+}
+
+// FUNC_TYPE -> COLON TYPE | ε (rules 24, 25)
+// Attaches the return type, NONE when omitted.
+static void parse_func_type(Ctx* ctx, Parser* parser, AstNode* parent) {
+  switch (parser->current.type) {
+    case COLON:
+      parser_advance(ctx, parser);
+      parse_type(ctx, parser, parent);
+      return;
+    case ASSIGN:
+      attach_node(ctx, parser, parent, AST_NODE_NONE);
+      return;
+    default:
+      parser_syntax_error(ctx, parser, ": or =");
+  }
+}
+
+// FUNC_BODY -> EXPR EOL_TOKEN | STATEMENT_IF | EOL_TOKEN BLOCK
+// (rules 26 to 28). Attaches the body as a BLOCK.
+static void parse_func_body(Ctx* ctx, Parser* parser, AstNode* parent) {
+  switch (parser->current.type) {
+    // Rule 26, predict set is FIRST(EXPR); a single-line body is wrapped in a
+    // BLOCK
+    case IDENT:
+    case TYPE_UNIT:
+    case BOOL_TRUE:
+    case BOOL_FALSE:
+    case NUMBER_INT:
+    case NUMBER_DOUBLE:
+    case STRING:
+    case TRIPLE_STRING:
+    case S_STRING_START:
+    case TRIPLE_S_STRING_START:
+    case OPERATOR_MINUS:
+    case BOOL_NEG:
+    case L_PAREN: {
+      AstNode* block = attach_node(ctx, parser, parent, AST_NODE_BLOCK);
+      attach_expr(ctx, parser, block);
+      parser_expect(ctx, parser, EOL_TOKEN);
+      return;
+    }
+
+    // Rules 27 and 28: if statements and blocks come with their tickets
+    case IF:
+    case EOL_TOKEN:
+      THROW(E_INTERNAL_ERROR,
+            "%d:%d: this kind of function body is not implemented yet",
+            parser->current.line, parser->current.column);
+
+    default:
+      parser_syntax_error(ctx, parser, "expression, if or end of line");
+  }
+}
+
+// MAIN_TAIL -> EOL_TOKEN | ε (rules 7, 8)
+static void parse_main_tail(Ctx* ctx, Parser* parser) {
+  switch (parser->current.type) {
+    case EOL_TOKEN:
+      parser_advance(ctx, parser);
+      return;
+    case DEF:
+      return;
+    default:
+      parser_syntax_error(ctx, parser, "def or end of line");
+  }
+}
+
+// MAIN -> AT_MAIN MAIN_TAIL | ε (rules 5, 6)
+// Sets the MAIN flag of the DEF given as parent.
+static void parse_main(Ctx* ctx, Parser* parser, AstNode* parent) {
+  switch (parser->current.type) {
+    case AT_MAIN:
+      ast_node_set_flags(parent,
+                         ast_node_get_flags(parent) | (unsigned)AST_FLAG_MAIN);
+      parser_advance(ctx, parser);
+      parse_main_tail(ctx, parser);
+      return;
+    case DEF:
+      return;
+    default:
+      parser_syntax_error(ctx, parser, "@main or def");
+  }
+}
+
+// FUNC -> MAIN DEF IDENT FUNC_PARAMS FUNC_TYPE ASSIGN FUNC_BODY (rule 14)
+// Attaches a DEF [ident, rettype|NONE, BLOCK, PARAM_LIST].
+static void parse_func(Ctx* ctx, Parser* parser, AstNode* parent) {
+  switch (parser->current.type) {
+    case AT_MAIN:
+    case DEF: {
+      AstNode* def = attach_node(ctx, parser, parent, AST_NODE_DEF);
+      parse_main(ctx, parser, def);
+      parser_expect(ctx, parser, DEF);
+      attach_ident(ctx, parser, def);
+      parse_func_params(ctx, parser, def);
+      parse_func_type(ctx, parser, def);
+      parser_expect(ctx, parser, ASSIGN);
+      parse_func_body(ctx, parser, def);
+
+      // The source order is [ident, PARAM_LIST, rettype, BLOCK]; move the
+      // PARAM_LIST last. Detaching frees a slot, so appending cannot fail.
+      AstNode* params;
+      ast_node_detach_child(ctx, def, 1, &params);
+      ast_node_append_child(ctx, def, params);
+      return;
+    }
+    default:
+      parser_syntax_error(ctx, parser, "@main or def");
+  }
+}
+
+// FUNC_LIST -> FUNC FUNC_LIST | ε (rules 3, 4)
+static void parse_func_list(Ctx* ctx, Parser* parser, AstNode* parent) {
+  // The right recursion is a loop, so long programs do not nest calls
+  while (true) {
+    switch (parser->current.type) {
+      case AT_MAIN:
+      case DEF:
+        parse_func(ctx, parser, parent);
+        continue;
+      case EOF_TOKEN:
+        return;
+      default:
+        parser_syntax_error(ctx, parser, "@main, def or end of file");
+    }
+  }
+}
+
+// PROLOG -> IMPORT IDENT PERIOD OPERATOR_MULTIPLY EOL_TOKEN (rule 2)
+// Produces no node.
+static void parse_prolog(Ctx* ctx, Parser* parser) {
+  parser_expect(ctx, parser, IMPORT);
+
+  // `ifj26` is a contextual keyword (GLOSSARY.md, Contextual keyword)
+  if (parser->current.type != IDENT ||
+      strcmp(parser->current.value.text, "ifj26") != 0)
+    parser_syntax_error(ctx, parser, "ifj26");
+  parser_advance(ctx, parser);
+
+  parser_expect(ctx, parser, PERIOD);
+  parser_expect(ctx, parser, OPERATOR_MULTIPLY);
+  parser_expect(ctx, parser, EOL_TOKEN);
+}
+
+// PROGRAM -> PROLOG FUNC_LIST EOF_TOKEN (rule 1), the start nonterminal
+// Attaches the functions to the PROGRAM root given as parent.
+static void parse_program(Ctx* ctx, Parser* parser, AstNode* parent) {
+  switch (parser->current.type) {
+    case IMPORT:
+      parse_prolog(ctx, parser);
+      parse_func_list(ctx, parser, parent);
+      parser_expect(ctx, parser, EOF_TOKEN);
+      return;
+    default:
+      parser_syntax_error(ctx, parser, "import");
+  }
+}
 
 // === ENTRY POINT ===
 
@@ -306,17 +616,23 @@ static Token lexer_source_next(Ctx* ctx, void* source) {
   return (Token){.type = EOF_TOKEN};  // unreachable
 }
 
-void parser_parse(Ctx* ctx, Lexer* lexer) {
-  parser_init(ctx, lexer_source_next, lexer);
+void parser_run(Ctx* ctx, TokenSourceNext next, void* source) {
+  parser_init(ctx, next, source);
 
   // The root is stored in ctx before parsing, so a partly built tree is freed
   // by ctx_free when an error is thrown
   AstNode* root;
   ast_node_create(ctx, &root);
   ast_node_set_type(root, AST_NODE_PROGRAM);
+  ast_node_set_position(root, ctx->parser->current.line,
+                        ctx->parser->current.column);
   ctx->ast = root;
 
-  // TODO(parser author): call the start nonterminal function here
+  parse_program(ctx, ctx->parser, root);
 
   parser_cleanup(ctx);
+}
+
+void parser_parse(Ctx* ctx, Lexer* lexer) {
+  parser_run(ctx, lexer_source_next, lexer);
 }
