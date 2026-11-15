@@ -21,19 +21,19 @@
 #include <stddef.h>   // size_t
 
 /**
- * @brief Replaces all occurrences of a value with a constant in the IR
+ * @brief Replaces all occurrences of a value in the IR
  *
  * @param[in,out] ctx The context
  * @param[in] function_id The function ID
  * @param[in] value_id The value ID
- * @param[in] constant The constant to replace with
- * @param[in] move_ownership Whether to move ownership of the constant
+ * @param[in] replacement The replacement value
+ * @param[in] move_ownership Whether to move ownership of the replacement
  * @return The number of replacements made
  */
-size_t optimizer_replace_value_with_constant(Ctx* ctx,
-                                             IrFunctionId function_id,
-                                             IrValueId value_id,
-                                             IrOperand constant,
-                                             bool move_ownership);
+size_t optimizer_replace_value(Ctx* ctx,
+                               IrFunctionId function_id,
+                               IrValueId value_id,
+                               IrOperand replacement,
+                               bool move_ownership);
 
 #endif
