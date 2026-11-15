@@ -30,6 +30,13 @@ CFLAGS_COMMON := -std=$(CSTD) -Wall -Wextra -pedantic -MMD -MP
 CFLAGS_RELEASE := $(CFLAGS_COMMON) -O3
 CFLAGS_DEBUG := $(CFLAGS_COMMON) -g -O0
 
+# If we are not on Windows, link math library
+ifeq ($(OS),Windows_NT)
+    LIBS :=
+else
+    LIBS := -lm
+endif
+
 ################################################################################
 # OS detection and adaptation logic                                            #
 ################################################################################
@@ -157,7 +164,7 @@ endif
 # Build the release binary
 release: $(RELEASE_BIN)
 $(RELEASE_BIN): $(RELEASE_OBJS)
-	@$(CC) $(CFLAGS_RELEASE) -o $@ $^
+	@$(CC) $(CFLAGS_RELEASE) -o $@ $^ $(LIBS)
 
 # Build individual object files (release)
 $(RELEASE_BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(RELEASE_BUILD_DIR)
@@ -166,7 +173,7 @@ $(RELEASE_BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(RELEASE_BUILD_DIR)
 # Build the debug binary
 debug: $(DEBUG_BIN)
 $(DEBUG_BIN): $(DEBUG_OBJS)
-	@$(CC) $(CFLAGS_DEBUG) -o $@ $^
+	@$(CC) $(CFLAGS_DEBUG) -o $@ $^ $(LIBS)
 
 # Build individual object files (debug)
 $(DEBUG_BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(DEBUG_BUILD_DIR)
@@ -178,7 +185,7 @@ $(TEST_BUILD_DIR)/helper_%.o: $(UNIT_TESTS_DIR)/helpers/%.c | $(TEST_BUILD_DIR)
 
 # Build unit test executables
 $(TEST_BUILD_DIR)/%$(EXE): tests/unit/%.c $(UNIT_OBJS) $(UNIT_HELPER_OBJS) | $(TEST_BUILD_DIR)
-	@$(CC) $(CFLAGS_UNIT) -MF $(TEST_BUILD_DIR)/$*.d -o $@ $< $(filter %.o,$^)
+	@$(CC) $(CFLAGS_UNIT) -MF $(TEST_BUILD_DIR)/$*.d -o $@ $< $(filter %.o,$^) $(LIBS)
 
 # Run unit tests
 test-unit: $(UNIT_BINS)
