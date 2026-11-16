@@ -56,6 +56,14 @@ _Avoid_: duplicate declaration, redeclaration
 The first phase of semantic analysis, which declares every function in the global scope before any function body is checked, so a function can be called before its definition.
 _Avoid_: pre-pass, forward declaration
 
+**Slot**:
+The number a variable gets within its function, stored in its symbol and shown on every use of the variable. The parameters take 0 to n-1, then every `val`, `var` and `for` variable takes the next number in the order of its declaration, so a shadowed name has a slot of its own. A slot is not an address; IR generation maps it to storage.
+_Avoid_: index, offset, register, local number
+
+**Function id**:
+The number of a user function: the position of its `def` among the program's top-level `def`s, assigned by function collection and stored in the function's symbol. It finds the `def` from a call, and tells a user function from a built-in or member, whose symbols carry no function id of this kind.
+_Avoid_: function index, function number, address
+
 ### Types
 
 **Widening**:
@@ -65,6 +73,14 @@ _Avoid_: promotion, coercion, cast
 **Inferred return type**:
 The return type of a function whose `def` omits it, taken from the type of its body's last statement. Inferring it through a call to the function itself is an error.
 _Avoid_: implicit return type, deduced type
+
+**Body result**:
+The value a function body yields: the value of its last statement, or, when that is an `if`, of the last statement of each of its branches, recursively. It is compared with the declared return type, or, for an omitted one, becomes the return type. A branch ending in `return` yields no body result and is compatible with the other branch; a declared `Unit` discards every body result. The branches of an if expression follow the same rule with no declared type. In the code it is a result rule.
+_Avoid_: tail, last value, final expression
+
+**On-demand inference**:
+Checking a function whose return type is omitted at the moment a call needs its type, instead of waiting for its place in source order, so a call before the `def` gets the right type. The function is marked as being checked meanwhile; a call that reaches it again is a cycle through a function without a declared return type (exit 6), while a cycle through a function with a declared type is cut there and compiles.
+_Avoid_: lazy inference, forward inference, demand-driven checking
 
 **Member**:
 A built-in operation written after a dot on a value (`x.toInt`, `s.length`, `(-3.75).toInt.toString`). Which members exist depends on the receiver's type; they live in the global scope beside the built-in functions but can never clash with a user's name.
