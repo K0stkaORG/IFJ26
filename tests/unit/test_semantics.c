@@ -65,6 +65,15 @@
 #define EMPTY_DEF(name) \
   LINE(0), TOK(DEF), ID(name), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL
 
+// `@main def main() =` header line, the body lines follow indented by 2
+#define MAIN_HEAD \
+  LINE(0), TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE, TOK(ASSIGN), EOL
+
+// Expected AST of a program whose only function is `@main def main()` with the
+// given statements as its body
+#define MAIN_AST(body)                                                 \
+  "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK " body ") (PARAM_LIST)))"
+
 // clang-format off
 describe(semantics) {
   // === Ticket 02: entry point, members and function collection ===
@@ -80,7 +89,7 @@ describe(semantics) {
           "(DEF [MAIN] (IDENT main fn1) NONE (BLOCK (UNIT_LIT)) (PARAM_LIST)) "
           "(DEF (IDENT half fn2) (TYPE_ANNOTATION Double) "
           "(BLOCK (DOUBLE_LIT 0.5)) "
-          "(PARAM_LIST (PARAM (IDENT x) (TYPE_ANNOTATION Double)))))",
+          "(PARAM_LIST (PARAM (IDENT x @0) (TYPE_ANNOTATION Double)))))",
           PROLOG,
           LINE(0), TOK(DEF), ID("helper"), UNIT_VALUE, TOK(COLON),
             TOK(TYPE_INT), TOK(ASSIGN), INT(1), EOL,
@@ -95,7 +104,7 @@ describe(semantics) {
       // def later() = ()
       ASSERT_SEMANTIC_AST(
           "(PROGRAM "
-          "(DEF [MAIN] (IDENT main fn0) NONE (BLOCK (CALL (IDENT later))) "
+          "(DEF [MAIN] (IDENT main fn0) NONE (BLOCK (CALL (IDENT later fn1))) "
           "(PARAM_LIST)) "
           "(DEF (IDENT later fn1) NONE (BLOCK (UNIT_LIT)) (PARAM_LIST)))",
           PROLOG,
@@ -111,7 +120,7 @@ describe(semantics) {
           "(DEF [MAIN] (IDENT main fn0) NONE (BLOCK (UNIT_LIT)) "
           "(PARAM_LIST)) "
           "(DEF (IDENT length fn1) (TYPE_ANNOTATION Int) (BLOCK (INT_LIT 1)) "
-          "(PARAM_LIST (PARAM (IDENT s) (TYPE_ANNOTATION String)))))",
+          "(PARAM_LIST (PARAM (IDENT s @0) (TYPE_ANNOTATION String)))))",
           PROLOG, MAIN_DEF,
           LINE(0), TOK(DEF), ID("length"), TOK(L_PAREN), ID("s"), TOK(COLON),
             TOK(TYPE_STRING), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
@@ -201,6 +210,617 @@ describe(semantics) {
           "(DEF [MAIN] (IDENT main fn1) NONE (BLOCK (UNIT_LIT)) "
           "(PARAM_LIST)))",
           PROLOG, EMPTY_DEF("first"), MAIN_DEF);
+    }
+  }
+
+  // === Ticket 03: scopes, declarations, resolution and shadowing ===
+  subdesc(declarations_and_slots) {
+    it("numbers val and var slots in declaration order") {
+      // @main def main() =
+      //   val a = 1
+      //   var b = 2
+      //   b = a
+      //   print(b)
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAL (IDENT a @0) NONE (INT_LIT 1)) "
+                   "(VAR (IDENT b @1) NONE (INT_LIT 2)) "
+                   "(ASSIGN (IDENT b @1) (IDENT a @0)) "
+                   "(CALL [BUILTIN] (IDENT print builtin) (IDENT b @1))"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(VAR), ID("b"), TOK(ASSIGN), INT(2), EOL,
+          LINE(2), ID("b"), TOK(ASSIGN), ID("a"), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), ID("b"), TOK(R_PAREN), EOL);
+    }
+
+    it("numbers parameters from 0 and the body's variables after them") {
+      // @main def main() = ()
+      // def f(a: Int, b: Int): Int =
+      //   val c = a
+      //   b
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM "
+          "(DEF [MAIN] (IDENT main fn0) NONE (BLOCK (UNIT_LIT)) "
+          "(PARAM_LIST)) "
+          "(DEF (IDENT f fn1) (TYPE_ANNOTATION Int) "
+          "(BLOCK (VAL (IDENT c @2) NONE (IDENT a @0)) (IDENT b @1)) "
+          "(PARAM_LIST (PARAM (IDENT a @0) (TYPE_ANNOTATION Int)) "
+          "(PARAM (IDENT b @1) (TYPE_ANNOTATION Int)))))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+            TOK(TYPE_INT), TOK(COMMA), ID("b"), TOK(COLON), TOK(TYPE_INT),
+            TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT), TOK(ASSIGN), EOL,
+          LINE(2), TOK(VAL), ID("c"), TOK(ASSIGN), ID("a"), EOL,
+          LINE(2), ID("b"), EOL);
+    }
+
+    it("restarts the slots in every function") {
+      // @main def main() =
+      //   val a = 1
+      // def f() =
+      //   val b = 2
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM "
+          "(DEF [MAIN] (IDENT main fn0) NONE "
+          "(BLOCK (VAL (IDENT a @0) NONE (INT_LIT 1))) (PARAM_LIST)) "
+          "(DEF (IDENT f fn1) NONE "
+          "(BLOCK (VAL (IDENT b @0) NONE (INT_LIT 2))) (PARAM_LIST)))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), EOL,
+          LINE(2), TOK(VAL), ID("b"), TOK(ASSIGN), INT(2), EOL);
+    }
+
+    it("reads the outer variable in the initializer of a shadowing val") {
+      // @main def main() =
+      //   val x = 1
+      //   val y = 2
+      //   {block} val x = x + 1   (here written as an if branch)
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAL (IDENT x @0) NONE (INT_LIT 1)) "
+                   "(IF (BOOL_LIT true) "
+                   "(BLOCK (VAL (IDENT x @1) NONE "
+                   "(ADD (IDENT x @0) (INT_LIT 1)))) NONE)"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(IF), TOK(BOOL_TRUE), TOK(THEN), EOL,
+          LINE(4), TOK(VAL), ID("x"), TOK(ASSIGN), ID("x"),
+            TOK(OPERATOR_PLUS), INT(1), EOL);
+    }
+
+    it("accepts a variable sharing a function's name, both used") {
+      // @main def main() =
+      //   val print = 1
+      //   print(print)
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAL (IDENT print @0) NONE (INT_LIT 1)) "
+                   "(CALL [BUILTIN] (IDENT print builtin) (IDENT print @0))"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("print"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), ID("print"), TOK(R_PAREN), EOL);
+    }
+
+    it("points a call of a user function at its function id") {
+      // @main def main() =
+      //   helper(1)
+      // def helper(n: Int) = ()
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM "
+          "(DEF [MAIN] (IDENT main fn0) NONE "
+          "(BLOCK (CALL (IDENT helper fn1) (INT_LIT 1))) (PARAM_LIST)) "
+          "(DEF (IDENT helper fn1) NONE (BLOCK (UNIT_LIT)) "
+          "(PARAM_LIST (PARAM (IDENT n @0) (TYPE_ANNOTATION Int)))))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), ID("helper"), TOK(L_PAREN), INT(1), TOK(R_PAREN), EOL,
+          LINE(0), TOK(DEF), ID("helper"), TOK(L_PAREN), ID("n"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(ASSIGN), UNIT_VALUE, EOL);
+    }
+  }
+
+  subdesc(undefined_names) {
+    it("rejects an undefined variable") {
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), ID("nothing"), EOL);
+    }
+
+    it("rejects an undefined function") {
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), ID("nothing"), TOK(L_PAREN), TOK(R_PAREN), EOL);
+    }
+
+    it("rejects a use before the declaration") {
+      // val a = b
+      // val b = 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), ID("b"), EOL,
+          LINE(2), TOK(VAL), ID("b"), TOK(ASSIGN), INT(1), EOL);
+    }
+
+    it("rejects a val whose initializer reads itself") {
+      // val x = x
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), ID("x"), EOL);
+    }
+
+    it("rejects a function name used as a variable") {
+      // val a = print
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), ID("print"), EOL);
+    }
+
+    it("rejects a variable name used as a function") {
+      // val f = 1
+      // f()
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("f"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), ID("f"), TOK(L_PAREN), TOK(R_PAREN), EOL);
+    }
+
+    it("rejects an assignment to an undeclared name") {
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), ID("nothing"), TOK(ASSIGN), INT(1), EOL);
+    }
+
+    it("rejects a variable of another function") {
+      // @main def main() =
+      //   val a = 1
+      // def f() =
+      //   a
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), EOL,
+          LINE(2), ID("a"), EOL);
+    }
+  }
+
+  subdesc(redefinition) {
+    it("rejects two val of one name in a block") {
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_REDEFINITION_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), INT(2), EOL);
+    }
+
+    it("rejects a val and a var of one name in a block") {
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_REDEFINITION_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAR), ID("x"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), INT(2), EOL);
+    }
+
+    it("rejects two parameters of one name") {
+      // def f(a: Int, a: Int) = ()
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_REDEFINITION_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+            TOK(TYPE_INT), TOK(COMMA), ID("a"), TOK(COLON), TOK(TYPE_INT),
+            TOK(R_PAREN), TOK(ASSIGN), UNIT_VALUE, EOL);
+    }
+  }
+
+  subdesc(shadowing_and_scopes) {
+    it("gives a shadowed x in both if branches its own slot") {
+      // @main def main() =
+      //   val x = 1
+      //   if true then
+      //     val x = 2
+      //     print(x)
+      //   else
+      //     val x = 3
+      //     print(x)
+      //   print(x)
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAL (IDENT x @0) NONE (INT_LIT 1)) "
+                   "(IF (BOOL_LIT true) "
+                   "(BLOCK (VAL (IDENT x @1) NONE (INT_LIT 2)) "
+                   "(CALL [BUILTIN] (IDENT print builtin) (IDENT x @1))) "
+                   "(BLOCK (VAL (IDENT x @2) NONE (INT_LIT 3)) "
+                   "(CALL [BUILTIN] (IDENT print builtin) (IDENT x @2)))) "
+                   "(CALL [BUILTIN] (IDENT print builtin) (IDENT x @0))"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(IF), TOK(BOOL_TRUE), TOK(THEN), EOL,
+          LINE(4), TOK(VAL), ID("x"), TOK(ASSIGN), INT(2), EOL,
+          LINE(4), ID("print"), TOK(L_PAREN), ID("x"), TOK(R_PAREN), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), TOK(VAL), ID("x"), TOK(ASSIGN), INT(3), EOL,
+          LINE(4), ID("print"), TOK(L_PAREN), ID("x"), TOK(R_PAREN), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), ID("x"), TOK(R_PAREN), EOL);
+    }
+
+    it("resolves the condition of an if in the enclosing scope") {
+      // @main def main() =
+      //   val c = true
+      //   if c then
+      //     val c = false
+      //     print(c)
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAL (IDENT c @0) NONE (BOOL_LIT true)) "
+                   "(IF (IDENT c @0) "
+                   "(BLOCK (VAL (IDENT c @1) NONE (BOOL_LIT false)) "
+                   "(CALL [BUILTIN] (IDENT print builtin) (IDENT c @1))) "
+                   "NONE)"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("c"), TOK(ASSIGN), TOK(BOOL_TRUE), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), TOK(VAL), ID("c"), TOK(ASSIGN), TOK(BOOL_FALSE), EOL,
+          LINE(4), ID("print"), TOK(L_PAREN), ID("c"), TOK(R_PAREN), EOL);
+    }
+
+    it("gives every branch of an else if chain a scope of its own") {
+      // @main def main() =
+      //   val c = true
+      //   if c then
+      //     val x = 1
+      //   else if c then
+      //     val x = 2
+      //   else
+      //     val x = 3
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAL (IDENT c @0) NONE (BOOL_LIT true)) "
+                   "(IF (IDENT c @0) "
+                   "(BLOCK (VAL (IDENT x @1) NONE (INT_LIT 1))) "
+                   "(IF (IDENT c @0) "
+                   "(BLOCK (VAL (IDENT x @2) NONE (INT_LIT 2))) "
+                   "(BLOCK (VAL (IDENT x @3) NONE (INT_LIT 3)))))"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("c"), TOK(ASSIGN), TOK(BOOL_TRUE), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), TOK(VAL), ID("x"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(ELSE), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), TOK(VAL), ID("x"), TOK(ASSIGN), INT(2), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), TOK(VAL), ID("x"), TOK(ASSIGN), INT(3), EOL);
+    }
+
+    it("shadows a variable in a while body, the condition keeps the outer") {
+      // @main def main() =
+      //   val n = 3
+      //   while n > 0 do
+      //     val n = 1
+      //     print(n)
+      //   print(n)
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAL (IDENT n @0) NONE (INT_LIT 3)) "
+                   "(WHILE (GT (IDENT n @0) (INT_LIT 0)) "
+                   "(BLOCK (VAL (IDENT n @1) NONE (INT_LIT 1)) "
+                   "(CALL [BUILTIN] (IDENT print builtin) (IDENT n @1)))) "
+                   "(CALL [BUILTIN] (IDENT print builtin) (IDENT n @0))"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("n"), TOK(ASSIGN), INT(3), EOL,
+          LINE(2), TOK(WHILE), ID("n"), TOK(COMPARISON_G), INT(0), TOK(DO),
+            EOL,
+          LINE(4), TOK(VAL), ID("n"), TOK(ASSIGN), INT(1), EOL,
+          LINE(4), ID("print"), TOK(L_PAREN), ID("n"), TOK(R_PAREN), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), ID("n"), TOK(R_PAREN), EOL);
+    }
+
+    it("does not reuse a slot across sibling blocks") {
+      // @main def main() =
+      //   while true do
+      //     val a = 1
+      //   while true do
+      //     val b = 2
+      //   val c = 3
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(WHILE (BOOL_LIT true) "
+                   "(BLOCK (VAL (IDENT a @0) NONE (INT_LIT 1)))) "
+                   "(WHILE (BOOL_LIT true) "
+                   "(BLOCK (VAL (IDENT b @1) NONE (INT_LIT 2)))) "
+                   "(VAL (IDENT c @2) NONE (INT_LIT 3))"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(WHILE), TOK(BOOL_TRUE), TOK(DO), EOL,
+          LINE(4), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(WHILE), TOK(BOOL_TRUE), TOK(DO), EOL,
+          LINE(4), TOK(VAL), ID("b"), TOK(ASSIGN), INT(2), EOL,
+          LINE(2), TOK(VAL), ID("c"), TOK(ASSIGN), INT(3), EOL);
+    }
+
+    it("shadows a parameter in the body of its function") {
+      // @main def main() = ()
+      // def f(a: Int) =
+      //   val a = 2
+      //   a
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM "
+          "(DEF [MAIN] (IDENT main fn0) NONE (BLOCK (UNIT_LIT)) "
+          "(PARAM_LIST)) "
+          "(DEF (IDENT f fn1) NONE "
+          "(BLOCK (VAL (IDENT a @1) NONE (INT_LIT 2)) (IDENT a @1)) "
+          "(PARAM_LIST (PARAM (IDENT a @0) (TYPE_ANNOTATION Int)))))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(ASSIGN), EOL,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(2), EOL,
+          LINE(2), ID("a"), EOL);
+    }
+
+    it("shadows a for variable in its body, guards see the loop variable") {
+      // @main def main() =
+      //   val n = 5
+      //   for i <- 1 to n if i > 2 do
+      //     val i = 0
+      //     print(i)
+      //   print(n)
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAL (IDENT n @0) NONE (INT_LIT 5)) "
+                   "(FOR (IDENT i @1) "
+                   "(RANGE_TO (INT_LIT 1) (IDENT n @0) NONE) "
+                   "(BLOCK (VAL (IDENT i @2) NONE (INT_LIT 0)) "
+                   "(CALL [BUILTIN] (IDENT print builtin) (IDENT i @2))) "
+                   "(GT (IDENT i @1) (INT_LIT 2))) "
+                   "(CALL [BUILTIN] (IDENT print builtin) (IDENT n @0))"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("n"), TOK(ASSIGN), INT(5), EOL,
+          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            ID("n"), TOK(IF), ID("i"), TOK(COMPARISON_G), INT(2), TOK(DO),
+            EOL,
+          LINE(4), TOK(VAL), ID("i"), TOK(ASSIGN), INT(0), EOL,
+          LINE(4), ID("print"), TOK(L_PAREN), ID("i"), TOK(R_PAREN), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), ID("n"), TOK(R_PAREN), EOL);
+    }
+
+    it("reads the range of a for in the enclosing scope") {
+      // @main def main() =
+      //   val i = 3
+      //   for i <- 1 to i do print(i)
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAL (IDENT i @0) NONE (INT_LIT 3)) "
+                   "(FOR (IDENT i @1) "
+                   "(RANGE_TO (INT_LIT 1) (IDENT i @0) NONE) "
+                   "(BLOCK (CALL [BUILTIN] (IDENT print builtin) "
+                   "(IDENT i @1))))"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("i"), TOK(ASSIGN), INT(3), EOL,
+          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            ID("i"), TOK(DO), ID("print"), TOK(L_PAREN), ID("i"),
+            TOK(R_PAREN), EOL);
+    }
+
+    it("assigns to a var of an enclosing scope from an inner block") {
+      // @main def main() =
+      //   var total = 0
+      //   for i <- 0 until 3 do total = total + i
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAR (IDENT total @0) NONE (INT_LIT 0)) "
+                   "(FOR (IDENT i @1) "
+                   "(RANGE_UNTIL (INT_LIT 0) (INT_LIT 3) NONE) "
+                   "(BLOCK (ASSIGN (IDENT total @0) "
+                   "(ADD (IDENT total @0) (IDENT i @1)))))"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAR), ID("total"), TOK(ASSIGN), INT(0), EOL,
+          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(0),
+            ID("until"), INT(3), TOK(DO), ID("total"), TOK(ASSIGN),
+            ID("total"), TOK(OPERATOR_PLUS), ID("i"), EOL);
+    }
+
+    it("resolves a recursive call to the function itself") {
+      // @main def main() = ()
+      // def f(n: Int): Int = f(n)
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM "
+          "(DEF [MAIN] (IDENT main fn0) NONE (BLOCK (UNIT_LIT)) "
+          "(PARAM_LIST)) "
+          "(DEF (IDENT f fn1) (TYPE_ANNOTATION Int) "
+          "(BLOCK (CALL (IDENT f fn1) (IDENT n @0))) "
+          "(PARAM_LIST (PARAM (IDENT n @0) (TYPE_ANNOTATION Int)))))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("n"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), ID("f"), TOK(L_PAREN), ID("n"), TOK(R_PAREN), EOL);
+    }
+
+    it("resolves the names in every expression form and in a return") {
+      // @main def main() =
+      //   val a = 1
+      //   val s = "x"
+      //   print(a + a * -a)
+      //   print(!(a == a))
+      //   print(s.length)
+      //   print(s"v$a ${a + 1}")
+      //   return a
+      ASSERT_SEMANTIC_AST(
+          MAIN_AST("(VAL (IDENT a @0) NONE (INT_LIT 1)) "
+                   "(VAL (IDENT s @1) NONE (STRING_LIT \"x\")) "
+                   "(CALL [BUILTIN] (IDENT print builtin) "
+                   "(ADD (IDENT a @0) (MUL (IDENT a @0) (NEG (IDENT a @0))))) "
+                   "(CALL [BUILTIN] (IDENT print builtin) "
+                   "(NOT (EQ (IDENT a @0) (IDENT a @0)))) "
+                   "(CALL [BUILTIN] (IDENT print builtin) "
+                   "(MEMBER length (IDENT s @1))) "
+                   "(CALL [BUILTIN] (IDENT print builtin) "
+                   "(INTERP_STRING (STRING_LIT \"v\") (IDENT a @0) "
+                   "(STRING_LIT \" \") (ADD (IDENT a @0) (INT_LIT 1)))) "
+                   "(RETURN (IDENT a @0))"),
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(VAL), ID("s"), TOK(ASSIGN), STR("x"), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), ID("a"), TOK(OPERATOR_PLUS),
+            ID("a"), TOK(OPERATOR_MULTIPLY), TOK(OPERATOR_MINUS), ID("a"),
+            TOK(R_PAREN), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), TOK(BOOL_NEG), TOK(L_PAREN),
+            ID("a"), TOK(COMPARISON_EQ), ID("a"), TOK(R_PAREN), TOK(R_PAREN),
+            EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), ID("s"), TOK(PERIOD),
+            ID("length"), TOK(R_PAREN), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), S_OPEN, STR("v"), ID("a"),
+            STR(" "), DOLLAR_OPEN, ID("a"), TOK(OPERATOR_PLUS), INT(1),
+            DOLLAR_CLOSE, S_CLOSE, TOK(R_PAREN), EOL,
+          LINE(2), TOK(RETURN), ID("a"), EOL);
+    }
+  }
+
+  subdesc(scope_errors) {
+    it("rejects a use after the block that declared it") {
+      // if true then
+      //   val a = 1
+      // print(a)
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(IF), TOK(BOOL_TRUE), TOK(THEN), EOL,
+          LINE(4), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), ID("a"), TOK(R_PAREN), EOL);
+    }
+
+    it("rejects a use of a variable of the then branch in the else branch") {
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(IF), TOK(BOOL_TRUE), TOK(THEN), EOL,
+          LINE(4), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), ID("print"), TOK(L_PAREN), ID("a"), TOK(R_PAREN), EOL);
+    }
+
+    it("rejects a use of the for variable after the loop") {
+      // for i <- 1 to 3 do print(i)
+      // print(i)
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            INT(3), TOK(DO), ID("print"), TOK(L_PAREN), ID("i"),
+            TOK(R_PAREN), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), ID("i"), TOK(R_PAREN), EOL);
+    }
+
+    it("rejects a use of a variable declared in the body of a while") {
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(WHILE), TOK(BOOL_TRUE), TOK(DO), EOL,
+          LINE(4), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), ID("print"), TOK(L_PAREN), ID("a"), TOK(R_PAREN), EOL);
+    }
+
+    it("rejects the loop variable in the range of its own for") {
+      // for i <- 1 to i do print(i)
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            ID("i"), TOK(DO), ID("print"), TOK(L_PAREN), ID("i"),
+            TOK(R_PAREN), EOL);
+    }
+
+    it("rejects an undefined name in a guard of a for") {
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            INT(3), TOK(IF), ID("nothing"), TOK(DO), ID("print"),
+            TOK(L_PAREN), ID("i"), TOK(R_PAREN), EOL);
+    }
+
+    it("rejects two val of one name in an inner block") {
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_REDEFINITION_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(WHILE), TOK(BOOL_TRUE), TOK(DO), EOL,
+          LINE(4), TOK(VAL), ID("x"), TOK(ASSIGN), INT(1), EOL,
+          LINE(4), TOK(VAR), ID("x"), TOK(ASSIGN), INT(2), EOL);
+    }
+
+    it("rejects an error found with several scopes open") {
+      // @main def main() = ()
+      // def f(p: Int) =
+      //   val a = 1
+      //   while true do
+      //     for i <- 1 to 3 do
+      //       if true then
+      //         val b = missing
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("p"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(ASSIGN), EOL,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(WHILE), TOK(BOOL_TRUE), TOK(DO), EOL,
+          LINE(4), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            INT(3), TOK(DO), EOL,
+          LINE(6), TOK(IF), TOK(BOOL_TRUE), TOK(THEN), EOL,
+          LINE(8), TOK(VAL), ID("b"), TOK(ASSIGN), ID("missing"), EOL);
+    }
+
+    it("rejects a redefinition found with several scopes open") {
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_REDEFINITION_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(WHILE), TOK(BOOL_TRUE), TOK(DO), EOL,
+          LINE(4), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            INT(3), TOK(DO), EOL,
+          LINE(6), TOK(IF), TOK(BOOL_TRUE), TOK(THEN), EOL,
+          LINE(8), TOK(VAL), ID("b"), TOK(ASSIGN), INT(1), EOL,
+          LINE(8), TOK(VAL), ID("b"), TOK(ASSIGN), INT(2), EOL);
+    }
+  }
+
+  subdesc(scope_memory) {
+    it("frees every scope when any allocation fails in nested scopes") {
+      // @main def main() =
+      //   val a = 1
+      //   for i <- 1 to a do
+      //     while true do
+      //       if true then
+      //         val b = i
+      //       else
+      //         print(a)
+      // def f(p: Int) =
+      //   val p = p
+      static const Token program[] = {
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            ID("a"), TOK(DO), EOL,
+          LINE(4), TOK(WHILE), TOK(BOOL_TRUE), TOK(DO), EOL,
+          LINE(6), TOK(IF), TOK(BOOL_TRUE), TOK(THEN), EOL,
+          LINE(8), TOK(VAL), ID("b"), TOK(ASSIGN), ID("i"), EOL,
+          LINE(6), TOK(ELSE), EOL,
+          LINE(8), ID("print"), TOK(L_PAREN), ID("a"), TOK(R_PAREN), EOL,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("p"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(ASSIGN), EOL,
+          LINE(2), TOK(VAL), ID("p"), TOK(ASSIGN), ID("p"), EOL};
+
+      for (int nth = 1;; nth++) {
+        FakeSource source = {.tokens = program,
+                             .count = sizeof(program) / sizeof(*program)};
+        Ctx failing;
+        Flags flags = DEFAULT_TEST_FLAGS;
+        flags.verbose = false;
+        flags.forceNthMallocFail = nth;
+        ctx_init(&failing, flags);
+
+        bool failed = true;
+        if (setjmp(failing.error_target) == 0) {
+          ctx_allocate(&failing);
+          parser_run(&failing, fake_next, &source);
+          semantics_analyze(&failing);
+          failed = false;
+        }
+
+        ExitCode code = ctx_free(&failing);
+        if (!failed) {
+          asserteq(code, E_OK);
+          break;
+        }
+        asserteq(code, E_INTERNAL_ERROR);
+      }
+    }
+
+    it("frees every scope when a semantic error stops the pass") {
+      // The same program with an undefined name in the innermost scope, ctx
+      // is freed by the test environment, so a leak shows in the leak checker
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            ID("a"), TOK(DO), EOL,
+          LINE(4), TOK(WHILE), TOK(BOOL_TRUE), TOK(DO), EOL,
+          LINE(6), TOK(IF), TOK(BOOL_TRUE), TOK(THEN), EOL,
+          LINE(8), TOK(VAL), ID("b"), TOK(ASSIGN), ID("i"), EOL,
+          LINE(6), TOK(ELSE), EOL,
+          LINE(8), ID("print"), TOK(L_PAREN), ID("missing"), TOK(R_PAREN),
+            EOL);
     }
   }
 
