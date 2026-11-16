@@ -19,6 +19,7 @@
 #include "optimizer_control_flow.h"
 #include "optimizer_dead_code_elimination.h"
 #include "optimizer_forwarding.h"
+#include "optimizer_jump_threading.h"
 
 #include <stdbool.h>  // bool
 
@@ -39,6 +40,7 @@ void optimize_ir(Ctx* ctx) {
       changed |= optimizer_forward_stores(ctx, fid);
       changed |= optimizer_remove_unreachable_blocks(ctx, fid);
       changed |= optimizer_remove_unused_stores(ctx, fid);
+      changed |= optimizer_simplify_jumps(ctx, fid);
     } while (changed);
 
     // Print debug info
