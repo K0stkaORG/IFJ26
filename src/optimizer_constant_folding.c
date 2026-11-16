@@ -24,36 +24,12 @@
 #include "optimizer_constant_propagation.h"
 #include "optimizer_fold_branches.h"
 #include "optimizer_fold_identities.h"
+#include "optimizer_helpers.h"
 
 #include <math.h>     // floor
 #include <stdbool.h>  // bool
 #include <stddef.h>   // size_t
 #include <string.h>   // strcmp
-
-/**
- * @brief Finds the definition of a value in the IR
- *
- * @param[in] function The function to search in
- * @param[in] value The value to search for
- * @return The instruction that defines the value, or NULL if not found
- */
-static IrInstruction* optimizer_find_definition(IrFunction* function,
-                                                IrValueId value) {
-  // Go through each block and instruction
-  for (IrBlockId bid = 0; bid < function->blocks.count; bid++) {
-    IrBlock* block = &function->blocks.data[bid];
-
-    for (size_t instId = 0; instId < block->instructions.count; instId++) {
-      IrInstruction* instruction = &block->instructions.data[instId];
-
-      if (instruction->result == value)
-        return instruction;  // Return the instruction if it defines the value
-    }
-  }
-
-  // No such instruction found, return NULL
-  return NULL;
-}
 
 /**
  * @brief Tries to fold a constant in the IR
