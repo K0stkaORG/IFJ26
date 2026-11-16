@@ -28,4 +28,13 @@
  */
 bool optimizer_remove_unreachable_blocks(Ctx* ctx, IrFunctionId function_id);
 
+/**
+ * @brief Removes stores whose target is not read from in any possible path
+ *
+ * @param ctx The context of the program
+ * @param function_id The ID of the function to optimize
+ * @return true if the function was modified, false otherwise
+ */
+bool optimizer_remove_unused_stores(Ctx* ctx, IrFunctionId function_id);
+
 #endif
