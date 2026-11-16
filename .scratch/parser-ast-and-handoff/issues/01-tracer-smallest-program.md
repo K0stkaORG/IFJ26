@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] An internal entry point parses a whole program from any token source; the public parser entry is a thin wrapper over it with the lexer adapter. The PROGRAM root is stored in the context before parsing starts.
 - [ ] A test-only printer renders an AST as a compact S-expression (node kind, name or value, flags, children); parser tests compare its output.
@@ -15,3 +15,7 @@
 - [ ] Single-line function bodies are wrapped in a BLOCK.
 - [ ] Every node carries the line and column of the token it starts at.
 - [ ] Tests: `def f(a: Int): Int = a`, a `@main` function, an inferred return type (`def empty() = ()`), several functions in order, a wrong prolog, and a syntax error inside a parameter list, all under valgrind with no leaks.
+
+## Comments
+
+- 2026-11-16 (implement-spec): Implemented by the parser author in dbe2d9d. Integrated on `feat/implement-parser`; final review fixes e7d531b (no leak when an allocation fails, ADR-0004), 13cffaf.

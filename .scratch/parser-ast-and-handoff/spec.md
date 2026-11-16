@@ -1,6 +1,6 @@
 # Parser: building the AST and handing expressions to the precedence parser
 
-Status: ready-for-agent
+Status: resolved
 
 Vocabulary follows `guidance/parser-structure/GLOSSARY.md`. Decisions are recorded in `guidance/parser-structure/adr/` (ADR-0001 to ADR-0004).
 
