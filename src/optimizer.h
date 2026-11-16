@@ -14,8 +14,6 @@
 #ifndef OPTIMIZER_H
 #define OPTIMIZER_H
 
-#include "ir.h"
-
 #include <stdbool.h>  // bool
 #include <stddef.h>   // size_t
 
@@ -38,11 +36,12 @@ typedef struct {
   // Number of times each value is used (valid only in specific contexts)
   size_t* value_uses;
 
-  // Tracks whether each block is reachable (valid only in specific contexts)
+  // Tracks whether each block/function is reachable (valid only in specific
+  // contexts)
   bool* reachable;
 
-  // Maps block IDs to their index in the reachable buffer
-  IrBlockId* block_id_map;
+  // Maps block/function IDs to their new IDs (valid only in specific contexts)
+  size_t* id_map;
 } OptimizerCtx;
 
 /**
