@@ -140,4 +140,6 @@ void lexer_copy_stack(Ctx* ctx,
                       LexerStack* destination,
                       const LexerStack* source);
 
+void lexer_discard_consumed(Ctx* ctx);
+
 #endif

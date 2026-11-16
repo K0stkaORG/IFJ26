@@ -80,6 +80,7 @@ Token next_token(Ctx* ctx) {
         if (current_state == START && ctx->lexer.cursor == token_start &&
             stack->count == 1 && top == STACK_EMPTY) {
           token.type = EOF_TOKEN;
+          lexer_discard_consumed(ctx);
           return token;
         }
         if (stack->count != 1 && top != STACK_EMPTY) {
@@ -98,6 +99,7 @@ Token next_token(Ctx* ctx) {
           if (lexer_populate_token(ctx, &token, EOL_OR_EOF,
                                    (const char*)buffer->data + token_start,
                                    saved_cursor - token_start)) {
+            lexer_discard_consumed(ctx);
             return token;
           }
         }
@@ -106,6 +108,7 @@ Token next_token(Ctx* ctx) {
           if (lexer_populate_token(ctx, &token, current_state,
                                    (const char*)buffer->data + token_start,
                                    saved_cursor - token_start)) {
+            lexer_discard_consumed(ctx);
             return token;
           }
         }
@@ -120,8 +123,10 @@ Token next_token(Ctx* ctx) {
         if (lexer_populate_token(ctx, &token, current_state,
                                  (const char*)buffer->data + token_start,
                                  saved_cursor - token_start)) {
+          lexer_discard_consumed(ctx);
           return token;
         }
+        lexer_discard_consumed(ctx);
         current_state = START;
         saved_state = START;
         have_checkpoint = false;
