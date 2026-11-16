@@ -23,7 +23,7 @@
 #include <stddef.h>   // NULL, size_t
 
 typedef struct AstNode AstNode;  // Forward declaration (ast.h includes ctx.h)
-typedef struct Parser Parser;  // Forward declaration (parser state)
+typedef struct Parser Parser;    // Forward declaration (parser state)
 
 /**
  * @brief Exit codes for the IFJ26 compiler
