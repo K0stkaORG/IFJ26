@@ -190,10 +190,65 @@ static void cg_generate_instruction(FILE* out, IrInstruction* inst) {
 
 // Blocks
 
-static void cg_generate_block(FILE* out, IrBlock* block) {
+static void cg_print_block_label(FILE* out, char* fn_name, size_t block_id) {
+  fprintf(out, "$%s$b%zu", fn_name, block_id);
+}
+
+static void cg_generate_block(FILE* out,
+                              IrFunction* fn,
+                              size_t block_id,
+                              IrBlock* block) {
+  fputs("LABEL ", out);
+  cg_print_block_label(out, fn->name, block_id);
+  cg_print_nl(out);
+
   for (size_t i = 0; i < block->instructions.count; i++) {
     IrInstruction* inst = &block->instructions.data[i];
     cg_generate_instruction(out, inst);
+  }
+
+  switch (block->terminator.type) {
+    case IR_TERMINATOR_EXIT:
+      fputs("EXIT ", out);
+      cg_print_operand(out, &block->terminator.value.exit_code);
+      cg_print_nl(out);
+      break;
+    case IR_TERMINATOR_JUMP:
+      if (block->terminator.value.jump_target != IR_INVALID_ID) {
+        fputs("JUMP ", out);
+        cg_print_block_label(out, fn->name,
+                             block->terminator.value.jump_target);
+        cg_print_nl(out);
+      }
+      break;
+    case IR_TERMINATOR_RETURN:
+      if (fn->return_type != IR_UNIT) {
+        fputs("MOVE LF@%ret ", out);
+        cg_print_operand(out, &block->terminator.value.return_value);
+        cg_print_nl(out);
+      }
+      fputs("POPFRAME", out);
+      cg_print_nl(out);
+      fputs("RETURN", out);
+      cg_print_nl(out);
+      break;
+    case IR_TERMINATOR_CONDITIONAL:
+      fputs("JUMPIFEQ ", out);
+      cg_print_block_label(
+          out, fn->name,
+          block->terminator.value.conditional_target.true_target);
+      cg_print_ws(out);
+      cg_print_operand(out,
+                       &block->terminator.value.conditional_target.condition);
+      cg_print_ws(out);
+      cg_print_bool(out, true);
+      cg_print_nl(out);
+      fputs("JUMP ", out);
+      cg_print_block_label(
+          out, fn->name,
+          block->terminator.value.conditional_target.false_target);
+      cg_print_nl(out);
+      break;
   }
 }
 
@@ -222,7 +277,7 @@ static void cg_generate_function(FILE* out, IrFunction* fn) {
 
   for (size_t i = 0; i < fn->blocks.count; i++) {
     IrBlock* block = &fn->blocks.data[i];
-    cg_generate_block(out, block);
+    cg_generate_block(out, fn, i, block);
   }
 
   fputs("POPFRAME", out);
