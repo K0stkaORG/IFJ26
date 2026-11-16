@@ -13,6 +13,9 @@
 #include "optimizer_helpers.h"
 
 #include "ir.h"
+#include "ir_helpers.h"
+
+#include <stdbool.h>  // bool
 
 IrInstruction* optimizer_find_definition(IrFunction* function,
                                          IrValueId value) {
@@ -30,4 +33,100 @@ IrInstruction* optimizer_find_definition(IrFunction* function,
 
   // No such instruction found, return NULL
   return NULL;
+}
+
+bool optimizer_is_pure(IrInstructionType type) {
+  switch (type) {
+    // List instruction with side effects
+    case IR_INST_STORE:
+    case IR_INST_CALL:
+      return false;
+
+    // Rest is pure
+    default:
+      return true;
+  }
+}
+
+void optimizer_count_value_uses(IrFunction* function, size_t* uses) {
+  // Initialize uses to 0
+  for (size_t i = 0; i < function->value_count; i++)
+    uses[i] = 0;
+
+  // Go through each block
+  for (IrBlockId bid = 0; bid < function->blocks.count; bid++) {
+    IrBlock* block = &function->blocks.data[bid];
+
+    // Go through each instruction in the block
+    for (size_t instId = 0; instId < block->instructions.count; instId++) {
+      IrInstruction* instruction = &block->instructions.data[instId];
+
+      // Depending on the instruction class, count the uses of each value
+      switch (ir_get_instruction_class(instruction)) {
+        case IR_INST_CLASS_UNARY: {
+          IrOperand* operand = &instruction->operands.unary.operand;
+
+          if (operand->type == IR_OP_VALUE)
+            uses[operand->value.id]++;
+
+          break;
+        }
+
+        case IR_INST_CLASS_BINARY: {
+          IrOperand* left = &instruction->operands.binary.left;
+          IrOperand* right = &instruction->operands.binary.right;
+
+          if (left->type == IR_OP_VALUE)
+            uses[left->value.id]++;
+          if (right->type == IR_OP_VALUE)
+            uses[right->value.id]++;
+
+          break;
+        }
+
+        case IR_INST_CLASS_STORE: {
+          IrOperand* value = &instruction->operands.store.source;
+
+          if (value->type == IR_OP_VALUE)
+            uses[value->value.id]++;
+
+          break;
+        }
+
+        case IR_INST_CLASS_CALL:
+          for (size_t aid = 0; aid < instruction->operands.call.arg_count;
+               aid++) {
+            IrOperand* operand = &instruction->operands.call.args[aid];
+            if (operand->type == IR_OP_VALUE)
+              uses[operand->value.id]++;
+          }
+
+          break;
+
+        case IR_INST_CLASS_LOAD:
+          break;  // Load never uses values
+      }
+    }
+
+    // Also count value uses in block's terminator
+    IrBlockTerminator* terminator = &block->terminator;
+    IrOperand* operand = NULL;
+
+    switch (terminator->type) {
+      case IR_TERMINATOR_CONDITIONAL:
+        operand = &terminator->value.conditional_target.condition;
+        break;
+      case IR_TERMINATOR_RETURN:
+        operand = &terminator->value.return_value;
+        break;
+      case IR_TERMINATOR_EXIT:
+        operand = &terminator->value.exit_code;
+        break;
+      default:
+        break;  // JUMP has no operand
+    }
+
+    if (operand != NULL && operand->type == IR_OP_VALUE)
+      uses[operand->value.id]++;
+  }
 }
