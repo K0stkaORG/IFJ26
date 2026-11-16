@@ -64,6 +64,10 @@ static void cg_print_localframe_val(FILE* out, size_t id) {
   fprintf(out, "LF@val_%zu", id);
 }
 
+static void cg_print_localframe_slot(FILE* out, size_t id) {
+  fprintf(out, "LF@slot_%zu", id);
+}
+
 static void cg_print_operand(FILE* out, IrOperand* op) {
   switch (op->type) {
     case IR_OP_VALUE:
@@ -167,6 +171,20 @@ static void cg_generate_instruction(FILE* out, IrInstruction* inst) {
       cg_print_binary_inst(out, "LT", inst);
       cg_print_not_result(out, inst->result);
       break;
+    case IR_INST_LOAD:
+      fputs("MOVE ", out);
+      cg_print_localframe_val(out, inst->result);
+      cg_print_ws(out);
+      cg_print_localframe_slot(out, inst->operands.load.source);
+      cg_print_nl(out);
+      break;
+    case IR_INST_STORE:
+      fputs("MOVE ", out);
+      cg_print_localframe_slot(out, inst->operands.store.target);
+      cg_print_ws(out);
+      cg_print_operand(out, &inst->operands.store.source);
+      cg_print_nl(out);
+      break;
   }
 }
 
@@ -193,6 +211,12 @@ static void cg_generate_function(FILE* out, IrFunction* fn) {
   for (size_t i = 0; i < fn->value_count; i++) {
     fputs("DEFVAR ", out);
     cg_print_localframe_val(out, i);
+    cg_print_nl(out);
+  }
+
+  for (size_t i = 0; i < fn->slots.count; i++) {
+    fputs("DEFVAR ", out);
+    cg_print_localframe_slot(out, i);
     cg_print_nl(out);
   }
 
