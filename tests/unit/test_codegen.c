@@ -66,7 +66,7 @@ describe(codegen) {
     }
 
     it("outputs preamble") {
-      cg_generate(ctx, out);
+      cg_generate(out, ctx);
       asserteq_str(read_output(), ".IFJcode26\n");
     }
 
@@ -94,7 +94,7 @@ describe(codegen) {
       };
       ir_add_instruction(ctx, fid, bid, add_inst);
 
-      cg_generate(ctx, out);
+      cg_generate(out, ctx);
       asserteq_str(read_output(),
                    ".IFJcode26\n"
                    "JUMP $$main\n"
@@ -132,7 +132,7 @@ describe(codegen) {
       };
       ir_add_instruction(ctx, fid, bid, sub_inst);
 
-      cg_generate(ctx, out);
+      cg_generate(out, ctx);
       assert(strstr(read_output(), "SUB LF@val_0 int@10 int@5") != NULL);
     }
 
@@ -154,7 +154,7 @@ describe(codegen) {
       };
       ir_add_instruction(ctx, fid, bid, mul_inst);
 
-      cg_generate(ctx, out);
+      cg_generate(out, ctx);
       assert(strstr(read_output(), "MUL LF@val_0 int@3 int@7") != NULL);
     }
 
@@ -176,7 +176,7 @@ describe(codegen) {
       };
       ir_add_instruction(ctx, fid, bid, idiv_inst);
 
-      cg_generate(ctx, out);
+      cg_generate(out, ctx);
       assert(strstr(read_output(), "IDIV LF@val_0 int@20 int@4") != NULL);
     }
 
@@ -198,7 +198,7 @@ describe(codegen) {
       };
       ir_add_instruction(ctx, fid, bid, div_inst);
 
-      cg_generate(ctx, out);
+      cg_generate(out, ctx);
       assert(strstr(read_output(),
                     "DIV LF@val_0 float@0x1.4p+2 float@0x1p+1") != NULL);
     }
@@ -220,7 +220,7 @@ describe(codegen) {
       };
       ir_add_instruction(ctx, fid, bid, floor_inst);
 
-      cg_generate(ctx, out);
+      cg_generate(out, ctx);
       assert(strstr(read_output(), "FLOAT2INT LF@val_0 float@0x1.cp+1") !=
              NULL);
     }
