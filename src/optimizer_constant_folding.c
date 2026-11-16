@@ -338,6 +338,8 @@ bool optimizer_fold_function(Ctx* ctx, IrFunctionId function_id) {
 
     // Attempt to fold the block terminator
     modified |= optimizer_fold_branch(&block->terminator);
+    modified |=
+        optimizer_simplify_negated_branch(ctx, function, &block->terminator);
   }
 
   // Return whether the function was modified
