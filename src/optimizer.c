@@ -27,6 +27,12 @@ void optimize_ir(Ctx* ctx) {
   // Prepare the optimizer context
   optimizer_prepare(ctx);
 
+  // Remove unreachable functions (before optimizing, to avoid optimizing
+  // unreachable functions)
+  size_t removed = optimizer_remove_unreachable_functions(ctx);
+  if (removed > 0)
+    DEBUG("Removed (pre-optimization) %zu unreachable functions", removed);
+
   // Iteratively optimize functions until no more changes are made
   for (IrFunctionId fid = 0; fid < ctx->ir.functions.count; fid++) {
     size_t iterations = 0;
@@ -51,6 +57,12 @@ void optimize_ir(Ctx* ctx) {
     else
       DEBUG("Failed to optimize function %s", ctx->ir.functions.data[fid].name);
   }
+
+  // Remove unreachable functions (also after optimizing, to remove functions
+  // that are no longer reachable)
+  removed = optimizer_remove_unreachable_functions(ctx);
+  if (removed > 0)
+    DEBUG("Removed (post-optimization) %zu unreachable functions", removed);
 }
 
 void optimizer_init(OptimizerCtx* optimizer) {
@@ -61,7 +73,7 @@ void optimizer_init(OptimizerCtx* optimizer) {
   optimizer->reachable = NULL;
 
   // Initialize block ID map to NULL
-  optimizer->block_id_map = NULL;
+  optimizer->id_map = NULL;
 }
 
 void optimizer_prepare(Ctx* ctx) {
@@ -74,17 +86,18 @@ void optimizer_prepare(Ctx* ctx) {
   // Allocate value uses buffer
   ctx->optimizer.value_uses = TRY_MALLOC(max_values * sizeof(size_t));
 
-  // Compute the maximum number of blocks across all functions
-  size_t max_blocks = 0;
+  // Compute the maximum number of blocks across all functions and the number of
+  // functions (so that we can reuse the same buffer for blocks and functions)
+  size_t buffer_size = ctx->ir.functions.count;
   for (IrFunctionId fid = 0; fid < ctx->ir.functions.count; fid++)
-    if (ctx->ir.functions.data[fid].blocks.count > max_blocks)
-      max_blocks = ctx->ir.functions.data[fid].blocks.count;
+    if (ctx->ir.functions.data[fid].blocks.count > buffer_size)
+      buffer_size = ctx->ir.functions.data[fid].blocks.count;
 
   // Allocate reachable buffer
-  ctx->optimizer.reachable = TRY_MALLOC(max_blocks * sizeof(bool));
+  ctx->optimizer.reachable = TRY_MALLOC(buffer_size * sizeof(bool));
 
   // Allocate block ID map
-  ctx->optimizer.block_id_map = TRY_MALLOC(max_blocks * sizeof(IrBlockId));
+  ctx->optimizer.id_map = TRY_MALLOC(buffer_size * sizeof(size_t));
 }
 
 void optimizer_free(OptimizerCtx* optimizer) {
@@ -101,8 +114,8 @@ void optimizer_free(OptimizerCtx* optimizer) {
   }
 
   // Free block ID map if it exists
-  if (optimizer->block_id_map != NULL) {
-    free(optimizer->block_id_map);
-    optimizer->block_id_map = NULL;
+  if (optimizer->id_map != NULL) {
+    free(optimizer->id_map);
+    optimizer->id_map = NULL;
   }
 }

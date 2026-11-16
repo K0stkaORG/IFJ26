@@ -20,6 +20,14 @@
 #include <stdbool.h>  // bool
 
 /**
+ * @brief Removes unreachable functions from the IR
+ *
+ * @param ctx The context of the program
+ * @return The number of unreachable functions removed
+ */
+size_t optimizer_remove_unreachable_functions(Ctx* ctx);
+
+/**
  * @brief Removes unreachable blocks from the control flow graph
  *
  * @param ctx The context of the program

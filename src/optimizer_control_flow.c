@@ -21,6 +21,108 @@
 #include <stddef.h>   // size_t
 
 /**
+ * @brief Recursively explores reachable functions from the given function ID
+ *
+ * @param ir The IR program
+ * @param reachable The reachable buffer
+ * @param function_id The ID of the function to explore
+ */
+static void explore_reachable_functions(IrProgram* ir,
+                                        bool* reachable,
+                                        IrFunctionId function_id) {
+  IrFunction* function = &ir->functions.data[function_id];
+
+  // Check if the function has already been explored
+  if (reachable[function_id])
+    return;
+
+  // Mark the function as reachable
+  reachable[function_id] = true;
+
+  // Go through all blocks and instructions of the function
+  for (IrBlockId bid = 0; bid < function->blocks.count; bid++) {
+    IrBlock* block = &function->blocks.data[bid];
+    for (size_t inst_id = 0; inst_id < block->instructions.count; inst_id++) {
+      IrInstruction* inst = &block->instructions.data[inst_id];
+
+      // If the instruction is a call to a user-defined function, explore it
+      if (inst->type == IR_INST_CALL && inst->operands.call.type == IR_FX_USER)
+        explore_reachable_functions(ir, reachable, inst->operands.call.id);
+    }
+  }
+}
+
+size_t optimizer_remove_unreachable_functions(Ctx* ctx) {
+  IrProgram* ir = &ctx->ir;
+
+  // Check if the program has any functions
+  if (ir->functions.count == 0)
+    return 0;
+
+  // Reset the reachable buffer
+  bool* reachable = ctx->optimizer.reachable;
+  for (IrFunctionId fid = 0; fid < ir->functions.count; fid++)
+    reachable[fid] = false;
+
+  // Explore functions reachable from the entrypoint
+  explore_reachable_functions(ir, reachable, ir->entrypoint);
+
+  size_t unreachable_count = 0;
+  for (IrFunctionId fid = 0; fid < ir->functions.count; fid++)
+    if (!reachable[fid])
+      unreachable_count++;
+
+  // Check that there are functions to remove
+  if (unreachable_count == 0)
+    return 0;
+
+  // Removing functions will cause the remaining ones to change their ids,
+  // create a map of old to new ids
+  IrFunctionId* map = ctx->optimizer.id_map;
+  IrFunctionId next_id = 0;
+  for (IrFunctionId fid = 0; fid < ir->functions.count; fid++)
+    map[fid] = reachable[fid] ? next_id++ : IR_INVALID_ID;
+
+  // Remove unreachable functions
+  next_id = 0;
+  for (IrFunctionId fid = 0; fid < ir->functions.count; fid++) {
+    IrFunction* function = &ir->functions.data[fid];
+
+    // If a function is unreachable, free it and skip it
+    if (!reachable[fid]) {
+      ir_free_function(function);
+      continue;
+    }
+
+    // Otherwise, update all it's call instructions
+    for (IrBlockId bid = 0; bid < function->blocks.count; bid++) {
+      IrBlock* block = &function->blocks.data[bid];
+      for (size_t inst_id = 0; inst_id < block->instructions.count; inst_id++) {
+        IrInstruction* inst = &block->instructions.data[inst_id];
+
+        // Check that the instruction is a call to a user-defined function, if
+        // so, update its id
+        if (inst->type == IR_INST_CALL &&
+            inst->operands.call.type == IR_FX_USER)
+          inst->operands.call.id = map[inst->operands.call.id];
+      }
+    }
+
+    // And move the function to the next available slot in the array
+    ir->functions.data[next_id++] = *function;
+  }
+
+  // Update the count of functions in the program
+  ir->functions.count = next_id;
+
+  // Update the entrypoint of the program
+  ir->entrypoint = map[ir->entrypoint];
+
+  // Return the number of unreachable (removed) functions
+  return unreachable_count;
+}
+
+/**
  * @brief Recursively explores reachable blocks from a given block in a function
  *
  * @param[in,out] optimizer_ctx The optimizer context
@@ -84,14 +186,13 @@ bool optimizer_remove_unreachable_blocks(Ctx* ctx, IrFunctionId function_id) {
 
   // Removing blocks will cause the remaining ones to change their ids, create a
   // map of old to new ids
-  IrBlockId* map = optimizer_ctx->block_id_map;
-  IrBlockId next_new_id = 0;
+  IrBlockId* map = optimizer_ctx->id_map;
+  IrBlockId next_id = 0;
   for (IrBlockId old_id = 0; old_id < function->blocks.count; old_id++)
-    map[old_id] =
-        optimizer_ctx->reachable[old_id] ? next_new_id++ : IR_INVALID_ID;
+    map[old_id] = optimizer_ctx->reachable[old_id] ? next_id++ : IR_INVALID_ID;
 
   // Remove unreachable blocks
-  IrBlockId next_free_id = 0;
+  next_id = 0;
   for (IrBlockId old_id = 0; old_id < function->blocks.count; old_id++) {
     IrBlock* block = &function->blocks.data[old_id];
 
@@ -120,11 +221,11 @@ bool optimizer_remove_unreachable_blocks(Ctx* ctx, IrFunctionId function_id) {
     }
 
     // And (shallow) move the block to the next free id
-    function->blocks.data[next_free_id++] = *block;
+    function->blocks.data[next_id++] = *block;
   }
 
   // Update the block count
-  function->blocks.count = next_free_id;
+  function->blocks.count = next_id;
 
   // Update the function entrypoint
   function->entrypoint = map[function->entrypoint];
