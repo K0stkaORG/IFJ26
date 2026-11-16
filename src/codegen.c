@@ -9,13 +9,14 @@
  */
 
 #include "codegen.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include "ctx.h"
 #include "ir.h"
 
 // Data types
-//
+
 static void cg_print_int(FILE* out, IrInt value) {
   fprintf(out, "int@%d", value);
 }
@@ -43,6 +44,35 @@ static void cg_print_string(FILE* out, char* str) {
   }
 }
 
+// Operands
+
+static void cg_print_localframe_val(FILE* out, size_t id) {
+  fprintf(out, "LF@val_%zu", id);
+}
+
+static void cg_print_operand(FILE* out, IrOperand* op) {
+  switch (op->type) {
+    case IR_OP_VALUE:
+      cg_print_localframe_val(out, op->value.id);
+      break;
+    case IR_OP_INT32:
+      cg_print_int(out, op->value.int32_value);
+      break;
+    case IR_OP_DOUBLE:
+      cg_print_float(out, op->value.double_value);
+      break;
+    case IR_OP_BOOL:
+      cg_print_bool(out, op->value.bool_value);
+      break;
+    case IR_OP_STRING:
+      cg_print_string(out, op->value.string_value);
+      break;
+    case IR_OP_UNIT:
+      cg_print_nil(out);
+      break;
+  }
+}
+
 // Code structure
 
 static void cg_print_nl(FILE* out) {
@@ -57,5 +87,5 @@ static void cg_print_preamble(FILE* out) {
 
 void cg_generate(Ctx* ctx, FILE* output) {
   (void)ctx;
-  (void)output;
+  cg_print_preamble(output);
 }
