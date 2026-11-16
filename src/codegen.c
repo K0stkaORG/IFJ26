@@ -170,9 +170,56 @@ static void cg_generate_instruction(FILE* out, IrInstruction* inst) {
   }
 }
 
+// Blocks
+
+static void cg_generate_block(FILE* out, IrBlock* block) {
+  for (size_t i = 0; i < block->instructions.count; i++) {
+    IrInstruction* inst = &block->instructions.data[i];
+    cg_generate_instruction(out, inst);
+  }
+}
+
+// Functions
+
+static void cg_generate_function(FILE* out, IrFunction* fn) {
+  fputs("LABEL $$", out);
+  fputs(fn->name, out);
+  cg_print_nl(out);
+  fputs("CREATEFRAME", out);
+  cg_print_nl(out);
+  fputs("PUSHFRAME", out);
+  cg_print_nl(out);
+
+  for (size_t i = 0; i < fn->value_count; i++) {
+    fputs("DEFVAR ", out);
+    cg_print_localframe_val(out, i);
+    cg_print_nl(out);
+  }
+
+  for (size_t i = 0; i < fn->blocks.count; i++) {
+    IrBlock* block = &fn->blocks.data[i];
+    cg_generate_block(out, block);
+  }
+
+  fputs("POPFRAME", out);
+  cg_print_nl(out);
+  fputs("RETURN", out);
+  cg_print_nl(out);
+}
+
 // Generator
 
-void cg_generate(Ctx* ctx, FILE* output) {
-  (void)ctx;
-  cg_print_preamble(output);
+void cg_generate(FILE* out, Ctx* ctx) {
+  cg_print_preamble(out);
+
+  if (ctx->ir.entrypoint != IR_INVALID_ID) {
+    fputs("JUMP $$", out);
+    fputs(ctx->ir.functions.data[ctx->ir.entrypoint].name, out);
+    cg_print_nl(out);
+  }
+
+  for (size_t i = 0; i < ctx->ir.functions.count; i++) {
+    IrFunction* fn = &ctx->ir.functions.data[i];
+    cg_generate_function(out, fn);
+  }
 }
