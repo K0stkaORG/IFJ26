@@ -12,8 +12,9 @@
  */
 
 #include "ctx.h"
-#include "ast.h"                // ast_node_destroy
-#include "ir.h"                 // ir_init, ir_free
+#include "ast.h"  // ast_node_destroy
+#include "ir.h"   // ir_init, ir_free
+#include "optimizer.h"
 #include "symtable.h"           // symtable_init, symtable_destroy
 #include "symtable_builtins.h"  // symtable_builtins_populate
 
@@ -40,6 +41,9 @@ void ctx_init(Ctx* ctx, Flags flags) {
 
   // Initialize IR program
   ir_init(&ctx->ir);
+
+  // Initialize optimizer context
+  optimizer_init(&ctx->optimizer);
 }
 
 void ctx_allocate(Ctx* ctx) {
@@ -112,8 +116,11 @@ ExitCode ctx_free(Ctx* ctx) {
   // Destroy global symbol table
   symtable_destroy(&ctx->global_symtable);
 
-  // Free allocated memory
+  // Free intermediate representation
   ir_free(&ctx->ir);
+
+  // Free optimizer context
+  optimizer_free(&ctx->optimizer);
 
   // Return the exit code
   return ctx->exit_code;
