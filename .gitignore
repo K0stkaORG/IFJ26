@@ -10,3 +10,6 @@ __pycache__/
 .scala-build/
 .metals/
 .bsp/
+
+# Local agent scratch space (specs, tickets)
+.scratch/
