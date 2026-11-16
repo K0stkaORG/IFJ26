@@ -16,6 +16,7 @@
 #include "ctx.h"
 #include "ir.h"
 #include "optimizer_constant_folding.h"
+#include "optimizer_control_flow.h"
 #include "optimizer_dead_code_elimination.h"
 #include "optimizer_forwarding.h"
 
@@ -36,6 +37,8 @@ void optimize_ir(Ctx* ctx) {
       changed = optimizer_fold_function(ctx, fid);
       changed |= optimizer_eliminate_dead_code(ctx, fid);
       changed |= optimizer_forward_stores(ctx, fid);
+      changed |= optimizer_remove_unreachable_blocks(ctx, fid);
+      changed |= optimizer_remove_unused_stores(ctx, fid);
     } while (changed);
 
     // Print debug info
@@ -51,6 +54,12 @@ void optimize_ir(Ctx* ctx) {
 void optimizer_init(OptimizerCtx* optimizer) {
   // Initialize value uses buffer to NULL
   optimizer->value_uses = NULL;
+
+  // Initialize reachable buffer to NULL
+  optimizer->reachable = NULL;
+
+  // Initialize block ID map to NULL
+  optimizer->block_id_map = NULL;
 }
 
 void optimizer_prepare(Ctx* ctx) {
@@ -62,6 +71,18 @@ void optimizer_prepare(Ctx* ctx) {
 
   // Allocate value uses buffer
   ctx->optimizer.value_uses = TRY_MALLOC(max_values * sizeof(size_t));
+
+  // Compute the maximum number of blocks across all functions
+  size_t max_blocks = 0;
+  for (IrFunctionId fid = 0; fid < ctx->ir.functions.count; fid++)
+    if (ctx->ir.functions.data[fid].blocks.count > max_blocks)
+      max_blocks = ctx->ir.functions.data[fid].blocks.count;
+
+  // Allocate reachable buffer
+  ctx->optimizer.reachable = TRY_MALLOC(max_blocks * sizeof(bool));
+
+  // Allocate block ID map
+  ctx->optimizer.block_id_map = TRY_MALLOC(max_blocks * sizeof(IrBlockId));
 }
 
 void optimizer_free(OptimizerCtx* optimizer) {
@@ -69,5 +90,17 @@ void optimizer_free(OptimizerCtx* optimizer) {
   if (optimizer->value_uses != NULL) {
     free(optimizer->value_uses);
     optimizer->value_uses = NULL;
+  }
+
+  // Free reachable buffer if it exists
+  if (optimizer->reachable != NULL) {
+    free(optimizer->reachable);
+    optimizer->reachable = NULL;
+  }
+
+  // Free block ID map if it exists
+  if (optimizer->block_id_map != NULL) {
+    free(optimizer->block_id_map);
+    optimizer->block_id_map = NULL;
   }
 }
