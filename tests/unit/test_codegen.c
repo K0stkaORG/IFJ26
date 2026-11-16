@@ -102,6 +102,7 @@ describe(codegen) {
                    "CREATEFRAME\n"
                    "PUSHFRAME\n"
                    "DEFVAR LF@val_0\n"
+                   "LABEL $main$b0\n"
                    "ADD LF@val_0 int@1 int@2\n"
                    "POPFRAME\n"
                    "RETURN\n");
