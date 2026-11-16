@@ -3412,8 +3412,8 @@ describe(parser) {
   // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
   // final review fixes"
   // Changes: added the allocation failure sweep: every malloc of a parse fails
-  // in turn, and the leak check of make test-unit sees a node left without an
-  // owner.
+  // in turn; a node left without an owner shows up in a leak checker
+  // (valgrind in make test-unit, or leaks --atExit where valgrind is missing).
   // The token rows are kept one source line per row
   // clang-format off
   subdesc(allocation_failure) {
