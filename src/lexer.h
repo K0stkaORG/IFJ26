@@ -14,6 +14,7 @@
 #ifndef LEXER_H
 #define LEXER_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include "array.h"
 typedef struct Ctx Ctx;  // Forward declaration to avoid circular includes
@@ -139,6 +140,7 @@ typedef struct {
   size_t line;
   size_t column;
   size_t cursor;
+  bool indent_flag;
 } LexerCtx;
 
 /**
