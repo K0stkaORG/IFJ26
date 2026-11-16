@@ -141,7 +141,8 @@ IrStackSlotId ir_add_slot(Ctx* ctx,
 
   // Create the slot
   IrStackSlotId id = (IrStackSlotId)fx->slots.count;
-  IrStackSlot slot = {.name = copy_string(ctx, name), .type = type};
+  IrStackSlot slot = {
+      .name = copy_string(ctx, name), .type = type, .lastStore = NULL};
 
   // Append the slot to the function's slot array
   array_append(ctx, &fx->slots, slot);

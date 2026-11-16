@@ -359,6 +359,9 @@ typedef struct {
 
   // Type of the stack slot
   IrType type;
+
+  // Optimizer only: last value stored in this slot
+  IrOperand* lastStore;
 } IrStackSlot;
 
 /**
