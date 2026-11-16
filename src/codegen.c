@@ -109,6 +109,14 @@ static void cg_print_binary_inst(FILE* out, char* opcode, IrInstruction* inst) {
   cg_print_nl(out);
 }
 
+static void cg_print_not_result(FILE* out, size_t result) {
+  fputs("NOT ", out);
+  cg_print_localframe_val(out, result);
+  cg_print_ws(out);
+  cg_print_localframe_val(out, result);
+  cg_print_nl(out);
+}
+
 static void cg_generate_instruction(FILE* out, IrInstruction* inst) {
   switch (inst->type) {
     case IR_INST_ADD:
@@ -146,6 +154,18 @@ static void cg_generate_instruction(FILE* out, IrInstruction* inst) {
       break;
     case IR_INST_GT:
       cg_print_binary_inst(out, "GT", inst);
+      break;
+    case IR_INST_NE:
+      cg_print_binary_inst(out, "EQ", inst);
+      cg_print_not_result(out, inst->result);
+      break;
+    case IR_INST_LE:
+      cg_print_binary_inst(out, "GT", inst);
+      cg_print_not_result(out, inst->result);
+      break;
+    case IR_INST_GE:
+      cg_print_binary_inst(out, "LT", inst);
+      cg_print_not_result(out, inst->result);
       break;
   }
 }
