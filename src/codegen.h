@@ -19,6 +19,6 @@
  * @param ctx Compiler context
  * @param output File to output to
  */
-void cg_generate(Ctx* ctx, FILE* output);
+void cg_generate(FILE* out, Ctx* ctx);
 
 #endif
