@@ -656,7 +656,7 @@ describe(semantics) {
     }
 
     it("resolves the names in every expression form and in a return") {
-      // @main def main() =
+      // @main def main(): Unit =
       //   val a = 1
       //   val s = "x"
       //   print(a + a * -a)
@@ -665,22 +665,25 @@ describe(semantics) {
       //   print(s"v$a ${a + 1}")
       //   return a
       ASSERT_SEMANTIC_AST(
-          MAIN_AST("(VAL (IDENT a @0) NONE (INT_LIT 1 :Int)) "
-                   "(VAL (IDENT s @1) NONE (STRING_LIT \"x\" :String)) "
-                   "(CALL [BUILTIN] :Unit (IDENT print builtin) "
-                   "(ADD :Int (IDENT a :Int @0) (MUL :Int (IDENT a :Int @0) "
-                   "(NEG :Int (IDENT a :Int @0))))) "
-                   "(CALL [BUILTIN] :Unit (IDENT print builtin) "
-                   "(NOT :Boolean (EQ :Boolean (IDENT a :Int @0) "
-                   "(IDENT a :Int @0)))) "
-                   "(CALL [BUILTIN] :Unit (IDENT print builtin) "
-                   "(MEMBER length (IDENT s :String @1))) "
-                   "(CALL [BUILTIN] :Unit (IDENT print builtin) "
-                   "(INTERP_STRING :String (STRING_LIT \"v\" :String) "
-                   "(IDENT a :Int @0) (STRING_LIT \" \" :String) "
-                   "(ADD :Int (IDENT a :Int @0) (INT_LIT 1 :Int)))) "
-                   "(RETURN (IDENT a :Int @0))"),
-          PROLOG, MAIN_HEAD,
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) (TYPE_ANNOTATION Unit) (BLOCK "
+          "(VAL (IDENT a @0) NONE (INT_LIT 1 :Int)) "
+          "(VAL (IDENT s @1) NONE (STRING_LIT \"x\" :String)) "
+          "(CALL [BUILTIN] :Unit (IDENT print builtin) "
+          "(ADD :Int (IDENT a :Int @0) (MUL :Int (IDENT a :Int @0) "
+          "(NEG :Int (IDENT a :Int @0))))) "
+          "(CALL [BUILTIN] :Unit (IDENT print builtin) "
+          "(NOT :Boolean (EQ :Boolean (IDENT a :Int @0) "
+          "(IDENT a :Int @0)))) "
+          "(CALL [BUILTIN] :Unit (IDENT print builtin) "
+          "(MEMBER length (IDENT s :String @1))) "
+          "(CALL [BUILTIN] :Unit (IDENT print builtin) "
+          "(INTERP_STRING :String (STRING_LIT \"v\" :String) "
+          "(IDENT a :Int @0) (STRING_LIT \" \" :String) "
+          "(ADD :Int (IDENT a :Int @0) (INT_LIT 1 :Int)))) "
+          "(RETURN (IDENT a :Int @0))) (PARAM_LIST)))",
+          PROLOG,
+          LINE(0), TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE,
+            TOK(COLON), UNIT_VALUE, TOK(ASSIGN), EOL,
           LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
           LINE(2), TOK(VAL), ID("s"), TOK(ASSIGN), STR("x"), EOL,
           LINE(2), ID("print"), TOK(L_PAREN), ID("a"), TOK(OPERATOR_PLUS),
@@ -1835,14 +1838,16 @@ describe(semantics) {
       //   widen(n)
       // def widen(x: Double): Double = x
       ASSERT_SEMANTIC_AST(
-          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) (TYPE_ANNOTATION Unit) (BLOCK "
           "(VAL (IDENT n @0) NONE (INT_LIT 1 :Int)) "
           "(CALL :Double (IDENT widen fn1) "
           "(INT_TO_DOUBLE :Double (IDENT n :Int @0)))) (PARAM_LIST)) "
           "(DEF (IDENT widen fn1) (TYPE_ANNOTATION Double) "
           "(BLOCK (IDENT x :Double @0)) "
           "(PARAM_LIST (PARAM (IDENT x @0) (TYPE_ANNOTATION Double)))))",
-          PROLOG, MAIN_HEAD,
+          PROLOG,
+          LINE(0), TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE,
+            TOK(COLON), UNIT_VALUE, TOK(ASSIGN), EOL,
           LINE(2), TOK(VAL), ID("n"), TOK(ASSIGN), INT(1), EOL,
           LINE(2), ID("widen"), TOK(L_PAREN), ID("n"), TOK(R_PAREN), EOL,
           LINE(0), TOK(DEF), ID("widen"), TOK(L_PAREN), ID("x"), TOK(COLON),
@@ -1854,7 +1859,7 @@ describe(semantics) {
       // @main def main() = mix(1, 2, 3.5)
       // def mix(a: Int, b: Double, c: Double): Int = a
       ASSERT_SEMANTIC_AST(
-          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) (TYPE_ANNOTATION Unit) (BLOCK "
           "(CALL :Int (IDENT mix fn1) (INT_LIT 1 :Int) "
           "(INT_TO_DOUBLE :Double (INT_LIT 2 :Int)) "
           "(DOUBLE_LIT 3.5 :Double))) (PARAM_LIST)) "
@@ -1865,7 +1870,7 @@ describe(semantics) {
           "(PARAM (IDENT c @2) (TYPE_ANNOTATION Double)))))",
           PROLOG,
           LINE(0), TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE,
-            TOK(ASSIGN), ID("mix"), TOK(L_PAREN), INT(1), TOK(COMMA),
+            TOK(COLON), UNIT_VALUE, TOK(ASSIGN), ID("mix"), TOK(L_PAREN), INT(1), TOK(COMMA),
             INT(2), TOK(COMMA), DBL(3.5), TOK(R_PAREN), EOL,
           LINE(0), TOK(DEF), ID("mix"), TOK(L_PAREN), ID("a"), TOK(COLON),
             TOK(TYPE_INT), TOK(COMMA), ID("b"), TOK(COLON), TOK(TYPE_DOUBLE),
@@ -1877,7 +1882,7 @@ describe(semantics) {
       // @main def main() = twice(twice(if true then 1 else 2))
       // def twice(x: Int): Int = x
       ASSERT_SEMANTIC_AST(
-          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) (TYPE_ANNOTATION Unit) (BLOCK "
           "(CALL :Int (IDENT twice fn1) (CALL :Int (IDENT twice fn1) "
           "(IF [EXPR] :Int (BOOL_LIT true :Boolean) (BLOCK (INT_LIT 1 :Int)) "
           "(BLOCK (INT_LIT 2 :Int)))))) (PARAM_LIST)) "
@@ -1886,7 +1891,7 @@ describe(semantics) {
           "(PARAM_LIST (PARAM (IDENT x @0) (TYPE_ANNOTATION Int)))))",
           PROLOG,
           LINE(0), TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE,
-            TOK(ASSIGN), ID("twice"), TOK(L_PAREN), ID("twice"),
+            TOK(COLON), UNIT_VALUE, TOK(ASSIGN), ID("twice"), TOK(L_PAREN), ID("twice"),
             TOK(L_PAREN), TOK(IF), TOK(BOOL_TRUE), TOK(THEN), INT(1),
             TOK(ELSE), INT(2), TOK(R_PAREN), TOK(R_PAREN), EOL,
           LINE(0), TOK(DEF), ID("twice"), TOK(L_PAREN), ID("x"), TOK(COLON),
@@ -2011,6 +2016,1028 @@ describe(semantics) {
             EOL);
     }
   }
+
+  // AI generated by: Claude Code (claude-sonnet-5-5)
+  // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
+  // ticket 07: return types, return rules and inferred return types"
+  // Changes:
+  // New section: inferred return types (also for a function called before its
+  // definition), the return rules of declared and omitted return types,
+  // recursion through a function without a declared type and the @main return
+  // type. Header macros: `def name(): type =` and `def name() =` as program
+  // rows whose body lines follow indented by 2.
+  // === Ticket 07: return types, return rules and inferred return types ===
+  #define DEF_HEAD(name, type)                                              \
+    LINE(0), TOK(DEF), ID(name), UNIT_VALUE, TOK(COLON), TOK(type),        \
+        TOK(ASSIGN), EOL
+  #define DEF_INFER(name) \
+    LINE(0), TOK(DEF), ID(name), UNIT_VALUE, TOK(ASSIGN), EOL
+  #define CALL0(name) ID(name), TOK(L_PAREN), TOK(R_PAREN)
+
+  subdesc(inferred_return_types) {
+    it("infers Unit for a function whose body is ()") {
+      // @main def main() =
+      //   val r = empty()
+      // def empty() = ()
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(VAL (IDENT r @0) NONE (CALL :Unit (IDENT empty fn1)))) "
+          "(PARAM_LIST)) "
+          "(DEF (IDENT empty fn1) NONE (BLOCK (UNIT_LIT :Unit)) "
+          "(PARAM_LIST)))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("r"), TOK(ASSIGN), CALL0("empty"), EOL,
+          EMPTY_DEF("empty"));
+    }
+
+    it("infers Int for a single-line function, called before its "
+       "definition") {
+      // @main def main() =
+      //   val p = pack(1, 2)
+      // def pack(left: Int, right: Int) = left * 100 + right
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(VAL (IDENT p @0) NONE (CALL :Int (IDENT pack fn1) "
+          "(INT_LIT 1 :Int) (INT_LIT 2 :Int)))) (PARAM_LIST)) "
+          "(DEF (IDENT pack fn1) NONE (BLOCK (ADD :Int "
+          "(MUL :Int (IDENT left :Int @0) (INT_LIT 100 :Int)) "
+          "(IDENT right :Int @1))) "
+          "(PARAM_LIST (PARAM (IDENT left @0) (TYPE_ANNOTATION Int)) "
+          "(PARAM (IDENT right @1) (TYPE_ANNOTATION Int)))))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("p"), TOK(ASSIGN), ID("pack"), TOK(L_PAREN),
+            INT(1), TOK(COMMA), INT(2), TOK(R_PAREN), EOL,
+          LINE(0), TOK(DEF), ID("pack"), TOK(L_PAREN), ID("left"),
+            TOK(COLON), TOK(TYPE_INT), TOK(COMMA), ID("right"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(ASSIGN), ID("left"),
+            TOK(OPERATOR_MULTIPLY), INT(100), TOK(OPERATOR_PLUS),
+            ID("right"), EOL);
+    }
+
+    it("infers the type of a function defined before its caller") {
+      // def half() = 0.5
+      // @main def main() =
+      //   val h = half()
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF (IDENT half fn0) NONE (BLOCK "
+          "(DOUBLE_LIT 0.5 :Double)) (PARAM_LIST)) "
+          "(DEF [MAIN] (IDENT main fn1) NONE (BLOCK "
+          "(VAL (IDENT h @0) NONE (CALL :Double (IDENT half fn0)))) "
+          "(PARAM_LIST)))",
+          PROLOG,
+          LINE(0), TOK(DEF), ID("half"), UNIT_VALUE, TOK(ASSIGN), DBL(0.5),
+            EOL,
+          MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("h"), TOK(ASSIGN), CALL0("half"), EOL);
+    }
+
+    it("infers through a chain of inferred functions, outermost first") {
+      // @main def main() =
+      //   val a = outer()
+      // def outer() = middle()
+      // def middle() = inner()
+      // def inner() = "s"
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(VAL (IDENT a @0) NONE (CALL :String (IDENT outer fn1)))) "
+          "(PARAM_LIST)) "
+          "(DEF (IDENT outer fn1) NONE (BLOCK "
+          "(CALL :String (IDENT middle fn2))) (PARAM_LIST)) "
+          "(DEF (IDENT middle fn2) NONE (BLOCK "
+          "(CALL :String (IDENT inner fn3))) (PARAM_LIST)) "
+          "(DEF (IDENT inner fn3) NONE (BLOCK (STRING_LIT \"s\" :String)) "
+          "(PARAM_LIST)))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), CALL0("outer"), EOL,
+          LINE(0), TOK(DEF), ID("outer"), UNIT_VALUE, TOK(ASSIGN),
+            CALL0("middle"), EOL,
+          LINE(0), TOK(DEF), ID("middle"), UNIT_VALUE, TOK(ASSIGN),
+            CALL0("inner"), EOL,
+          LINE(0), TOK(DEF), ID("inner"), UNIT_VALUE, TOK(ASSIGN), STR("s"),
+            EOL);
+    }
+
+    it("infers the common type of a single-line if expression body") {
+      // @main def main() =
+      //   val p = pick(true)
+      // def pick(c: Boolean) = if c then 1 else 2.5
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(VAL (IDENT p @0) NONE (CALL :Double (IDENT pick fn1) "
+          "(BOOL_LIT true :Boolean)))) (PARAM_LIST)) "
+          "(DEF (IDENT pick fn1) NONE (BLOCK (IF :Double "
+          "(IDENT c :Boolean @0) "
+          "(BLOCK (INT_TO_DOUBLE :Double (INT_LIT 1 :Int))) "
+          "(BLOCK (DOUBLE_LIT 2.5 :Double)))) "
+          "(PARAM_LIST (PARAM (IDENT c @0) (TYPE_ANNOTATION Boolean)))))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("p"), TOK(ASSIGN), ID("pick"), TOK(L_PAREN),
+            TOK(BOOL_TRUE), TOK(R_PAREN), EOL,
+          LINE(0), TOK(DEF), ID("pick"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(ASSIGN), TOK(IF), ID("c"),
+            TOK(THEN), INT(1), TOK(ELSE), DBL(2.5), EOL);
+    }
+
+    it("infers Unit when the body ends in val, var, assignment, while or "
+       "for") {
+      // @main def main() =
+      //   val a = ends_val()
+      //   val b = ends_while()
+      // def ends_val() =
+      //   val x = 1
+      // def ends_while() =
+      //   while false do
+      //     val y = 1
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(VAL (IDENT a @0) NONE (CALL :Unit (IDENT ends_val fn1))) "
+          "(VAL (IDENT b @1) NONE (CALL :Unit (IDENT ends_while fn2)))) "
+          "(PARAM_LIST)) "
+          "(DEF (IDENT ends_val fn1) NONE (BLOCK "
+          "(VAL (IDENT x @0) NONE (INT_LIT 1 :Int))) (PARAM_LIST)) "
+          "(DEF (IDENT ends_while fn2) NONE (BLOCK (WHILE "
+          "(BOOL_LIT false :Boolean) (BLOCK "
+          "(VAL (IDENT y @0) NONE (INT_LIT 1 :Int))))) (PARAM_LIST)))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), CALL0("ends_val"), EOL,
+          LINE(2), TOK(VAL), ID("b"), TOK(ASSIGN), CALL0("ends_while"), EOL,
+          DEF_INFER("ends_val"),
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), INT(1), EOL,
+          DEF_INFER("ends_while"),
+          LINE(2), TOK(WHILE), TOK(BOOL_FALSE), TOK(DO), EOL,
+          LINE(4), TOK(VAL), ID("y"), TOK(ASSIGN), INT(1), EOL);
+    }
+
+    it("restores the caller's scope and slots after an on-demand "
+       "inference in the middle of its body") {
+      // @main def main() =
+      //   val a = 1
+      //   val x = f()
+      //   val b = 2
+      // def f() =
+      //   val inner = 5
+      //   inner
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(VAL (IDENT a @0) NONE (INT_LIT 1 :Int)) "
+          "(VAL (IDENT x @1) NONE (CALL :Int (IDENT f fn1))) "
+          "(VAL (IDENT b @2) NONE (INT_LIT 2 :Int))) (PARAM_LIST)) "
+          "(DEF (IDENT f fn1) NONE (BLOCK "
+          "(VAL (IDENT inner @0) NONE (INT_LIT 5 :Int)) "
+          "(IDENT inner :Int @0)) (PARAM_LIST)))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), CALL0("f"), EOL,
+          LINE(2), TOK(VAL), ID("b"), TOK(ASSIGN), INT(2), EOL,
+          DEF_INFER("f"),
+          LINE(2), TOK(VAL), ID("inner"), TOK(ASSIGN), INT(5), EOL,
+          LINE(2), ID("inner"), EOL);
+    }
+
+    it("does not let a function inferred on demand see its caller's "
+       "variables") {
+      // @main def main() =
+      //   val secret = 1
+      //   val x = f()
+      // def f() = secret
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("secret"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), CALL0("f"), EOL,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), ID("secret"),
+            EOL);
+    }
+
+    it("infers a function once, however often it is called") {
+      // @main def main() =
+      //   val a = one()
+      //   val b = one()
+      // def one() = 1
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(VAL (IDENT a @0) NONE (CALL :Int (IDENT one fn1))) "
+          "(VAL (IDENT b @1) NONE (CALL :Int (IDENT one fn1)))) "
+          "(PARAM_LIST)) "
+          "(DEF (IDENT one fn1) NONE (BLOCK (INT_LIT 1 :Int)) "
+          "(PARAM_LIST)))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), CALL0("one"), EOL,
+          LINE(2), TOK(VAL), ID("b"), TOK(ASSIGN), CALL0("one"), EOL,
+          LINE(0), TOK(DEF), ID("one"), UNIT_VALUE, TOK(ASSIGN), INT(1),
+            EOL);
+    }
+  }
+
+  subdesc(return_rules) {
+    it("accepts if/else branches that both return") {
+      // def f(n: Int): Int = if n > 0 then return 1 else return 2
+      // (as a whole program with a trivial @main)
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT f fn1) (TYPE_ANNOTATION Int) (BLOCK (IF :Unit "
+          "(GT :Boolean (IDENT n :Int @0) (INT_LIT 0 :Int)) "
+          "(BLOCK (RETURN (INT_LIT 1 :Int))) "
+          "(BLOCK (RETURN (INT_LIT 2 :Int))))) "
+          "(PARAM_LIST (PARAM (IDENT n @0) (TYPE_ANNOTATION Int)))))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("n"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), TOK(IF), ID("n"), TOK(COMPARISON_G), INT(0),
+            TOK(THEN), TOK(RETURN), INT(1), TOK(ELSE), TOK(RETURN), INT(2),
+            EOL);
+    }
+
+    it("accepts an if expression body whose branches have the declared "
+       "type") {
+      // def abs(x: Int): Int = if x < 0 then 0 - x else x
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT abs fn1) (TYPE_ANNOTATION Int) (BLOCK (IF :Int "
+          "(LT :Boolean (IDENT x :Int @0) (INT_LIT 0 :Int)) "
+          "(BLOCK (SUB :Int (INT_LIT 0 :Int) (IDENT x :Int @0))) "
+          "(BLOCK (IDENT x :Int @0)))) "
+          "(PARAM_LIST (PARAM (IDENT x @0) (TYPE_ANNOTATION Int)))))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("abs"), TOK(L_PAREN), ID("x"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), TOK(IF), ID("x"), TOK(COMPARISON_L), INT(0),
+            TOK(THEN), INT(0), TOK(OPERATOR_MINUS), ID("x"), TOK(ELSE),
+            ID("x"), EOL);
+    }
+
+    it("widens an Int body result and an Int return value to a declared "
+       "Double") {
+      // def body(): Double = 1
+      // def early(): Double =
+      //   return 2
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT body fn1) (TYPE_ANNOTATION Double) (BLOCK "
+          "(INT_TO_DOUBLE :Double (INT_LIT 1 :Int))) (PARAM_LIST)) "
+          "(DEF (IDENT early fn2) (TYPE_ANNOTATION Double) (BLOCK "
+          "(RETURN (INT_TO_DOUBLE :Double (INT_LIT 2 :Int)))) "
+          "(PARAM_LIST)))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("body"), UNIT_VALUE, TOK(COLON),
+            TOK(TYPE_DOUBLE), TOK(ASSIGN), INT(1), EOL,
+          DEF_HEAD("early", TYPE_DOUBLE),
+          LINE(2), TOK(RETURN), INT(2), EOL);
+    }
+
+    it("accepts a declared Int function ending in a return") {
+      // def f(): Int =
+      //   val a = 1
+      //   return a
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT f fn1) (TYPE_ANNOTATION Int) (BLOCK "
+          "(VAL (IDENT a @0) NONE (INT_LIT 1 :Int)) "
+          "(RETURN (IDENT a :Int @0))) (PARAM_LIST)))",
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), TOK(RETURN), ID("a"), EOL);
+    }
+
+    it("accepts return 5 and a bare return in a function declared Unit, "
+       "and discards a non-Unit body result") {
+      // def a(): Unit =
+      //   return 5
+      // def b(): Unit =
+      //   return
+      // def c(): Unit = 7
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT a fn1) (TYPE_ANNOTATION Unit) (BLOCK "
+          "(RETURN (INT_LIT 5 :Int))) (PARAM_LIST)) "
+          "(DEF (IDENT b fn2) (TYPE_ANNOTATION Unit) (BLOCK (RETURN NONE)) "
+          "(PARAM_LIST)) "
+          "(DEF (IDENT c fn3) (TYPE_ANNOTATION Unit) (BLOCK "
+          "(INT_LIT 7 :Int)) (PARAM_LIST)))",
+          PROLOG, MAIN_DEF,
+          DEF_HEAD("a", TYPE_UNIT), LINE(2), TOK(RETURN), INT(5), EOL,
+          DEF_HEAD("b", TYPE_UNIT), LINE(2), TOK(RETURN), EOL,
+          LINE(0), TOK(DEF), ID("c"), UNIT_VALUE, TOK(COLON), UNIT_VALUE,
+            TOK(ASSIGN), INT(7), EOL);
+    }
+
+    it("rejects a declared Int body ending in while, val, var or assignment [def f(): Int = / while false do / val y = 1]") {
+      // def f(): Int =
+      //   while false do
+      //     val y = 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(WHILE), TOK(BOOL_FALSE), TOK(DO), EOL,
+          LINE(4), TOK(VAL), ID("y"), TOK(ASSIGN), INT(1), EOL);
+    }
+
+    it("rejects a declared Int body ending in while, val, var or assignment [def f(): Int = / val x = 1]") {
+      // def f(): Int =
+      //   val x = 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), INT(1), EOL);
+    }
+
+    it("rejects a declared Int body ending in while, val, var or assignment [def f(): Int = / var x = 1]") {
+      // def f(): Int =
+      //   var x = 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(VAR), ID("x"), TOK(ASSIGN), INT(1), EOL);
+    }
+
+    it("rejects a declared Int body ending in while, val, var or assignment [def f(): Int = / var x = 1 / x = 2]") {
+      // def f(): Int =
+      //   var x = 1
+      //   x = 2
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(VAR), ID("x"), TOK(ASSIGN), INT(1), EOL,
+          LINE(2), ID("x"), TOK(ASSIGN), INT(2), EOL);
+    }
+
+    it("rejects a declared Int body whose result has another type [def f(): Int = \"s\"]") {
+      // def f(): Int = "s"
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), STR("s"), EOL);
+    }
+
+    it("rejects a declared Int body whose result has another type [def f(): Int = 1.5]") {
+      // def f(): Int = 1.5
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), DBL(1.5), EOL);
+    }
+
+    it("rejects a declared Int body whose result has another type [def f(): Int = ()]") {
+      // def f(): Int = ()
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), UNIT_VALUE, EOL);
+    }
+
+    it("rejects a return value of the wrong type [def f(): Int = / return \"s\"]") {
+      // def f(): Int =
+      //   return "s"
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(RETURN), STR("s"), EOL);
+    }
+
+    it("rejects a return value of the wrong type [def f(): Int = / return 1.5]") {
+      // def f(): Int =
+      //   return 1.5
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(RETURN), DBL(1.5), EOL);
+    }
+
+    it("rejects a bare return in a function declared with another type") {
+      // def f(): Int =
+      //   return
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(RETURN), EOL);
+    }
+
+    it("rejects any return in a function without a declared return type [def f() = / return 1]") {
+      // def f() =
+      //   return 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_INFER("f"),
+          LINE(2), TOK(RETURN), INT(1), EOL);
+    }
+
+    it("rejects any return in a function without a declared return type [def f() = / return]") {
+      // def f() =
+      //   return
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_INFER("f"),
+          LINE(2), TOK(RETURN), EOL);
+    }
+
+    it("rejects any return in a function without a declared return type [def f() = / while true do / return 1]") {
+      // def f() =
+      //   while true do
+      //     return 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_INFER("f"),
+          LINE(2), TOK(WHILE), TOK(BOOL_TRUE), TOK(DO), EOL,
+          LINE(4), TOK(RETURN), INT(1), EOL);
+    }
+
+    it("rejects a bad return nested in a while, a for and an if [def f(): Int = / while true do / return \"s\" / return 1]") {
+      // def f(): Int =
+      //   while true do
+      //     return "s"
+      //   return 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(WHILE), TOK(BOOL_TRUE), TOK(DO), EOL,
+          LINE(4), TOK(RETURN), STR("s"), EOL,
+          LINE(2), TOK(RETURN), INT(1), EOL);
+    }
+
+    it("rejects a bad return nested in a while, a for and an if [def f(): Int = / if true then / return / return 1]") {
+      // def f(): Int =
+      //   if true then
+      //     return
+      //   return 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(IF), TOK(BOOL_TRUE), TOK(THEN), EOL,
+          LINE(4), TOK(RETURN), EOL,
+          LINE(2), TOK(RETURN), INT(1), EOL);
+    }
+
+    it("checks the code after a return like any other code [def f(): Int = / return 1 / val x: Int = \"s\"]") {
+      // def f(): Int =
+      //   return 1
+      //   val x: Int = "s"
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(RETURN), INT(1), EOL,
+          LINE(2), TOK(VAL), ID("x"), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), STR("s"), EOL);
+    }
+
+    it("checks the code after a return like any other code [def f(): Int = / return 1 / missing]") {
+      // def f(): Int =
+      //   return 1
+      //   missing
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(RETURN), INT(1), EOL,
+          LINE(2), ID("missing"), EOL);
+    }
+
+    it("checks the value of a return before its rules") {
+      // def f() =
+      //   return missing
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_UNDEFINED_ERROR,
+          PROLOG, MAIN_DEF, DEF_INFER("f"),
+          LINE(2), TOK(RETURN), ID("missing"), EOL);
+    }
+  }
+
+  subdesc(recursion_and_main_return) {
+    it("rejects direct recursion without a declared return type") {
+      // def f() = f()
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), CALL0("f"),
+            EOL);
+    }
+
+    it("rejects mutual recursion without declared return types") {
+      // def a() = b()
+      // def b() = a()
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("a"), UNIT_VALUE, TOK(ASSIGN), CALL0("b"),
+            EOL,
+          LINE(0), TOK(DEF), ID("b"), UNIT_VALUE, TOK(ASSIGN), CALL0("a"),
+            EOL);
+    }
+
+    it("rejects recursion through a function inferred on demand from "
+       "@main") {
+      // @main def main() =
+      //   val x = a()
+      // def a() = b()
+      // def b() = a()
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), CALL0("a"), EOL,
+          LINE(0), TOK(DEF), ID("a"), UNIT_VALUE, TOK(ASSIGN), CALL0("b"),
+            EOL,
+          LINE(0), TOK(DEF), ID("b"), UNIT_VALUE, TOK(ASSIGN), CALL0("a"),
+            EOL);
+    }
+
+    it("accepts recursion and mutual recursion with declared return "
+       "types") {
+      // def fact(n: Int): Int = if n < 2 then 1 else n * fact(n - 1)
+      // def even(n: Int): Boolean = if n == 0 then true else odd(n - 1)
+      // def odd(n: Int): Boolean = if n == 0 then false else even(n - 1)
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT even fn1) (TYPE_ANNOTATION Boolean) (BLOCK "
+          "(IF :Boolean "
+          "(EQ :Boolean (IDENT n :Int @0) (INT_LIT 0 :Int)) "
+          "(BLOCK (BOOL_LIT true :Boolean)) "
+          "(BLOCK (CALL :Boolean (IDENT odd fn2) "
+          "(SUB :Int (IDENT n :Int @0) (INT_LIT 1 :Int)))))) "
+          "(PARAM_LIST (PARAM (IDENT n @0) (TYPE_ANNOTATION Int)))) "
+          "(DEF (IDENT odd fn2) (TYPE_ANNOTATION Boolean) (BLOCK "
+          "(IF :Boolean "
+          "(EQ :Boolean (IDENT n :Int @0) (INT_LIT 0 :Int)) "
+          "(BLOCK (BOOL_LIT false :Boolean)) "
+          "(BLOCK (CALL :Boolean (IDENT even fn1) "
+          "(SUB :Int (IDENT n :Int @0) (INT_LIT 1 :Int)))))) "
+          "(PARAM_LIST (PARAM (IDENT n @0) (TYPE_ANNOTATION Int)))))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("even"), TOK(L_PAREN), ID("n"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_BOOL),
+            TOK(ASSIGN), TOK(IF), ID("n"), TOK(COMPARISON_EQ), INT(0),
+            TOK(THEN), TOK(BOOL_TRUE), TOK(ELSE), ID("odd"), TOK(L_PAREN),
+            ID("n"), TOK(OPERATOR_MINUS), INT(1), TOK(R_PAREN), EOL,
+          LINE(0), TOK(DEF), ID("odd"), TOK(L_PAREN), ID("n"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_BOOL),
+            TOK(ASSIGN), TOK(IF), ID("n"), TOK(COMPARISON_EQ), INT(0),
+            TOK(THEN), TOK(BOOL_FALSE), TOK(ELSE), ID("even"), TOK(L_PAREN),
+            ID("n"), TOK(OPERATOR_MINUS), INT(1), TOK(R_PAREN), EOL);
+    }
+
+    it("accepts a self-recursive function with a declared type, called "
+       "from an inferred one") {
+      // def loop(n: Int): Int = loop(n)
+      // def user() = loop(1)
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT loop fn1) (TYPE_ANNOTATION Int) (BLOCK "
+          "(CALL :Int (IDENT loop fn1) (IDENT n :Int @0))) "
+          "(PARAM_LIST (PARAM (IDENT n @0) (TYPE_ANNOTATION Int)))) "
+          "(DEF (IDENT user fn2) NONE (BLOCK "
+          "(CALL :Int (IDENT loop fn1) (INT_LIT 1 :Int))) (PARAM_LIST)))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("loop"), TOK(L_PAREN), ID("n"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), ID("loop"), TOK(L_PAREN), ID("n"), TOK(R_PAREN),
+            EOL,
+          LINE(0), TOK(DEF), ID("user"), UNIT_VALUE, TOK(ASSIGN),
+            ID("loop"), TOK(L_PAREN), INT(1), TOK(R_PAREN), EOL);
+    }
+
+    it("accepts a declared function and an inferred one that call each "
+       "other") {
+      // def a(): Int = b()
+      // def b() = a()
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT a fn1) (TYPE_ANNOTATION Int) (BLOCK "
+          "(CALL :Int (IDENT b fn2))) (PARAM_LIST)) "
+          "(DEF (IDENT b fn2) NONE (BLOCK (CALL :Int (IDENT a fn1))) "
+          "(PARAM_LIST)))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("a"), UNIT_VALUE, TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), CALL0("b"), EOL,
+          LINE(0), TOK(DEF), ID("b"), UNIT_VALUE, TOK(ASSIGN), CALL0("a"),
+            EOL);
+    }
+
+    it("rejects a @main declared with a return type other than Unit") {
+      // @main def m(): Int = 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG,
+          LINE(0), TOK(AT_MAIN), TOK(DEF), ID("m"), UNIT_VALUE, TOK(COLON),
+            TOK(TYPE_INT), TOK(ASSIGN), INT(1), EOL);
+    }
+
+    it("rejects a @main whose inferred return type is not Unit [@main def m() = 1]") {
+      // @main def m() = 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG,
+          LINE(0), TOK(AT_MAIN), TOK(DEF), ID("m"), UNIT_VALUE, TOK(ASSIGN),
+            INT(1), EOL);
+    }
+
+    it("rejects a @main whose inferred return type is not Unit [@main def m() = f() / def f() = \"s\"]") {
+      // @main def m() = f()
+      // def f() = "s"
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG,
+          LINE(0), TOK(AT_MAIN), TOK(DEF), ID("m"), UNIT_VALUE, TOK(ASSIGN),
+            CALL0("f"), EOL,
+          LINE(0), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), STR("s"),
+            EOL);
+    }
+
+    it("accepts a @main declared Unit that returns early") {
+      // @main def m(): Unit =
+      //   return 5
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT m fn0) (TYPE_ANNOTATION Unit) "
+          "(BLOCK (RETURN (INT_LIT 5 :Int))) (PARAM_LIST)))",
+          PROLOG,
+          LINE(0), TOK(AT_MAIN), TOK(DEF), ID("m"), UNIT_VALUE, TOK(COLON),
+            UNIT_VALUE, TOK(ASSIGN), EOL,
+          LINE(2), TOK(RETURN), INT(5), EOL);
+    }
+  }
+
+
+  // AI generated by: Claude Code (claude-sonnet-5-5)
+  // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
+  // ticket 07: return types, return rules and inferred return types"
+  // Changes:
+  // New section: an `if` ending a function body, for a declared Unit, a
+  // declared other type and an omitted return type, with `else if` chains,
+  // nested ifs, a missing else and widened Int branches.
+  subdesc(if_ending_a_body) {
+    it("accepts an else if chain mixing returns and values in an Int "
+       "function") {
+      // def f(n: Int): Int =
+      //   if n > 0 then
+      //     return 1
+      //   else if n < 0 then
+      //     2
+      //   else
+      //     3
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT f fn1) (TYPE_ANNOTATION Int) (BLOCK (IF :Int "
+          "(GT :Boolean (IDENT n :Int @0) (INT_LIT 0 :Int)) "
+          "(BLOCK (RETURN (INT_LIT 1 :Int))) "
+          "(IF :Int (LT :Boolean (IDENT n :Int @0) (INT_LIT 0 :Int)) "
+          "(BLOCK (INT_LIT 2 :Int)) (BLOCK (INT_LIT 3 :Int))))) "
+          "(PARAM_LIST (PARAM (IDENT n @0) (TYPE_ANNOTATION Int)))))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("n"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("n"), TOK(COMPARISON_G), INT(0), TOK(THEN),
+            EOL,
+          LINE(4), TOK(RETURN), INT(1), EOL,
+          LINE(2), TOK(ELSE), TOK(IF), ID("n"), TOK(COMPARISON_L), INT(0),
+            TOK(THEN), EOL,
+          LINE(4), INT(2), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), INT(3), EOL);
+    }
+
+    it("checks a branch ending in an if recursively and widens Int "
+       "branches in a Double function") {
+      // def f(c: Boolean): Double =
+      //   if c then
+      //     if c then
+      //       1
+      //     else
+      //       return 2.5
+      //   else
+      //     3
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT f fn1) (TYPE_ANNOTATION Double) (BLOCK (IF :Double "
+          "(IDENT c :Boolean @0) "
+          "(BLOCK (IF :Double (IDENT c :Boolean @0) "
+          "(BLOCK (INT_TO_DOUBLE :Double (INT_LIT 1 :Int))) "
+          "(BLOCK (RETURN (DOUBLE_LIT 2.5 :Double))))) "
+          "(BLOCK (INT_TO_DOUBLE :Double (INT_LIT 3 :Int))))) "
+          "(PARAM_LIST (PARAM (IDENT c @0) (TYPE_ANNOTATION Boolean)))))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), TOK(TYPE_DOUBLE),
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(6), INT(1), EOL,
+          LINE(4), TOK(ELSE), EOL,
+          LINE(6), TOK(RETURN), DBL(2.5), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), INT(3), EOL);
+    }
+
+    it("accepts an if ending a body of a function declared Unit, with or "
+       "without else and with any branch values") {
+      // def f(c: Boolean): Unit =
+      //   if c then
+      //     1
+      // def g(c: Boolean): Unit =
+      //   if c then
+      //     1
+      //   else
+      //     "s"
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT f fn1) (TYPE_ANNOTATION Unit) (BLOCK (IF :Unit "
+          "(IDENT c :Boolean @0) (BLOCK (INT_LIT 1 :Int)) NONE)) "
+          "(PARAM_LIST (PARAM (IDENT c @0) (TYPE_ANNOTATION Boolean)))) "
+          "(DEF (IDENT g fn2) (TYPE_ANNOTATION Unit) (BLOCK (IF :Unit "
+          "(IDENT c :Boolean @0) (BLOCK (INT_LIT 1 :Int)) "
+          "(BLOCK (STRING_LIT \"s\" :String)))) "
+          "(PARAM_LIST (PARAM (IDENT c @0) (TYPE_ANNOTATION Boolean)))))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), UNIT_VALUE,
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), INT(1), EOL,
+          LINE(0), TOK(DEF), ID("g"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), UNIT_VALUE,
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), INT(1), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), STR("s"), EOL);
+    }
+
+    it("infers Unit from an if whose branches all yield Unit, with a "
+       "missing else counting as ()") {
+      // @main def main() =
+      //   val r = f(true)
+      // def f(c: Boolean) =
+      //   if c then
+      //     print("a")
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(VAL (IDENT r @0) NONE (CALL :Unit (IDENT f fn1) "
+          "(BOOL_LIT true :Boolean)))) (PARAM_LIST)) "
+          "(DEF (IDENT f fn1) NONE (BLOCK (IF :Unit (IDENT c :Boolean @0) "
+          "(BLOCK (CALL [BUILTIN] :Unit (IDENT print builtin) "
+          "(STRING_LIT \"a\" :String))) NONE)) "
+          "(PARAM_LIST (PARAM (IDENT c @0) (TYPE_ANNOTATION Boolean)))))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("r"), TOK(ASSIGN), ID("f"), TOK(L_PAREN),
+            TOK(BOOL_TRUE), TOK(R_PAREN), EOL,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), ID("print"), TOK(L_PAREN), STR("a"), TOK(R_PAREN), EOL);
+    }
+
+    it("infers the common type of a multi-line if with Int and Double "
+       "branches, widening the Int one") {
+      // @main def main() =
+      //   val r = f(true)
+      // def f(c: Boolean) =
+      //   if c then
+      //     1
+      //   else
+      //     2.5
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(VAL (IDENT r @0) NONE (CALL :Double (IDENT f fn1) "
+          "(BOOL_LIT true :Boolean)))) (PARAM_LIST)) "
+          "(DEF (IDENT f fn1) NONE (BLOCK (IF :Double "
+          "(IDENT c :Boolean @0) "
+          "(BLOCK (INT_TO_DOUBLE :Double (INT_LIT 1 :Int))) "
+          "(BLOCK (DOUBLE_LIT 2.5 :Double)))) "
+          "(PARAM_LIST (PARAM (IDENT c @0) (TYPE_ANNOTATION Boolean)))))",
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("r"), TOK(ASSIGN), ID("f"), TOK(L_PAREN),
+            TOK(BOOL_TRUE), TOK(R_PAREN), EOL,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), INT(1), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), DBL(2.5), EOL);
+    }
+
+    it("rejects an inferred if with a value branch and no else") {
+      // def f(c: Boolean) =
+      //   if c then
+      //     1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), INT(1), EOL);
+    }
+
+    it("rejects an inferred if whose branches have unrelated types") {
+      // def f(c: Boolean) =
+      //   if c then
+      //     1
+      //   else
+      //     "s"
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), INT(1), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), STR("s"), EOL);
+    }
+
+    it("rejects an inferred if with a Unit branch and a value branch") {
+      // def f(c: Boolean) =
+      //   if c then
+      //     print("a")
+      //   else
+      //     1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), ID("print"), TOK(L_PAREN), STR("a"), TOK(R_PAREN), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), INT(1), EOL);
+    }
+
+    it("rejects an if without else ending an Int function") {
+      // def f(c: Boolean): Int =
+      //   if c then
+      //     1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), INT(1), EOL);
+    }
+
+    it("rejects an if without else whose then branch returns, in an Int "
+       "function") {
+      // def f(c: Boolean): Int =
+      //   if c then
+      //     return 1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), TOK(RETURN), INT(1), EOL);
+    }
+
+    it("rejects an Int function whose if has a branch of another type") {
+      // def f(c: Boolean): Int =
+      //   if c then
+      //     1
+      //   else
+      //     "s"
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), INT(1), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), STR("s"), EOL);
+    }
+
+    it("rejects an Int function whose if has a branch ending in a val") {
+      // def f(c: Boolean): Int =
+      //   if c then
+      //     1
+      //   else
+      //     val x = 2
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), INT(1), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), TOK(VAL), ID("x"), TOK(ASSIGN), INT(2), EOL);
+    }
+
+    it("rejects an Int function whose nested if is missing its else") {
+      // def f(c: Boolean): Int =
+      //   if c then
+      //     if c then
+      //       1
+      //   else
+      //     2
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(6), INT(1), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), INT(2), EOL);
+    }
+
+    it("rejects a return of the wrong type inside the if that ends a "
+       "body") {
+      // def f(c: Boolean): Int =
+      //   if c then
+      //     return "s"
+      //   else
+      //     1
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), TOK(RETURN), STR("s"), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), INT(1), EOL);
+    }
+
+    it("rejects a non-Boolean condition of the if that ends a body") {
+      // def f(): Int =
+      //   if 1 then
+      //     return 1
+      //   else
+      //     2
+      ASSERT_SEMANTIC_ERROR(E_SEMANTIC_TYPE_ERROR,
+          PROLOG, MAIN_DEF, DEF_HEAD("f", TYPE_INT),
+          LINE(2), TOK(IF), INT(1), TOK(THEN), EOL,
+          LINE(4), TOK(RETURN), INT(1), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), INT(2), EOL);
+    }
+
+    it("does not treat an if followed by another statement as the "
+       "body's result") {
+      // def f(c: Boolean): Int =
+      //   if c then
+      //     return 1
+      //   2
+      ASSERT_SEMANTIC_AST(
+          "(PROGRAM (DEF [MAIN] (IDENT main fn0) NONE (BLOCK "
+          "(UNIT_LIT :Unit)) (PARAM_LIST)) "
+          "(DEF (IDENT f fn1) (TYPE_ANNOTATION Int) (BLOCK (IF :Unit "
+          "(IDENT c :Boolean @0) (BLOCK (RETURN (INT_LIT 1 :Int))) NONE) "
+          "(INT_LIT 2 :Int)) "
+          "(PARAM_LIST (PARAM (IDENT c @0) (TYPE_ANNOTATION Boolean)))))",
+          PROLOG, MAIN_DEF,
+          LINE(0), TOK(DEF), ID("f"), TOK(L_PAREN), ID("c"), TOK(COLON),
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), TOK(RETURN), INT(1), EOL,
+          LINE(2), INT(2), EOL);
+    }
+  }
+
+  subdesc(inference_allocation_failure) {
+    it("frees everything when an allocation fails during on-demand "
+       "inference") {
+      // @main def main() =
+      //   val a = outer(2)
+      // def outer(n: Int) =
+      //   val b = inner(n)
+      //   b
+      // def inner(x: Int) =
+      //   if x > 0 then
+      //     1
+      //   else
+      //     2.5
+      static const Token program[] = {
+          PROLOG, MAIN_HEAD,
+          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), ID("outer"),
+            TOK(L_PAREN), INT(2), TOK(R_PAREN), EOL,
+          LINE(0), TOK(DEF), ID("outer"), TOK(L_PAREN), ID("n"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(ASSIGN), EOL,
+          LINE(2), TOK(VAL), ID("b"), TOK(ASSIGN), ID("inner"),
+            TOK(L_PAREN), ID("n"), TOK(R_PAREN), EOL,
+          LINE(2), ID("b"), EOL,
+          LINE(0), TOK(DEF), ID("inner"), TOK(L_PAREN), ID("x"), TOK(COLON),
+            TOK(TYPE_INT), TOK(R_PAREN), TOK(ASSIGN), EOL,
+          LINE(2), TOK(IF), ID("x"), TOK(COMPARISON_G), INT(0), TOK(THEN),
+            EOL,
+          LINE(4), INT(1), EOL,
+          LINE(2), TOK(ELSE), EOL,
+          LINE(4), DBL(2.5), EOL};
+
+      for (int nth = 1;; nth++) {
+        FakeSource source = {.tokens = program,
+                             .count = sizeof(program) / sizeof(*program)};
+        Ctx failing;
+        Flags flags = DEFAULT_TEST_FLAGS;
+        flags.verbose = false;
+        flags.forceNthMallocFail = nth;
+        ctx_init(&failing, flags);
+
+        bool failed = true;
+        if (setjmp(failing.error_target) == 0) {
+          ctx_allocate(&failing);
+          parser_run(&failing, fake_next, &source);
+          semantics_analyze(&failing);
+          failed = false;
+        }
+
+        // The failure may strike while the pass is inside the nested check of
+        // an inferred function; ctx_free still releases every scope and node
+        ExitCode code = ctx_free(&failing);
+        if (!failed) {
+          asserteq(code, E_OK);
+          break;
+        }
+        asserteq(code, E_INTERNAL_ERROR);
+      }
+    }
+  }
+
 }
 // clang-format on
 
