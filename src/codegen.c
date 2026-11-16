@@ -15,6 +15,20 @@
 #include "ctx.h"
 #include "ir.h"
 
+// Code structure
+
+static void cg_print_nl(FILE* out) {
+  fputs("\n", out);
+}
+
+static void cg_print_ws(FILE* out) {
+  fputs(" ", out);
+}
+
+static void cg_print_preamble(FILE* out) {
+  fputs(".IFJcode26\n", out);
+}
+
 // Data types
 
 static void cg_print_int(FILE* out, IrInt value) {
@@ -73,14 +87,67 @@ static void cg_print_operand(FILE* out, IrOperand* op) {
   }
 }
 
-// Code structure
+// Instructions
 
-static void cg_print_nl(FILE* out) {
-  fputs("\n", out);
+static void cg_print_unary_inst(FILE* out, char* opcode, IrInstruction* inst) {
+  fputs(opcode, out);
+  cg_print_ws(out);
+  cg_print_localframe_val(out, inst->result);
+  cg_print_ws(out);
+  cg_print_operand(out, &inst->operands.unary.operand);
+  cg_print_nl(out);
 }
 
-static void cg_print_preamble(FILE* out) {
-  fputs(".IFJcode26\n", out);
+static void cg_print_binary_inst(FILE* out, char* opcode, IrInstruction* inst) {
+  fputs(opcode, out);
+  cg_print_ws(out);
+  cg_print_localframe_val(out, inst->result);
+  cg_print_ws(out);
+  cg_print_operand(out, &inst->operands.binary.left);
+  cg_print_ws(out);
+  cg_print_operand(out, &inst->operands.binary.right);
+  cg_print_nl(out);
+}
+
+static void cg_generate_instruction(FILE* out, IrInstruction* inst) {
+  switch (inst->type) {
+    case IR_INST_ADD:
+      cg_print_binary_inst(out, "ADD", inst);
+      break;
+    case IR_INST_SUB:
+      cg_print_binary_inst(out, "SUB", inst);
+      break;
+    case IR_INST_MUL:
+      cg_print_binary_inst(out, "MUL", inst);
+      break;
+    case IR_INST_DIV:
+      cg_print_binary_inst(out, "DIV", inst);
+      break;
+    case IR_INST_IDIV:
+      cg_print_binary_inst(out, "IDIV", inst);
+      break;
+    case IR_INST_FLOOR:
+      cg_print_unary_inst(out, "FLOAT2INT", inst);
+      break;
+    case IR_INST_CONCAT:
+      cg_print_binary_inst(out, "CONCAT", inst);
+      break;
+    case IR_INST_NOT:
+      cg_print_unary_inst(out, "NOT", inst);
+      break;
+    case IR_INST_INT2DOUBLE:
+      cg_print_unary_inst(out, "INT2FLOAT", inst);
+      break;
+    case IR_INST_EQ:
+      cg_print_binary_inst(out, "EQ", inst);
+      break;
+    case IR_INST_LT:
+      cg_print_binary_inst(out, "LT", inst);
+      break;
+    case IR_INST_GT:
+      cg_print_binary_inst(out, "GT", inst);
+      break;
+  }
 }
 
 // Generator
