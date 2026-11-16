@@ -97,10 +97,12 @@ describe(codegen) {
       cg_generate(out, ctx);
       asserteq_str(read_output(),
                    ".IFJcode26\n"
-                   "JUMP $$main\n"
-                   "LABEL $$main\n"
                    "CREATEFRAME\n"
+                   "CALL $$main\n"
+                   "EXIT int@0\n"
+                   "LABEL $$main\n"
                    "PUSHFRAME\n"
+                   "DEFVAR LF@%ret\n"
                    "DEFVAR LF@val_0\n"
                    "LABEL $main$b0\n"
                    "ADD LF@val_0 int@1 int@2\n"
