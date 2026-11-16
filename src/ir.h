@@ -18,7 +18,7 @@
 
 #include <stdbool.h>  // bool
 #include <stddef.h>   // size_t
-#include <stdint.h>   // int32_t, SIZE_MAX
+#include <stdint.h>   // int64_t, SIZE_MAX
 
 /**
  * @brief Id of a value in the IR
@@ -64,7 +64,7 @@ typedef size_t IrFunctionId;
  * Even though IFJ26Code works with 64bit integers, we are supposed to pretend
  * its 32bit.
  */
-typedef int32_t IrInt;
+typedef int64_t IrInt;
 
 /**
  * @brief Double type used in the IR
