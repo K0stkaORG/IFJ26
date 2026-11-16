@@ -17,6 +17,7 @@
 #include "ir.h"
 #include "optimizer_constant_folding.h"
 #include "optimizer_dead_code_elimination.h"
+#include "optimizer_forwarding.h"
 
 #include <stdbool.h>  // bool
 
@@ -34,6 +35,7 @@ void optimize_ir(Ctx* ctx) {
 
       changed = optimizer_fold_function(ctx, fid);
       changed |= optimizer_eliminate_dead_code(ctx, fid);
+      changed |= optimizer_forward_stores(ctx, fid);
     } while (changed);
 
     // Print debug info
