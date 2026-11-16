@@ -32,32 +32,32 @@ bool optimizer_forward_stores(Ctx* ctx, IrFunctionId function_id) {
     IrBlock* block = &function->blocks.data[bid];
 
     // Reset the last store operand for each slot
-    for (IrStackSlotId slotId = 0; slotId < function->slots.count; slotId++)
-      function->slots.data[slotId].lastStore = NULL;
+    for (IrStackSlotId slot_i = 0; slot_i < function->slots.count; slot_i++)
+      function->slots.data[slot_i].lastStore = NULL;
 
     // Go through each instruction in the block
-    for (size_t instId = 0; instId < block->instructions.count; instId++) {
-      IrInstruction* instruction = &block->instructions.data[instId];
+    for (size_t inst_id = 0; inst_id < block->instructions.count; inst_id++) {
+      IrInstruction* instruction = &block->instructions.data[inst_id];
 
       switch (instruction->type) {
         case IR_INST_LOAD: {
-          IrStackSlotId slotId = instruction->operands.load.source;
+          IrStackSlotId slot_id = instruction->operands.load.source;
 
           // Check if we know the value of this slot
-          if (function->slots.data[slotId].lastStore == NULL)
+          if (function->slots.data[slot_id].lastStore == NULL)
             break;
 
           // Replace uses of the load result with the known value
           optimizer_replace_value(ctx, function_id, instruction->result,
-                                  *function->slots.data[slotId].lastStore,
+                                  *function->slots.data[slot_id].lastStore,
                                   false);
 
           // Remove the load instruction
           ir_free_instruction(instruction);
-          array_remove(ctx, &block->instructions, instId);
+          array_remove(ctx, &block->instructions, inst_id);
 
           // Move back one instruction to account for the removed load
-          instId--;
+          inst_id--;
 
           // Mark that the function has changed
           changed = true;
