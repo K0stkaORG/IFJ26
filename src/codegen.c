@@ -26,7 +26,8 @@ static void cg_print_ws(FILE* out) {
 }
 
 static void cg_print_preamble(FILE* out) {
-  fputs(".IFJcode26\n", out);
+  fputs(".IFJcode26", out);
+  cg_print_nl(out);
 }
 
 // Data types
@@ -258,10 +259,13 @@ static void cg_generate_function(FILE* out, IrFunction* fn) {
   fputs("LABEL $$", out);
   fputs(fn->name, out);
   cg_print_nl(out);
-  fputs("CREATEFRAME", out);
-  cg_print_nl(out);
   fputs("PUSHFRAME", out);
   cg_print_nl(out);
+
+  if (fn->return_type != IR_UNIT) {
+    fputs("DEFVAR LF@%ret", out);
+    cg_print_nl(out);
+  }
 
   for (size_t i = 0; i < fn->value_count; i++) {
     fputs("DEFVAR ", out);
@@ -292,8 +296,13 @@ void cg_generate(FILE* out, Ctx* ctx) {
   cg_print_preamble(out);
 
   if (ctx->ir.entrypoint != IR_INVALID_ID) {
-    fputs("JUMP $$", out);
+    fputs("CREATEFRAME", out);
+    cg_print_nl(out);
+    fputs("CALL $$", out);
     fputs(ctx->ir.functions.data[ctx->ir.entrypoint].name, out);
+    cg_print_nl(out);
+    fputs("EXIT ", out);
+    cg_print_int(out, 0);
     cg_print_nl(out);
   }
 
