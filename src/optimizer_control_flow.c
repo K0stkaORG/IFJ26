@@ -80,7 +80,7 @@ bool optimizer_remove_unreachable_blocks(Ctx* ctx, IrFunctionId function_id) {
 
   // Removing blocks will cause the remaining ones to change their ids, create a
   // map of old to new ids
-  IrBlockId* map = optimizer_ctx->blockIdMap;
+  IrBlockId* map = optimizer_ctx->block_id_map;
   IrBlockId next_new_id = 0;
   for (IrBlockId old_id = 0; old_id < function->blocks.count; old_id++)
     map[old_id] =

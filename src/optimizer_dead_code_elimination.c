@@ -36,8 +36,8 @@ bool optimizer_eliminate_dead_code(Ctx* ctx, IrFunctionId function_id) {
     // Go through all instructions in all blocks
     for (IrBlockId bid = 0; bid < function->blocks.count; bid++) {
       IrBlock* block = &function->blocks.data[bid];
-      for (size_t instId = 0; instId < block->instructions.count; instId++) {
-        IrInstruction* instruction = &block->instructions.data[instId];
+      for (size_t inst_id = 0; inst_id < block->instructions.count; inst_id++) {
+        IrInstruction* instruction = &block->instructions.data[inst_id];
 
         // Check that the instruction is pure
         if (!optimizer_is_pure(instruction->type))
@@ -49,7 +49,7 @@ bool optimizer_eliminate_dead_code(Ctx* ctx, IrFunctionId function_id) {
 
         // Remove the dead instruction
         ir_free_instruction(instruction);
-        array_remove(ctx, &block->instructions, instId);
+        array_remove(ctx, &block->instructions, inst_id);
         removed = true;
         changed = true;
       }

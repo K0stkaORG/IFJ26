@@ -308,8 +308,8 @@ bool optimizer_fold_function(Ctx* ctx, IrFunctionId function_id) {
     IrBlock* block = &function->blocks.data[bid];
 
     // Iterate over all instructions in the block
-    for (size_t instId = 0; instId < block->instructions.count; instId++) {
-      IrInstruction* instruction = &block->instructions.data[instId];
+    for (size_t inst_id = 0; inst_id < block->instructions.count; inst_id++) {
+      IrInstruction* instruction = &block->instructions.data[inst_id];
 
       IrOperand result;
 
@@ -327,10 +327,10 @@ bool optimizer_fold_function(Ctx* ctx, IrFunctionId function_id) {
 
       // The instruction was folded, remove it as it's no longer needed
       ir_free_instruction(instruction);
-      array_remove(ctx, &block->instructions, instId);
+      array_remove(ctx, &block->instructions, inst_id);
 
       // Decrement the instruction index to account for the removed instruction
-      instId--;
+      inst_id--;
 
       // Mark the function as modified
       modified = true;

@@ -74,8 +74,8 @@ void ir_free_block(IrBlock* block) {
   // Free instructions
   if (block->instructions.data != NULL) {
     // Free each instruction
-    for (size_t instId = 0; instId < block->instructions.count; instId++)
-      ir_free_instruction(&block->instructions.data[instId]);
+    for (size_t inst_id = 0; inst_id < block->instructions.count; inst_id++)
+      ir_free_instruction(&block->instructions.data[inst_id]);
 
     // Free the instruction array
     array_free(&block->instructions);

@@ -82,8 +82,8 @@ size_t optimizer_replace_value(Ctx* ctx,
     IrBlock* block = &function->blocks.data[bid];
 
     // And replace instruction operands ...
-    for (size_t instId = 0; instId < block->instructions.count; instId++) {
-      IrInstruction* instruction = &block->instructions.data[instId];
+    for (size_t inst_id = 0; inst_id < block->instructions.count; inst_id++) {
+      IrInstruction* instruction = &block->instructions.data[inst_id];
 
       switch (ir_get_instruction_class(instruction)) {
         case IR_INST_CLASS_UNARY:
@@ -108,10 +108,10 @@ size_t optimizer_replace_value(Ctx* ctx,
           break;
 
         case IR_INST_CLASS_CALL:
-          for (size_t opId = 0; opId < instruction->operands.call.arg_count;
-               opId++)
+          for (size_t op_id = 0; op_id < instruction->operands.call.arg_count;
+               op_id++)
             replacements += replace_operand(
-                ctx, &instruction->operands.call.args[opId], value_id,
+                ctx, &instruction->operands.call.args[op_id], value_id,
                 &constant, move_ownership, &ownership_taken);
           break;
 
