@@ -16,6 +16,7 @@
 #include "ctx.h"
 #include "ir.h"
 #include "optimizer_constant_folding.h"
+#include "optimizer_dead_code_elimination.h"
 
 #include <stdbool.h>  // bool
 
@@ -23,10 +24,26 @@ void optimize_ir(Ctx* ctx) {
   // Prepare the optimizer context
   optimizer_prepare(ctx);
 
-  // For all functions, fold constants until no more can be folded
-  for (IrFunctionId fid = 0; fid < ctx->ir.functions.count; fid++)
+  // Iteratively optimize functions until no more changes are made
+  for (IrFunctionId fid = 0; fid < ctx->ir.functions.count; fid++) {
+    size_t iterations = 0;
+    bool changed;
+
     do {
-    } while (optimizer_fold_function(ctx, fid));
+      iterations++;
+
+      changed = optimizer_fold_function(ctx, fid);
+      changed |= optimizer_eliminate_dead_code(ctx, fid);
+    } while (changed);
+
+    // Print debug info
+    iterations--;
+    if (iterations > 0)
+      DEBUG("Optimization of function %s took %zu iterations",
+            ctx->ir.functions.data[fid].name, iterations);
+    else
+      DEBUG("Failed to optimize function %s", ctx->ir.functions.data[fid].name);
+  }
 }
 
 void optimizer_init(OptimizerCtx* optimizer) {
