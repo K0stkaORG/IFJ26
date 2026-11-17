@@ -15,6 +15,7 @@
 
 #include "ast.h"
 #include "ir.h"
+#include "ir_helpers.h"
 
 IrType ast_to_ir_data_type(Ctx* ctx, AstDataType data_type) {
   switch (data_type) {
@@ -69,4 +70,60 @@ const char* ast_get_node_identifier(Ctx* ctx, AstNode* node) {
       THROW(E_INTERNAL_ERROR, "Failed to get identifier of AST node");
       return NULL;  // Unreachable
   }
+}
+
+IrOperand value_operand(IrValueId value) {
+  return (IrOperand){IR_OP_VALUE, .value.id = value};
+}
+
+IrOperand int_operand(IrInt value) {
+  return (IrOperand){IR_OP_INT32, .value.int32_value = value};
+}
+
+IrOperand double_operand(IrDouble value) {
+  return (IrOperand){IR_OP_DOUBLE, .value.double_value = value};
+}
+
+IrOperand string_operand(IrString value) {
+  return (IrOperand){IR_OP_STRING, .value.string_value = value};
+}
+
+IrOperand bool_operand(IrBool value) {
+  return (IrOperand){IR_OP_BOOL, .value.bool_value = value};
+}
+
+IrOperand unit_operand(void) {
+  return (IrOperand){IR_OP_UNIT, .value.id = IR_INVALID_ID};
+}
+
+IrOperand add_unary(Ctx* ctx,
+                    IrFunctionId function_id,
+                    IrBlockId block_id,
+                    IrInstructionType instruction_type,
+                    IrType result_type,
+                    IrOperand operand) {
+  IrValueId result =
+      ir_add_instruction(ctx, function_id, block_id,
+                         (IrInstruction){.type = instruction_type,
+                                         .result_type = result_type,
+                                         .operands.unary.operand = operand});
+
+  return value_operand(result);
+}
+
+IrOperand add_binary(Ctx* ctx,
+                     IrFunctionId function_id,
+                     IrBlockId block_id,
+                     IrInstructionType instruction_type,
+                     IrType result_type,
+                     IrOperand left,
+                     IrOperand right) {
+  IrValueId result =
+      ir_add_instruction(ctx, function_id, block_id,
+                         (IrInstruction){.type = instruction_type,
+                                         .result_type = result_type,
+                                         .operands.binary.left = left,
+                                         .operands.binary.right = right});
+
+  return value_operand(result);
 }

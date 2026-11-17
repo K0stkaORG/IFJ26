@@ -44,4 +44,106 @@ IrType ast_get_function_return_type(Ctx* ctx, AstNode* function);
  */
 const char* ast_get_node_identifier(Ctx* ctx, AstNode* node);
 
+/**
+ * @brief Create an IR operand for a value
+ *
+ * @param value The value
+ * @return The IR operand
+ */
+IrOperand value_operand(IrValueId value);
+
+/**
+ * @brief Create an IR operand for an integer value
+ *
+ * @param value The integer value
+ * @return The IR operand
+ */
+IrOperand int_operand(IrInt value);
+
+/**
+ * @brief Create an IR operand for a double value
+ *
+ * @param value The double value
+ * @return The IR operand
+ */
+IrOperand double_operand(IrDouble value);
+
+/**
+ * @brief Create an IR operand for a string value
+ *
+ * @param value The string value (will be moved into the operand, caller loses
+ * ownership of the original string)
+ * @return The IR operand
+ */
+IrOperand string_operand(IrString value);
+
+/**
+ * @brief Create an IR operand for a boolean value
+ *
+ * @param value The boolean value
+ * @return The IR operand
+ */
+IrOperand bool_operand(IrBool value);
+
+/**
+ * @brief Create an IR operand for unit
+ *
+ * @note This could be a constant value but for consistency with other types, it
+ * is a function. Optimizer will inline it anyway.
+ *
+ * @return The IR operand
+ */
+IrOperand unit_operand(void);
+
+/**
+ * @brief Add a unary instruction to the IR
+ *
+ * @param ctx The context of the program
+ * @param function_id Id of the function to add the instruction to
+ * @param block_id Id of the block to add the instruction to
+ * @param instruction_type The instruction type
+ * @param result_type The type of the result
+ * @param operand The operand
+ * @return The result of the unary operation (as a IR_OP_VALUE)
+ */
+IrOperand add_unary(Ctx* ctx,
+                    IrFunctionId function_id,
+                    IrBlockId block_id,
+                    IrInstructionType instruction_type,
+                    IrType result_type,
+                    IrOperand operand);
+
+/**
+ * @brief Add a binary instruction to the IR
+ *
+ * @param ctx The context of the program
+ * @param function_id Id of the function to add the instruction to
+ * @param block_id Id of the block to add the instruction to
+ * @param instruction_type The instruction type
+ * @param result_type The type of the result
+ * @param left The left operand
+ * @param right The right operand
+ * @return The result of the binary operation (as a IR_OP_VALUE)
+ */
+IrOperand add_binary(Ctx* ctx,
+                     IrFunctionId function_id,
+                     IrBlockId block_id,
+                     IrInstructionType instruction_type,
+                     IrType result_type,
+                     IrOperand left,
+                     IrOperand right);
+
+/**
+ * @brief Set block's terminator to return
+ *
+ * @param ctx The context of the program
+ * @param function_id Id of the function to set the terminator for
+ * @param block_id Id of the block to set the terminator for
+ * @param value The value to return
+ */
+void emit_return(Ctx* ctx,
+                 IrFunctionId function_id,
+                 IrBlockId block_id,
+                 IrOperand value);
+
 #endif
