@@ -34,7 +34,7 @@ static void cg_print_preamble(FILE* out) {
 // Data types
 
 static void cg_print_int(FILE* out, IrInt value) {
-  fprintf(out, "int@%d", value);
+  fprintf(out, "int@%lld", value);
 }
 
 static void cg_print_float(FILE* out, IrDouble value) {
