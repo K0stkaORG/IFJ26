@@ -83,7 +83,7 @@ An IDENT token whose text the grammar requires to be one specific word: `to`, `u
 _Avoid_: soft keyword, reserved identifier
 
 **Raw indent**:
-The INDENT token as the lexer emits it, carrying the line's indentation. The parser only ever sees block open / block close, which it derives from raw indents.
+The INDENT token as the lexer emits it at the start of an indented line, carrying the line's indentation. A line in column 0 has no raw indent: a line starting with any other token counts as indentation 0. The parser only ever sees block open / block close, which it derives from raw indents.
 _Avoid_: indent token (ambiguous)
 
 ### Failing
