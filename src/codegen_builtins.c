@@ -16,23 +16,252 @@
 // Prompt: "Update cg_generate to loop through all function calls and if it's
 // built-in function, call cg_generate_builtin(out, IrFunctionType)." Changes:
 // Implement cg_generate_builtin function stub.
+
+/**
+ * @brief Emits IFJcode26 implementation for the print(Any) built-in function
+ *
+ * @param[out] out Output stream to write the generated code to
+ */
+static void cg_builtin_print(FILE* out) {
+  fputs(
+      "LABEL $$builtin_print\n"
+      "PUSHFRAME\n"
+      "DEFVAR LF@type\n"
+      "TYPE LF@type LF@arg_0\n"
+      "JUMPIFEQ $$builtin_print$nil LF@type string@nil\n"
+      "WRITE LF@arg_0\n"
+      "POPFRAME\n"
+      "RETURN\n"
+      "LABEL $$builtin_print$nil\n"
+      "WRITE string@()\n"
+      "POPFRAME\n"
+      "RETURN\n",
+      out);
+}
+
+/**
+ * @brief Emits IFJcode26 implementation for the readInt() built-in function
+ *
+ * @param[out] out Output stream to write the generated code to
+ */
+static void cg_builtin_read_int(FILE* out) {
+  fputs(
+      "LABEL $$builtin_readInt\n"
+      "PUSHFRAME\n"
+      "DEFVAR LF@%ret\n"
+      "READ LF@%ret int\n"
+      "DEFVAR LF@type\n"
+      "TYPE LF@type LF@%ret\n"
+      "JUMPIFNEQ $$builtin_readInt$ok LF@type string@nil\n"
+      "MOVE LF@%ret int@0\n"
+      "LABEL $$builtin_readInt$ok\n"
+      "POPFRAME\n"
+      "RETURN\n",
+      out);
+}
+
+/**
+ * @brief Emits IFJcode26 implementation for the readDouble() built-in function
+ *
+ * @param[out] out Output stream to write the generated code to
+ */
+static void cg_builtin_read_double(FILE* out) {
+  fputs(
+      "LABEL $$builtin_readDouble\n"
+      "PUSHFRAME\n"
+      "DEFVAR LF@%ret\n"
+      "READ LF@%ret float\n"
+      "DEFVAR LF@type\n"
+      "TYPE LF@type LF@%ret\n"
+      "JUMPIFNEQ $$builtin_readDouble$ok LF@type string@nil\n"
+      "MOVE LF@%ret float@0x0p+0\n"
+      "LABEL $$builtin_readDouble$ok\n"
+      "POPFRAME\n"
+      "RETURN\n",
+      out);
+}
+
+/**
+ * @brief Emits IFJcode26 implementation for the readBoolean() built-in function
+ *
+ * @param[out] out Output stream to write the generated code to
+ */
+static void cg_builtin_read_bool(FILE* out) {
+  fputs(
+      "LABEL $$builtin_readBool\n"
+      "PUSHFRAME\n"
+      "DEFVAR LF@%ret\n"
+      "READ LF@%ret bool\n"
+      "DEFVAR LF@type\n"
+      "TYPE LF@type LF@%ret\n"
+      "JUMPIFNEQ $$builtin_readBool$ok LF@type string@nil\n"
+      "MOVE LF@%ret bool@false\n"
+      "LABEL $$builtin_readBool$ok\n"
+      "POPFRAME\n"
+      "RETURN\n",
+      out);
+}
+
+/**
+ * @brief Emits IFJcode26 implementation for the readLine() built-in function
+ *
+ * @param[out] out Output stream to write the generated code to
+ */
+static void cg_builtin_read_line(FILE* out) {
+  fputs(
+      "LABEL $$builtin_readLine\n"
+      "PUSHFRAME\n"
+      "DEFVAR LF@%ret\n"
+      "READ LF@%ret string\n"
+      "DEFVAR LF@type\n"
+      "TYPE LF@type LF@%ret\n"
+      "JUMPIFNEQ $$builtin_readLine$ok LF@type string@nil\n"
+      "MOVE LF@%ret string@\n"
+      "LABEL $$builtin_readLine$ok\n"
+      "POPFRAME\n"
+      "RETURN\n",
+      out);
+}
+
+/**
+ * @brief Emits IFJcode26 implementation for the toStr(Any) built-in function
+ *
+ * @param[out] out Output stream to write the generated code to
+ */
+static void cg_builtin_to_str(FILE* out) {
+  fputs(
+      "LABEL $$builtin_toStr\n"
+      "PUSHFRAME\n"
+      "DEFVAR LF@%ret\n"
+      "DEFVAR LF@type\n"
+      "TYPE LF@type LF@arg_0\n"
+      "JUMPIFEQ $$builtin_toStr$int LF@type string@int\n"
+      "JUMPIFEQ $$builtin_toStr$float LF@type string@float\n"
+      "JUMPIFEQ $$builtin_toStr$string LF@type string@string\n"
+      "JUMPIFEQ $$builtin_toStr$bool LF@type string@bool\n"
+      "MOVE LF@%ret string@()\n"
+      "POPFRAME\n"
+      "RETURN\n"
+      "LABEL $$builtin_toStr$int\n"
+      "INT2STR LF@%ret LF@arg_0\n"
+      "POPFRAME\n"
+      "RETURN\n"
+      "LABEL $$builtin_toStr$float\n"
+      "FLOAT2STR LF@%ret LF@arg_0\n"
+      "POPFRAME\n"
+      "RETURN\n"
+      "LABEL $$builtin_toStr$string\n"
+      "MOVE LF@%ret LF@arg_0\n"
+      "POPFRAME\n"
+      "RETURN\n"
+      "LABEL $$builtin_toStr$bool\n"
+      "JUMPIFEQ $$builtin_toStr$bool_true LF@arg_0 bool@true\n"
+      "MOVE LF@%ret string@false\n"
+      "POPFRAME\n"
+      "RETURN\n"
+      "LABEL $$builtin_toStr$bool_true\n"
+      "MOVE LF@%ret string@true\n"
+      "POPFRAME\n"
+      "RETURN\n",
+      out);
+}
+
+/**
+ * @brief Emits IFJcode26 implementation for the ord(String, Int) built-in
+ * function
+ *
+ * @param[out] out Output stream to write the generated code to
+ */
+static void cg_builtin_ord(FILE* out) {
+  fputs(
+      "LABEL $$builtin_ord\n"
+      "PUSHFRAME\n"
+      "DEFVAR LF@%ret\n"
+      "DEFVAR LF@len\n"
+      "STRLEN LF@len LF@arg_0\n"
+      "DEFVAR LF@cond\n"
+      "LT LF@cond LF@arg_1 int@0\n"
+      "JUMPIFEQ $$builtin_ord$err LF@cond bool@true\n"
+      "LT LF@cond LF@arg_1 LF@len\n"
+      "JUMPIFNEQ $$builtin_ord$err LF@cond bool@true\n"
+      "STRI2INT LF@%ret LF@arg_0 LF@arg_1\n"
+      "POPFRAME\n"
+      "RETURN\n"
+      "LABEL $$builtin_ord$err\n"
+      "MOVE LF@%ret int@-1\n"
+      "POPFRAME\n"
+      "RETURN\n",
+      out);
+}
+
+/**
+ * @brief Emits IFJcode26 implementation for the subStr(String, Int, Int)
+ * built-in function
+ *
+ * @param[out] out Output stream to write the generated code to
+ */
+static void cg_builtin_sub_str(FILE* out) {
+  fputs(
+      "LABEL $$builtin_subStr\n"
+      "PUSHFRAME\n"
+      "DEFVAR LF@len\n"
+      "STRLEN LF@len LF@arg_0\n"
+      "DEFVAR LF@cond\n"
+      "LT LF@cond LF@arg_1 int@0\n"
+      "JUMPIFEQ $$builtin_subStr$err LF@cond bool@true\n"
+      "LT LF@cond LF@arg_2 int@0\n"
+      "JUMPIFEQ $$builtin_subStr$err LF@cond bool@true\n"
+      "GT LF@cond LF@arg_1 LF@arg_2\n"
+      "JUMPIFEQ $$builtin_subStr$err LF@cond bool@true\n"
+      "LT LF@cond LF@arg_1 LF@len\n"
+      "JUMPIFNEQ $$builtin_subStr$err LF@cond bool@true\n"
+      "GT LF@cond LF@arg_2 LF@len\n"
+      "JUMPIFEQ $$builtin_subStr$err LF@cond bool@true\n"
+      "DEFVAR LF@%ret\n"
+      "MOVE LF@%ret string@\n"
+      "DEFVAR LF@idx\n"
+      "MOVE LF@idx LF@arg_1\n"
+      "DEFVAR LF@char\n"
+      "LABEL $$builtin_subStr$loop\n"
+      "LT LF@cond LF@idx LF@arg_2\n"
+      "JUMPIFNEQ $$builtin_subStr$done LF@cond bool@true\n"
+      "GETCHAR LF@char LF@arg_0 LF@idx\n"
+      "CONCAT LF@%ret LF@%ret LF@char\n"
+      "ADD LF@idx LF@idx int@1\n"
+      "JUMP $$builtin_subStr$loop\n"
+      "LABEL $$builtin_subStr$done\n"
+      "POPFRAME\n"
+      "RETURN\n"
+      "LABEL $$builtin_subStr$err\n"
+      "EXIT int@40\n",
+      out);
+}
+
 void cg_generate_builtin(FILE* out, IrFunctionType type) {
   switch (type) {
     case IR_FX_PRINT:
+      cg_builtin_print(out);
       break;
     case IR_FX_READ_INT:
+      cg_builtin_read_int(out);
       break;
     case IR_FX_READ_DOUBLE:
+      cg_builtin_read_double(out);
       break;
     case IR_FX_READ_BOOL:
+      cg_builtin_read_bool(out);
       break;
     case IR_FX_READ_LINE:
+      cg_builtin_read_line(out);
       break;
     case IR_FX_TO_STR:
+      cg_builtin_to_str(out);
       break;
     case IR_FX_STR_SUB:
+      cg_builtin_sub_str(out);
       break;
     case IR_FX_ORD:
+      cg_builtin_ord(out);
       break;
 
     default:
