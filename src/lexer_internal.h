@@ -113,6 +113,7 @@ enum {
   STACK_MULTILINE_S_STRING,
 };
 
+// enum for stack actions during transitions
 typedef enum {
   TRANSITION_KEEP,
   TRANSITION_PUSH,
@@ -120,6 +121,9 @@ typedef enum {
   TRANSITION_REPLACE,
 } TransitionStackAction;
 
+enum { NOT_ACTIVE = 0, INDENTATION = 1, INVALID_INDENTATION = 2 };
+
+// transition struct
 typedef struct {
   bool (*matches)(int character);  // Literal or character-class predicate.
   unsigned int stack_top_mask;     // Bit n permits stack symbol n.
@@ -128,14 +132,48 @@ typedef struct {
   int stack_symbol;  // Used only for push and replace.
 } Transition;
 
+/**
+ * @brief Finds a transition for the given state and character, with stack top.
+ *
+ * @param state The current state of the FSM.
+ * @param character The character to match against the transition.
+ * @param top The current stack top value.
+ * @return A pointer to the matching transition, or NULL if no transition is
+ * found.
+ */
 const Transition* lexer_find_transition(int state, int character, int top);
+
+/**
+ * @brief Returns whether the given state is an accepting state.
+ *
+ * @param state The state to check.
+ * @return true if the state is accepting, false otherwise.
+ */
 bool lexer_state_accepting(State state);
 
+/**
+ * @brief Populates a token with the given state and lexeme.
+ *
+ * @param ctx[int] The context of the lexer.
+ * @param token[out] The token to populate.
+ * @param state[in] The state of the FSM.
+ * @param lexeme[in] The lexeme to populate the token with.
+ * @param length[in] The length of the lexeme.
+ * @return true if the token was populated successfully, false otherwise.
+ */
 bool lexer_populate_token(Ctx* ctx,
                           Token* token,
                           State state,
                           const char* lexeme,
                           size_t length);
+
+/**
+ * @brief Copies the contents of one lexer stack to another.
+ *
+ * @param ctx[in] The context of the lexer.
+ * @param destination[out] The destination stack to copy to.
+ * @param source[in] The source stack to copy from.
+ */
 void lexer_copy_stack(Ctx* ctx,
                       LexerStack* destination,
                       const LexerStack* source);

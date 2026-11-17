@@ -140,7 +140,8 @@ typedef struct {
   size_t line;
   size_t column;
   size_t cursor;
-  bool indent_flag;
+  int indent_flag;
+  int indent_level;
 } LexerCtx;
 
 /**

@@ -47,7 +47,8 @@ void ctx_init(Ctx* ctx, Flags flags) {
   ctx->lexer.line = 1;
   ctx->lexer.column = 1;
   ctx->lexer.cursor = 0;
-  ctx->lexer.indent_flag = false;
+  ctx->lexer.indent_flag = 1;
+  ctx->lexer.indent_level = 0;
 
   // Initialize IR program
   ir_init(&ctx->ir);
