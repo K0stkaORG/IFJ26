@@ -6,6 +6,7 @@ The lexer on `feat/implement-lexer` (`Token next_token(Ctx* ctx)`, state in `ctx
 - **EOL_TOKEN and INDENT also appear inside parentheses.** While a `(` is open, the token layer hides them, unless the innermost open construct is the text of an interpolated string (more string starts than `${` are open). It records that a line break came before the next token it delivers. A trailing comma checks that record, not line numbers, because the lexer gives every token line 1 so far (amends ADR-0005).
 - **Blank and comment-only lines emit an EOL_TOKEN, and an indented one also emits a raw indent first.** An EOL_TOKEN that starts a line is hidden. A raw indent followed by an EOL_TOKEN or by the end of file decides nothing (amends ADR-0006).
 - **A last line without `\n` ends with no EOL_TOKEN.** At the end of file, if the last line is still open, the token layer delivers an EOL_TOKEN first. A program whose last line has no line break is therefore accepted.
+- **The lexer never returns WHITESPACE.** It drops whitespace and block comments itself, so the token layer does not skip WHITESPACE.
 - **Token text is heap memory exactly when `value_type` is TEXT.** The interpolated string delimiters carry no text, so ownership follows `value_type`, not the token type (refines ADR-0002).
 
 ## Considered Options
@@ -15,4 +16,4 @@ The lexer on `feat/implement-lexer` (`Token next_token(Ctx* ctx)`, state in `ctx
 
 ## Merging the lexer branch
 
-This branch keeps a copy of the lexer branch's `lexer.h` and a placeholder `next_token` in `lexer.c`. When merging, take the lexer branch's `lexer.h` and `lexer.c`. In `ctx.h` and `ctx.c`, keep both sides: the lexer branch drops `Parser* parser` and the `parser_cleanup(ctx)` call in `ctx_free`. The parser still needs both: its state lives in `ctx->parser`, and `parser_cleanup` frees it after a THROW. Add the lexer branch's `LexerCtx lexer` field next to them.
+The lexer branch is now merged. `ctx.h` and `ctx.c` keep both sides: `Parser* parser` with the `parser_cleanup(ctx)` call in `ctx_free` (the parser's state, freed after a THROW), and `LexerCtx lexer`, whose arrays `ctx_free` releases. `main` in `ifj26.c` calls `parser_parse`, which reads stdin through `next_token`.
