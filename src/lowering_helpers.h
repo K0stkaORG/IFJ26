@@ -28,7 +28,8 @@ IrType ast_to_ir_data_type(Ctx* ctx, AstDataType data_type);
 /**
  * @brief Get the return type of a function
  *
- * If the return type is not specified, infers it from the function body.
+ * Reads the final return type from the semantic function symbol.
+ * Semantic analysis must have completed before calling this helper.
  *
  * @param ctx The context
  * @param function The function node
@@ -71,8 +72,7 @@ IrOperand double_operand(IrDouble value);
 /**
  * @brief Create an IR operand for a string value
  *
- * @param value The string value (will be moved into the operand, caller loses
- * ownership of the original string)
+ * @param value Borrowed string; IR construction helpers copy it when emitted
  * @return The IR operand
  */
 IrOperand string_operand(IrString value);

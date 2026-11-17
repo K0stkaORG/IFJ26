@@ -99,6 +99,15 @@ typedef struct {
   }
 
 /**
+ * @brief One scoped error handler; the jump buffer stays at its original
+ * address
+ */
+typedef struct CtxErrorFrame {
+  jmp_buf target;
+  struct CtxErrorFrame* previous;
+} CtxErrorFrame;
+
+/**
  * @brief Shared memory and error context for the IFJ26 compiler
  */
 typedef struct Ctx {
@@ -107,6 +116,9 @@ typedef struct Ctx {
 
   // Target for error jumps
   jmp_buf error_target;
+
+  // Innermost scoped handler, or NULL to use the root error target
+  CtxErrorFrame* error_frame;
 
   // Flags for the compiler
   Flags flags;
@@ -195,6 +207,71 @@ void* ctx_malloc_helper(Ctx* ctx,
   ctx_malloc_helper(ctx, (size), __FILE__, __LINE__, true)
 
 /**
+ * @brief Propagates the current error without printing its diagnostic again
+ *
+ * Pops a scoped handler before jumping, so its CATCH can THROW or RETHROW.
+ * Falls back to error_target when no scoped handler exists.
+ * Preserves ctx->exit_code and does not return.
+ *
+ * @param ctx The shared context containing the error to propagate
+ * @pre A receiving TRY handler or root error_target has an active setjmp.
+ */
+_Noreturn void ctx_rethrow(Ctx* ctx);
+
+/**
+ * @brief Executes TRY { ... } CATCH { ... } using a stack-local jump buffer
+ *
+ * Requires a Ctx* named ctx. Always supply CATCH, even on the success path.
+ * CATCH runs with the parent handler restored. A handled error leaves
+ * ctx->exit_code set; explicitly reset it to E_OK to report recovery.
+ *
+ * @note After longjmp, a non-volatile automatic local in the function that
+ * called setjmp has an indeterminate value if it changed since setjmp.
+ * This applies to reads in CATCH and after it, not only inside the handler.
+ * Use volatile for such locals when their updated value must survive a throw.
+ * For pointers, qualify the pointer itself: T* volatile ptr, not volatile T*.
+ *
+ * @note Static variables have static storage duration, so the automatic-local
+ * rule does not apply. This suits the single compiler context in main, but
+ * static storage is shared across invocations and is not a substitute for
+ * invocation-local state in recursive or concurrent code. Prefer ordinary
+ * locals when unchanged across the jump, and volatile locals when required.
+ *
+ * @note A pointer allocated before TRY and never reassigned needs neither
+ * volatile nor static. Writing ptr[i] changes the pointed-to storage, not the
+ * local pointer. An ordinary local changed inside TRY is also safe to read
+ * after normal completion; it must not be read after a caught jump unless
+ * the rules above are satisfied. Allocating a cleanup resource before TRY
+ * makes it possible to keep its pointer unchanged and usable in CATCH.
+ *
+ * @warning Do not return, break, or goto out of either block: these can bypass
+ * handler removal. Do not use VLAs. This is C, not C++ unwinding.
+ * setjmp stays in the caller's if condition; its buffer is never copied.
+ */
+#define TRY                                                                \
+  for (CtxErrorFrame _ctx_try_frame = {.previous = ctx->error_frame},      \
+                     *_ctx_try_once = (ctx->error_frame = &_ctx_try_frame, \
+                                      &_ctx_try_frame);                    \
+       _ctx_try_once != NULL;                                              \
+       ctx->error_frame = _ctx_try_frame.previous, _ctx_try_once = NULL)   \
+    if (setjmp(_ctx_try_frame.target) == 0)
+
+#define CATCH else
+
+/**
+ * @brief Propagates the caught error to the enclosing handler without returning
+ *
+ * Use in CATCH after releasing resources owned by the protected operation.
+ * The receiving handler was already removed before CATCH started, so this
+ * reaches the enclosing TRY or, if none exists, the root error_target.
+ * Preserves ctx->exit_code and does not print the diagnostic a second time.
+ * Use THROW instead when replacing the caught error with a different one.
+ *
+ * @pre A Ctx* named ctx holds the caught error and a receiving handler is live.
+ */
+#define RETHROW() ctx_rethrow(ctx)
+
+/**
  * @brief Allocates memory and terminates on failure after executing cleanup
  * code.
  *
@@ -231,7 +308,7 @@ void* ctx_malloc_helper(Ctx* ctx,
     {cleanup}                                                \
                                                              \
     /* And jump to the error target */                       \
-    longjmp(ctx->error_target, 1);                           \
+    ctx_rethrow(ctx);                                        \
   }
 
 /**

@@ -30,6 +30,9 @@ void ctx_init(Ctx* ctx, Flags flags) {
   // Default exit code
   ctx->exit_code = E_OK;
 
+  // No scoped handler exists until the first TRY is entered
+  ctx->error_frame = NULL;
+
   // Flags
   ctx->flags = flags;
 
@@ -205,6 +208,16 @@ void* ctx_realloc_helper(Ctx* ctx,
   return ptr;  // unreachable
 }
 
+_Noreturn void ctx_rethrow(Ctx* ctx) {
+  CtxErrorFrame* frame = ctx->error_frame;
+  if (frame != NULL) {
+    // Restore the parent before CATCH executes, allowing a throw from CATCH
+    ctx->error_frame = frame->previous;
+    longjmp(frame->target, 1);
+  }
+  longjmp(ctx->error_target, 1);
+}
+
 void throw_error_helper(Ctx* ctx,
                         ExitCode code,
                         const char* file,
@@ -222,9 +235,9 @@ void throw_error_helper(Ctx* ctx,
   fprintf(stderr, "\n    thrown at %s:%d, code: %d\n", file, line, code);
   va_end(args);
 
-  // Jump to the error target
+  // Dispatch through the innermost scoped handler or the root target
   if (shouldJump)
-    longjmp(ctx->error_target, 1);
+    ctx_rethrow(ctx);
 }
 
 void debug_print_helper(Ctx* ctx,

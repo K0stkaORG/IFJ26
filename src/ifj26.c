@@ -35,10 +35,9 @@ int main(int argc, char** argv) {
 
   // If an error is thrown at any point during the program execution, an error
   // message will be printed to stderr and the CPU will jump back to here. If we
-  // got here because of a thrown error, the jump_result will be 1 and we will
+  // got here because of a thrown error, setjmp returns nonzero and we will
   // clean up and exit with the thrown error code.
-  int jump_result = setjmp(context.error_target);
-  if (jump_result != 0)
+  if (setjmp(context.error_target) != 0)
     return ctx_free(&context);
 
   // Allocate memory for the shared context

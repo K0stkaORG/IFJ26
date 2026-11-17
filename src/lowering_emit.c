@@ -1,0 +1,89 @@
+/**
+ * @file lowering_emit.c
+ * Project: IFJ26
+ *
+ * @brief AST access and IR emission helpers for the lowering pass
+ */
+
+#include "lowering_internal.h"
+
+AstNode* lower_child(Ctx* ctx, AstNode* node, size_t index) {
+  // Read the child through the AST API
+  AstNode* result;
+  ast_node_get_child(ctx, node, index, &result);
+  return result;
+}
+
+const SymtableData* lower_symbol(Ctx* ctx, AstNode* ident) {
+  // Semantic analysis must have resolved the node before lowering
+  const SymtableData* result = ast_node_get_symbol(ident);
+  if (result == NULL)
+    THROW(E_INTERNAL_ERROR, "Lowering requires resolved symbols");
+  return result;
+}
+
+IrBlockId lower_new_block(Lower* lower) {
+  return ir_add_block(lower->ctx, lower->function);
+}
+
+void lower_jump(Lower* lower, IrBlockId target) {
+  ir_set_terminator(lower->ctx, lower->function, lower->block,
+                    (IrBlockTerminator){.type = IR_TERMINATOR_JUMP,
+                                        .value.jump_target = target});
+}
+
+void lower_branch(Lower* lower,
+                  IrOperand condition,
+                  IrBlockId yes,
+                  IrBlockId no) {
+  ir_set_terminator(
+      lower->ctx, lower->function, lower->block,
+      (IrBlockTerminator){.type = IR_TERMINATOR_CONDITIONAL,
+                          .value.conditional_target = {condition, yes, no}});
+}
+
+IrOperand lower_load(Lower* lower, IrStackSlotId slot, IrType type) {
+  return value_operand(
+      ir_add_instruction(lower->ctx, lower->function, lower->block,
+                         (IrInstruction){.type = IR_INST_LOAD,
+                                         .operands.load.source = slot,
+                                         .result_type = type}));
+}
+
+void lower_store(Lower* lower, IrStackSlotId slot, IrOperand value) {
+  ir_add_instruction(
+      lower->ctx, lower->function, lower->block,
+      (IrInstruction){.type = IR_INST_STORE,
+                      .result_type = IR_UNIT,
+                      .operands.store = {.source = value, .target = slot}});
+}
+
+IrOperand lower_binary(Lower* lower,
+                       IrInstructionType op,
+                       IrType type,
+                       IrOperand left,
+                       IrOperand right) {
+  if (lower->block == IR_INVALID_ID)
+    return unit_operand();
+  return add_binary(lower->ctx, lower->function, lower->block, op, type, left,
+                    right);
+}
+
+IrOperand lower_emit_call(Lower* lower,
+                          IrFunctionType type,
+                          IrFunctionId id,
+                          IrType result_type,
+                          IrOperand* args,
+                          size_t count) {
+  // The construction helper copies the arguments and assigns the result ID
+  IrValueId value = ir_add_instruction(
+      lower->ctx, lower->function, lower->block,
+      (IrInstruction){
+          .type = IR_INST_CALL,
+          .result_type = result_type,
+          .operands.call = {
+              .type = type, .id = id, .args = args, .arg_count = count}});
+
+  // Unit calls have effects but do not define a value
+  return result_type == IR_UNIT ? unit_operand() : value_operand(value);
+}
