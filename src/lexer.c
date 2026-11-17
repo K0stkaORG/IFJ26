@@ -9,6 +9,7 @@
  *
  */
 
+#include "lexer.h"
 #include <stdio.h>
 #include "array.h"
 #include "ctx.h"
@@ -67,6 +68,62 @@ Token next_token(Ctx* ctx) {
       } else {
         // EOF - no more characters
       }
+    }
+
+    // indentation handling
+    if (current == '\n' &&
+        (current_state == START || current_state == WHITESPACE_STATE)) {
+      ctx->lexer.indent_flag = INDENTATION;
+      ctx->lexer.indent_level = 0;
+      token.type = EOL_TOKEN;
+      lexer_discard_consumed(ctx);
+      return token;
+    }
+
+    if (current_state == START) {
+      if ((ctx->lexer.indent_flag == INDENTATION ||
+           ctx->lexer.indent_flag == INVALID_INDENTATION) &&
+          current == EOF) {
+        ctx->lexer.indent_flag = NOT_ACTIVE;
+        ctx->lexer.indent_level = 0;
+        token_start = ctx->lexer.cursor;
+
+        // previous token was a newline and current is a space
+      } else if (ctx->lexer.indent_flag == INDENTATION && current == ' ') {
+        ctx->lexer.indent_level++;
+        lexer_discard_consumed(ctx);
+        token_start = 0;
+        continue;
+
+        // indentation error - tab or vertical tab
+      } else if (ctx->lexer.indent_flag != NOT_ACTIVE &&
+                 (current == '\t' || current == '\v' || current == '\f' ||
+                  current == '\r')) {
+        ctx->lexer.indent_flag = INVALID_INDENTATION;
+        continue;
+
+        // return indent token
+      } else if (ctx->lexer.indent_flag == INDENTATION && current != EOF) {
+        ctx->lexer.indent_flag = NOT_ACTIVE;
+        ctx->lexer.cursor -= 1;
+
+        if (ctx->lexer.indent_level != 0) {
+          token.type = INDENT;
+          token.value_type = INTEGER;
+          token.value.integer = ctx->lexer.indent_level;
+          lexer_discard_consumed(ctx);
+
+          return token;
+        } else {
+          continue;
+        }
+      }
+    }
+
+    if (ctx->lexer.indent_flag == INVALID_INDENTATION && current != ' ' &&
+        current != EOF && current != '\t' && current != '\v' &&
+        current != '\f' && current != '\r') {
+      THROW(E_LEXER_ERROR, "indentation error");
     }
 
     // top of the stack
@@ -155,6 +212,12 @@ Token next_token(Ctx* ctx) {
       }
 
       current_state = transition->next_state;
+
+      // newlines after comment handling for indentation
+      if (current_state == EOL_OR_EOF && current == '\n') {
+        ctx->lexer.indent_flag = INDENTATION;
+        ctx->lexer.indent_level = 0;
+      }
 
       // update last_accepting state, save cursor and stack
       // when going to accepting state
