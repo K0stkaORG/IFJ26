@@ -131,6 +131,8 @@ ExitCode ctx_free(Ctx* ctx) {
   // Prompt: "Solve merge conflict"
   // Changes: Preserve parser cleanup and release lexer arrays; retain the existing IR cleanup below.
   parser_cleanup(ctx);
+
+  // Free the lexer state
   array_free(&ctx->lexer.buffer);
   array_free(&ctx->lexer.stack);
   array_free(&ctx->lexer.saved_stack);
