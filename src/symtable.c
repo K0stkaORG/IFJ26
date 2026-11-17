@@ -61,7 +61,7 @@ void symtable_insert(Ctx* ctx,
 
   char* identptr = TRY_MALLOC_OR(strlen(identifier) + 1,
                                  { symtabledata_destructor(dataptr); });
-  strcpy(identptr, identifier);
+  memcpy(identptr, identifier, strlen(identifier) + 1);
 
   bst_insert(ctx, &table->tree, identptr, dataptr);
 }
