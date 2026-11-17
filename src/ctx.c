@@ -12,8 +12,10 @@
  */
 
 #include "ctx.h"
+#include "array.h"              // array_init, array_free
 #include "ast.h"                // ast_node_destroy
 #include "ir.h"                 // ir_init, ir_free
+#include "lexer.h"              // LexerCtx
 #include "parser.h"             // parser_cleanup
 #include "symtable.h"           // symtable_init, symtable_destroy
 #include "symtable_builtins.h"  // symtable_builtins_populate
@@ -41,6 +43,16 @@ void ctx_init(Ctx* ctx, Flags flags) {
 
   // Initialize global symtable
   symtable_init(ctx, &ctx->global_symtable, NULL);
+
+  // Initialize lexer struct
+  array_init(&ctx->lexer.buffer);
+  array_init(&ctx->lexer.stack);
+  array_init(&ctx->lexer.saved_stack);
+  ctx->lexer.line = 1;
+  ctx->lexer.column = 1;
+  ctx->lexer.cursor = 0;
+  ctx->lexer.indent_flag = 1;
+  ctx->lexer.indent_level = 0;
 
   // Initialize IR program
   ir_init(&ctx->ir);
@@ -107,6 +119,11 @@ bool parse_cli_args(int argc, char* argv[], Flags* flags) {
 
 ExitCode ctx_free(Ctx* ctx) {
   parser_cleanup(ctx);
+
+  // Free the lexer state
+  array_free(&ctx->lexer.buffer);
+  array_free(&ctx->lexer.stack);
+  array_free(&ctx->lexer.saved_stack);
 
   // Free the AST
   if (ctx->ast != NULL) {
