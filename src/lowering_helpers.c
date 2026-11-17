@@ -37,15 +37,14 @@ IrType ast_to_ir_data_type(Ctx* ctx, AstDataType data_type) {
 }
 
 IrType ast_get_function_return_type(Ctx* ctx, AstNode* function) {
-  // Get the return type child node
-  AstNode* return_type_node;
-  ast_node_get_child(ctx, function, AST_DEF_RETTYPE, &return_type_node);
-
-  // Get the return type
-  AstDataType return_type = ast_node_get_data_type(return_type_node);
-
-  // Convert the return type to IR
-  return ast_to_ir_data_type(ctx, return_type);
+  // Read the final return type from the function symbol, including inference
+  AstNode* ident;
+  ast_node_get_child(ctx, function, AST_DEF_IDENT, &ident);
+  const SymtableData* symbol = ast_node_get_symbol(ident);
+  // Lowering must run after semantic analysis has resolved the function
+  if (symbol == NULL || symbol->symbol_type != SYMBOL_FUNCTION)
+    THROW(E_INTERNAL_ERROR, "Lowering requires a checked function");
+  return symbol->ir_type;
 }
 
 const char* ast_get_node_identifier(Ctx* ctx, AstNode* node) {
@@ -58,10 +57,13 @@ const char* ast_get_node_identifier(Ctx* ctx, AstNode* node) {
     case AST_NODE_IDENT:
       return ast_node_get_name(node);
 
-    // For functions, parameters, their name is the first child
-    case AST_NODE_DEF: {
+    // Functions and parameters both keep their name in an identifier child
+    case AST_NODE_DEF:
+    case AST_NODE_PARAM: {
       AstNode* ident_child;
-      ast_node_get_child(ctx, node, AST_DEF_IDENT, &ident_child);
+      ast_node_get_child(ctx, node, ast_node_get_type(node) == AST_NODE_PARAM
+                                       ? AST_PARAM_IDENT : AST_DEF_IDENT,
+                         &ident_child);
 
       return ast_get_node_identifier(ctx, ident_child);
     }
@@ -102,6 +104,7 @@ IrOperand add_unary(Ctx* ctx,
                     IrInstructionType instruction_type,
                     IrType result_type,
                     IrOperand operand) {
+  // Add the instruction and wrap its automatically assigned result ID
   IrValueId result =
       ir_add_instruction(ctx, function_id, block_id,
                          (IrInstruction){.type = instruction_type,
@@ -118,6 +121,7 @@ IrOperand add_binary(Ctx* ctx,
                      IrType result_type,
                      IrOperand left,
                      IrOperand right) {
+  // Add the instruction and wrap its automatically assigned result ID
   IrValueId result =
       ir_add_instruction(ctx, function_id, block_id,
                          (IrInstruction){.type = instruction_type,
@@ -126,4 +130,12 @@ IrOperand add_binary(Ctx* ctx,
                                          .operands.binary.right = right});
 
   return value_operand(result);
+}
+
+void emit_return(Ctx* ctx, IrFunctionId function_id, IrBlockId block_id,
+                 IrOperand value) {
+  // Finish the block with the supplied return operand
+  ir_set_terminator(ctx, function_id, block_id,
+                    (IrBlockTerminator){.type = IR_TERMINATOR_RETURN,
+                                        .value.return_value = value});
 }

@@ -11,79 +11,101 @@
  */
 
 #include "lowering.h"
+#include "lowering_internal.h"
 
-#include "ast.h"
-#include "ctx.h"
-#include "ir.h"
-#include "ir_helpers.h"
-#include "lowering_helpers.h"
-
-#include <string.h>  // strcmp
-
+/* Allocate every source declaration before generating scratch slots. Semantic
+ * ir_index numbering includes unreachable declarations and shadowed names. */
 /**
- * @brief Lower a function signature to IR
+ * @brief Allocates source slots in the order assigned by semantic analysis
  *
- * Lowers the fact a function exists, including it's name, parameters, and
- * return type to the IR. Does not lower the function body.
- *
- * @param ctx The context
- * @param function The function node to lower
+ * @param ctx The shared context
+ * @param fn The function containing the declarations
+ * @param node The subtree whose declarations should be collected
  */
-static void lower_function_signature(Ctx* ctx, AstNode* function) {
-  // Add the function to the IR
-  IrFunctionId function_id =
-      ir_add_function(ctx, ast_get_node_identifier(ctx, function),
-                      ast_get_function_return_type(ctx, function));
+static void collect_slots(Ctx* ctx, IrFunctionId fn, AstNode* node) {
+  AstNodeType kind = ast_node_get_type(node);
+  if (kind == AST_NODE_VAR || kind == AST_NODE_VAL || kind == AST_NODE_FOR) {
+    bool loop = kind == AST_NODE_FOR;
 
-  // Check if this function was the main function
-  if (ast_node_get_flags(function) & AST_FLAG_MAIN)
-    // If so, set the entrypoint to this function
-    ctx->ir.entrypoint = function_id;
+    // Visit the initializer or range before allocating its declaration slot
+    collect_slots(ctx, fn,
+                  lower_child(ctx, node, loop ? AST_FOR_SOURCE : AST_VAL_INIT));
+    AstNode* ident =
+        lower_child(ctx, node, loop ? AST_FOR_IDENT : AST_VAL_IDENT);
+    const SymtableData* data = lower_symbol(ctx, ident);
+    IrStackSlotId slot =
+        ir_add_slot(ctx, fn, ast_node_get_name(ident), data->ir_type);
 
-  // Get the function parameters
-  AstNode* params;
-  ast_node_get_child(ctx, function, AST_DEF_PARAM_LIST, &params);
+    // Source slot IDs must continue to agree with the semantic symbol IDs
+    if (slot != data->ir_index)
+      THROW(E_INTERNAL_ERROR, "Semantic and IR slot numbering disagree");
 
-  // Add the function parameters to the IR
-  size_t param_count = ast_node_get_child_count(params);
-  for (size_t i = 0; i < param_count; i++) {
-    AstNode* param;
-    ast_node_get_child(ctx, params, i, &param);
-
-    AstNode* param_type;
-    ast_node_get_child(ctx, param, AST_PARAM_TYPE, &param_type);
-
-    ir_add_parameter(
-        ctx, function_id, ast_get_node_identifier(ctx, param),
-        ast_to_ir_data_type(ctx, ast_node_get_data_type(param_type)));
+    // Semantic analysis visits for guards before visiting its body
+    if (loop) {
+      for (size_t i = AST_FOR_FIRST_GUARD; i < ast_node_get_child_count(node);
+           i++)
+        collect_slots(ctx, fn, lower_child(ctx, node, i));
+      collect_slots(ctx, fn, lower_child(ctx, node, AST_FOR_BODY));
+    }
+    return;
   }
+  for (size_t i = 0; i < ast_node_get_child_count(node); i++)
+    collect_slots(ctx, fn, lower_child(ctx, node, i));
 }
 
-/**
- * @brief Lower a function body to IR
- *
- * Lowers the function body to the IR.
- *
- * @param ctx The context
- * @param function The function node to lower
- */
-static void lower_function_body(Ctx* ctx, AstNode* function) {}
-
 void lower_ast(Ctx* ctx) {
-  // Lower each function signature to IR
-  size_t function_count = ast_node_get_child_count(ctx->ast);
-  for (size_t i = 0; i < function_count; i++) {
-    AstNode* child;
-    ast_node_get_child(ctx, ctx->ast, i, &child);
+  // Require a checked program and avoid appending to an existing IR program
+  if (ctx->ast == NULL || ast_node_get_type(ctx->ast) != AST_NODE_PROGRAM ||
+      ctx->ir.functions.count != 0)
+    THROW(E_INTERNAL_ERROR, "Lowering needs a checked program and empty IR");
 
-    lower_function_signature(ctx, child);
+  // Register all signatures first so forward and recursive calls have IDs
+  size_t count = ast_node_get_child_count(ctx->ast);
+  for (size_t i = 0; i < count; i++) {
+    AstNode* def = lower_child(ctx, ctx->ast, i);
+    if (ast_node_get_type(def) != AST_NODE_DEF)
+      THROW(E_INTERNAL_ERROR, "Unsupported top-level node in lowering");
+    IrFunctionId fn = ir_add_function(ctx, ast_get_node_identifier(ctx, def),
+                                      ast_get_function_return_type(ctx, def));
+    if (lower_symbol(ctx, lower_child(ctx, def, AST_DEF_IDENT))->ir_index != fn)
+      THROW(E_INTERNAL_ERROR, "Semantic and IR function numbering disagree");
+
+    // Record the semantic main function as the program entrypoint
+    if (ast_node_get_flags(def) & AST_FLAG_MAIN)
+      ctx->ir.entrypoint = fn;
+
+    // Parameters occupy the first slots, before any local declarations
+    if (ast_node_get_child_count(def) > AST_DEF_PARAM_LIST) {
+      AstNode* params = lower_child(ctx, def, AST_DEF_PARAM_LIST);
+      for (size_t j = 0; j < ast_node_get_child_count(params); j++) {
+        AstNode* ident =
+            lower_child(ctx, lower_child(ctx, params, j), AST_PARAM_IDENT);
+        const SymtableData* data = lower_symbol(ctx, ident);
+        IrStackSlotId slot =
+            ir_add_parameter(ctx, fn, ast_node_get_name(ident), data->ir_type);
+        if (slot != data->ir_index)
+          THROW(E_INTERNAL_ERROR,
+                "Semantic and IR parameter numbering disagree");
+      }
+    }
   }
+  for (size_t i = 0; i < count; i++) {
+    // Lower each registered body after reserving all of its source slots
+    AstNode* body =
+        lower_child(ctx, lower_child(ctx, ctx->ast, i), AST_DEF_BODY);
+    collect_slots(ctx, i, body);
+    Lower lower = {.ctx = ctx, .function = i};
 
-  // Lower each function body to IR
-  for (size_t i = 0; i < function_count; i++) {
-    AstNode* child;
-    ast_node_get_child(ctx, ctx->ast, i, &child);
+    // Start emission in the function entry block
+    lower.block = lower_new_block(&lower);
+    ctx->ir.functions.data[i].entrypoint = lower.block;
+    IrOperand result = lower_node(&lower, body);
 
-    lower_function_body(ctx, child);
+    // Emit the implicit result only if the body still has a continuing path
+    if (lower.block != IR_INVALID_ID)
+      emit_return(ctx, i, lower.block,
+                  ctx->ir.functions.data[i].return_type == IR_UNIT
+                      ? unit_operand()
+                      : result);
   }
 }

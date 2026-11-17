@@ -36,7 +36,145 @@ describe(Ctx) {
       ctx_init(&test_ctx, DEFAULT_FLAGS);
 
       asserteq(test_ctx.exit_code, E_OK);
+      assert(test_ctx.error_frame == NULL);
       asserteq(test_ctx.flags.forceNthMallocFail, 0);
+    }
+  }
+
+  subdesc(scoped_errors) {
+    it("removes the handler after normal completion") {
+      volatile int ran = 0;
+      TRY {
+        ran++;
+        assert(ctx->error_frame != NULL);
+      } CATCH {
+        fail("Success must not enter CATCH");
+      }
+      asserteq(ran, 1);
+      assert(ctx->error_frame == NULL);
+    }
+    it("catches an error thrown by a called function") {
+      volatile int caught = 0;
+      TRY {
+        function_with_nested_error(ctx);
+      } CATCH {
+        assert(ctx->error_frame == NULL);
+        asserteq(ctx->exit_code, E_LEXER_ERROR);
+        caught++;
+        ctx->exit_code = E_OK;
+      }
+      asserteq(caught, 1);
+      assert(ctx->error_frame == NULL);
+    }
+    it("restores the outer handler after a successful nested TRY") {
+      volatile int caught = 0;
+      TRY {
+        CtxErrorFrame* parent = ctx->error_frame;
+        TRY {
+          assert(ctx->error_frame->previous == parent);
+        } CATCH {
+          fail("Inner block must succeed");
+        }
+        assert(ctx->error_frame == parent);
+        THROW(E_LEXER_ERROR, "outer error after inner success");
+      } CATCH {
+        caught++;
+        ctx->exit_code = E_OK;
+      }
+      asserteq(caught, 1);
+      assert(ctx->error_frame == NULL);
+    }
+    it("rethrows through nested catches in cleanup order") {
+      volatile int order = 0;
+      TRY {
+        TRY {
+          THROW(E_LEXER_ERROR, "nested error");
+        } CATCH {
+          order = order * 10 + 1;
+          assert(ctx->error_frame != NULL);
+          RETHROW();
+        }
+      } CATCH {
+        order = order * 10 + 2;
+        asserteq(ctx->exit_code, E_LEXER_ERROR);
+        assert(ctx->error_frame == NULL);
+        ctx->exit_code = E_OK;
+      }
+      asserteq(order, 12);
+    }
+    it("allows a new THROW from CATCH to reach the parent") {
+      volatile int caught = 0;
+      TRY {
+        TRY {
+          THROW(E_LEXER_ERROR, "original error");
+        } CATCH {
+          THROW(E_INTERNAL_ERROR, "replacement error");
+        }
+      } CATCH {
+        caught++;
+        asserteq(ctx->exit_code, E_INTERNAL_ERROR);
+        ctx->exit_code = E_OK;
+      }
+      asserteq(caught, 1);
+      assert(ctx->error_frame == NULL);
+    }
+    it("can handle an inner error and continue with the outer handler") {
+      volatile int order = 0;
+      TRY {
+        TRY {
+          THROW(E_LEXER_ERROR, "handled inner error");
+        } CATCH {
+          order = 1;
+          ctx->exit_code = E_OK;
+        }
+        order = order * 10 + 2;
+        THROW(E_INTERNAL_ERROR, "later outer error");
+      } CATCH {
+        order = order * 10 + 3;
+        ctx->exit_code = E_OK;
+      }
+      asserteq(order, 123);
+      assert(ctx->error_frame == NULL);
+    }
+    it("propagates a rethrow to the existing root target") {
+      assertThrow(E_LEXER_ERROR, {
+        TRY {
+          function_with_error(ctx);
+        } CATCH {
+          assert(ctx->error_frame == NULL);
+          RETHROW();
+        }
+      });
+      assert(ctx->error_frame == NULL);
+    }
+    it("routes allocation errors and cleanup macros through CATCH") {
+      volatile int cleaned = 0;
+      volatile int caught = 0;
+      ctx->flags.forceNthMallocFail = 1;
+      TRY {
+        void* value = TRY_MALLOC_OR(16, { cleaned++; });
+        (void)value;
+      } CATCH {
+        caught++;
+        asserteq(ctx->exit_code, E_INTERNAL_ERROR);
+        ctx->exit_code = E_OK;
+      }
+      asserteq(cleaned, 1);
+      asserteq(caught, 1);
+      assert(ctx->error_frame == NULL);
+    }
+    it("preserves normal if-else binding around TRY and CATCH") {
+      volatile int ran = 0;
+      if (ctx->exit_code == E_OK)
+        TRY {
+          ran = 1;
+        } CATCH {
+          ran = 2;
+        }
+      else
+        ran = 3;
+      asserteq(ran, 1);
+      assert(ctx->error_frame == NULL);
     }
   }
 

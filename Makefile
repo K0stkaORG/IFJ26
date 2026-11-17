@@ -128,6 +128,9 @@ endif
 
 # CFLAGS for unit tests (including flags required for Snow = testing library)
 CFLAGS_UNIT := -std=gnu17 $(filter-out -std=%,$(CFLAGS_DEBUG)) -Wno-strict-prototypes -DSNOW_ENABLED -Itests/vendor -Isrc
+ifneq ($(OS),Windows_NT)
+    LDLIBS_UNIT += -lm
+endif
 ifeq ($(OS),Windows_NT)
     # Windows MSVC-compatible Snow flags
     CFLAGS_UNIT += -Itests/vendor/snow_win -DSNOW_USE_FORK=0 -DSNOW_USE_FNMATCH=0
@@ -162,7 +165,7 @@ $(TEST_BUILD_DIR)/helper_%.o: $(UNIT_TESTS_DIR)/helpers/%.c | $(TEST_BUILD_DIR)
 
 # Build unit test executables
 $(TEST_BUILD_DIR)/%$(EXE): tests/unit/%.c $(UNIT_OBJS) $(UNIT_HELPER_OBJS) | $(TEST_BUILD_DIR)
-	@$(CC) $(CFLAGS_UNIT) -MF $(TEST_BUILD_DIR)/$*.d -o $@ $< $(filter %.o,$^)
+	@$(CC) $(CFLAGS_UNIT) -MF $(TEST_BUILD_DIR)/$*.d -o $@ $< $(filter %.o,$^) $(LDLIBS_UNIT)
 
 # Run unit tests
 test-unit: $(UNIT_BINS)
