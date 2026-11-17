@@ -1,0 +1,48 @@
+/**
+ * @file optimizer_control_flow.h
+ * Project: IFJ26
+ *
+ * @author Jan Kostka (xkostkj00)
+ * @date 16. 11. 2026
+ *
+ * @brief Helpers for control flow analysis and optimization
+ *
+ * Contains declarations for helper functions for control flow analysis and
+ * optimization.
+ */
+
+#ifndef OPTIMIZER_CONTROL_FLOW_H
+#define OPTIMIZER_CONTROL_FLOW_H
+
+#include "ctx.h"
+#include "ir.h"
+
+#include <stdbool.h>  // bool
+
+/**
+ * @brief Removes unreachable functions from the IR
+ *
+ * @param ctx The context of the program
+ * @return The number of unreachable functions removed
+ */
+size_t optimizer_remove_unreachable_functions(Ctx* ctx);
+
+/**
+ * @brief Removes unreachable blocks from the control flow graph
+ *
+ * @param ctx The context of the program
+ * @param function_id The ID of the function to optimize
+ * @return true if the function was modified, false otherwise
+ */
+bool optimizer_remove_unreachable_blocks(Ctx* ctx, IrFunctionId function_id);
+
+/**
+ * @brief Removes stores whose target is not read from in any possible path
+ *
+ * @param ctx The context of the program
+ * @param function_id The ID of the function to optimize
+ * @return true if the function was modified, false otherwise
+ */
+bool optimizer_remove_unused_stores(Ctx* ctx, IrFunctionId function_id);
+
+#endif

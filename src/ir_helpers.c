@@ -11,10 +11,54 @@
 #include "ir_helpers.h"
 
 #include "array.h"
-#include "ir_internal.h"
+#include "ir.h"
+#include "ir_free_helpers.h"
 
 #include <stdbool.h>  // bool
 #include <string.h>   // strlen, memcpy, size_t
+
+/**
+ * @brief Returns the class of an instruction
+ *
+ * @param[in] inst The instruction to get the class of
+ * @return The class of the instruction
+ */
+IrInstructionClass ir_get_instruction_class(IrInstruction* instruction) {
+  switch (instruction->type) {
+    // Unary operations
+    case IR_INST_NOT:
+    case IR_INST_INT2DOUBLE:
+    case IR_INST_FLOOR:
+      return IR_INST_CLASS_UNARY;
+
+    // Binary operations
+    case IR_INST_ADD:
+    case IR_INST_SUB:
+    case IR_INST_MUL:
+    case IR_INST_IDIV:
+    case IR_INST_DIV:
+    case IR_INST_EQ:
+    case IR_INST_NE:
+    case IR_INST_LT:
+    case IR_INST_LE:
+    case IR_INST_GT:
+    case IR_INST_GE:
+    case IR_INST_CONCAT:
+      return IR_INST_CLASS_BINARY;
+
+    // Store
+    case IR_INST_STORE:
+      return IR_INST_CLASS_STORE;
+
+    // Load
+    case IR_INST_LOAD:
+      return IR_INST_CLASS_LOAD;
+
+      // Function calls
+    case IR_INST_CALL:
+      return IR_INST_CLASS_CALL;
+  }
+}
 
 /**
  * @brief Gets a function from the IR by its id
@@ -34,17 +78,7 @@ static IrFunction* ir_get_function(Ctx* ctx, IrFunctionId function) {
   return &ctx->ir.functions.data[function];
 }
 
-/**
- * @brief Creates a copy of a string
- *
- * Allocates memory for the string, including its terminating null character.
- * The caller owns the returned string and must free it.
- *
- * @param[in,out] ctx The shared context used for memory and error handling
- * @param[in] source The string to copy
- * @return Pointer to the copied string
- */
-static char* copy_string(Ctx* ctx, const char* source) {
+char* copy_string(Ctx* ctx, const char* source) {
   // Check for NULL source
   if (source == NULL)
     THROW(E_INTERNAL_ERROR, "Cannot copy a NULL string");
@@ -58,17 +92,7 @@ static char* copy_string(Ctx* ctx, const char* source) {
   return copy;
 }
 
-/**
- * @brief Creates a copy of an IR operand
- *
- * Copies string values into a separate allocation. Other operand values are
- * copied directly. The original operand is not modified.
- *
- * @param[in,out] ctx The shared context used for memory and error handling
- * @param[in] operand The operand to copy
- * @return Copy of the operand
- */
-static IrOperand ir_copy_operand(Ctx* ctx, IrOperand operand) {
+IrOperand ir_copy_operand(Ctx* ctx, IrOperand operand) {
   if (operand.type < IR_OP_VALUE || operand.type > IR_OP_UNIT)
     THROW(E_INTERNAL_ERROR, "Invalid IR operand type: %d", operand.type);
 
@@ -117,7 +141,8 @@ IrStackSlotId ir_add_slot(Ctx* ctx,
 
   // Create the slot
   IrStackSlotId id = (IrStackSlotId)fx->slots.count;
-  IrStackSlot slot = {.name = copy_string(ctx, name), .type = type};
+  IrStackSlot slot = {
+      .name = copy_string(ctx, name), .type = type, .lastStore = NULL};
 
   // Append the slot to the function's slot array
   array_append(ctx, &fx->slots, slot);
