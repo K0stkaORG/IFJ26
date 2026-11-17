@@ -8,3 +8,5 @@ This needs one guarantee from the lexer: every source line ends with an EOL_TOKE
 
 - **Have the lexer emit INDENT with value 0 for lines in column 0.** Rejected: the lexer does not do this, and it is outside the modules this work may change.
 - **Have the lexer emit DEDENT tokens.** Rejected for the same reason; if it ever does, only the token layer's translation changes.
+
+Amended by ADR-0007: blank and comment-only lines do emit an EOL_TOKEN (and an indented one a raw indent first); the token layer hides them, and supplies the EOL_TOKEN of a last line without a line break.

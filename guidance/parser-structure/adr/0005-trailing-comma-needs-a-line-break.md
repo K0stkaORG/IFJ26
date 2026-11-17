@@ -10,3 +10,5 @@ This amends parser story 43, which accepted `pack(a, b, c,)` on one line.
 
 - **Have the lexer report the line break as a token.** Rejected: the lexer is outside the modules this work may change, and the grammar would need that token in every list.
 - **Keep accepting any trailing comma.** Rejected: it does not match the PDF.
+
+Amended by ADR-0007: the line break is the EOL_TOKEN the token layer hid inside the parentheses, not a later line number.

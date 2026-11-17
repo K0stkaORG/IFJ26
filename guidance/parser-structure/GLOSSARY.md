@@ -82,8 +82,16 @@ _Avoid_: DEDENT, scope start/end
 An IDENT token whose text the grammar requires to be one specific word: `to`, `until` and `by` in a `for` generator, `ifj26` in the prolog. Any other word there is a syntax error.
 _Avoid_: soft keyword, reserved identifier
 
+**Token layer**:
+The part of the parser between the lexer and the grammar code (`fetch_token`): it turns raw indents into block opens and closes, hides line breaks the grammar must not see, and keeps the one token it read ahead and put back (the put-back token, distinct from a peek, which the grammar code asks for).
+_Avoid_: scanner, tokenizer (that is the lexer)
+
+**Hidden line break**:
+An EOL_TOKEN or INDENT the token layer drops because a `(` is open (outside the text of an interpolated string). The token after it is marked as coming after a line break, which is what lets a trailing comma before `)` through (ADR-0005, ADR-0007).
+_Avoid_: line continuation
+
 **Raw indent**:
-The INDENT token as the lexer emits it at the start of an indented line, carrying the line's indentation. A line in column 0 has no raw indent: a line starting with any other token counts as indentation 0. The parser only ever sees block open / block close, which it derives from raw indents.
+The INDENT token as the lexer emits it at the start of an indented line, carrying the line's indentation. A line in column 0 has no raw indent: a line starting with any other token counts as indentation 0. A raw indent of a blank or comment-only line decides nothing (ADR-0007). The parser only ever sees block open / block close, which it derives from raw indents.
 _Avoid_: indent token (ambiguous)
 
 ### Failing

@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
   // Allocate memory for the shared context
   ctx_allocate(&context);
 
-  // Run the compiler
+  parser_parse(&context);
 
   // Free allocated resources and exit
   return ctx_free(&context);
