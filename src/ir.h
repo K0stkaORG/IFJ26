@@ -18,7 +18,7 @@
 
 #include <stdbool.h>  // bool
 #include <stddef.h>   // size_t
-#include <stdint.h>   // int32_t, SIZE_MAX
+#include <stdint.h>   // int64_t, SIZE_MAX
 
 /**
  * @brief Id of a value in the IR
@@ -64,7 +64,7 @@ typedef size_t IrFunctionId;
  * Even though IFJ26Code works with 64bit integers, we are supposed to pretend
  * its 32bit.
  */
-typedef int32_t IrInt;
+typedef int64_t IrInt;
 
 /**
  * @brief Double type used in the IR
@@ -216,6 +216,19 @@ typedef enum {
 } IrInstructionType;
 
 /**
+ * @brief Enum representing the class of an instruction
+ *
+ * This differentiates instructions based on their operands type.
+ */
+typedef enum {
+  IR_INST_CLASS_UNARY,
+  IR_INST_CLASS_BINARY,
+  IR_INST_CLASS_STORE,
+  IR_INST_CLASS_LOAD,
+  IR_INST_CLASS_CALL,
+} IrInstructionClass;
+
+/**
  * @brief IR instruction
  *
  * Represents a single instruction in the IR.
@@ -346,6 +359,9 @@ typedef struct {
 
   // Type of the stack slot
   IrType type;
+
+  // Optimizer only: last value stored in this slot
+  IrOperand* lastStore;
 } IrStackSlot;
 
 /**

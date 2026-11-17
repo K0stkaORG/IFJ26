@@ -555,6 +555,9 @@ void generate_mock_ir(IrProgram* ir) {
       IrBlock* block = &function->blocks.data[bid];
       for (size_t iid = 0; iid < block->instructions.count; iid++) {
         IrInstruction* instruction = &block->instructions.data[iid];
+        if (instruction->result != IR_INVALID_ID &&
+            instruction->result >= function->value_count)
+          function->value_count = instruction->result + 1;
         switch (instruction->type) {
           case IR_INST_LOAD:
             break;

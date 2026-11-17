@@ -65,6 +65,7 @@ describe(ir_helpers) {
       asserteq(ctx->ir.functions.data[0].parameter_count, 1);
       asserteq(ctx->ir.functions.data[0].slots.count, 2);
       asserteq(ctx->ir.functions.data[0].slots.data[id].type, IR_STRING);
+      asserteq(ctx->ir.functions.data[0].slots.data[id].lastStore, NULL);
     }
 
     it("copies the name") {
@@ -100,6 +101,7 @@ describe(ir_helpers) {
       asserteq_str(slot->name, name);
       assertneq_ptr(&slot->name, &name, "name should be copied");
       asserteq(slot->type, IR_INT);
+      asserteq(slot->lastStore, NULL);
     }
 
     it("rejects parameters after local variables") {
@@ -111,6 +113,7 @@ describe(ir_helpers) {
       asserteq(ctx->ir.functions.data[0].slots.count, 1);
       asserteq_str(ctx->ir.functions.data[0].slots.data[0].name, "local");
       asserteq(ctx->ir.functions.data[0].slots.data[0].type, IR_INT);
+      asserteq(ctx->ir.functions.data[0].slots.data[0].lastStore, NULL);
     }
   }
 
