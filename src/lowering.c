@@ -42,7 +42,7 @@ static void lower_function_signature(Ctx* ctx, AstNode* function) {
 
   // Get the function parameters
   AstNode* params;
-  ast_node_get_child(ctx, function, 3, &params);
+  ast_node_get_child(ctx, function, AST_DEF_PARAM_LIST, &params);
 
   // Add the function parameters to the IR
   size_t param_count = ast_node_get_child_count(params);
@@ -51,7 +51,7 @@ static void lower_function_signature(Ctx* ctx, AstNode* function) {
     ast_node_get_child(ctx, params, i, &param);
 
     AstNode* param_type;
-    ast_node_get_child(ctx, param, 2, &param_type);
+    ast_node_get_child(ctx, param, AST_PARAM_TYPE, &param_type);
 
     ir_add_parameter(
         ctx, function_id, ast_get_node_identifier(ctx, param),

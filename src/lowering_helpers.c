@@ -38,7 +38,7 @@ IrType ast_to_ir_data_type(Ctx* ctx, AstDataType data_type) {
 IrType ast_get_function_return_type(Ctx* ctx, AstNode* function) {
   // Get the return type child node
   AstNode* return_type_node;
-  ast_node_get_child(ctx, function, 1, &return_type_node);
+  ast_node_get_child(ctx, function, AST_DEF_RETTYPE, &return_type_node);
 
   // Get the return type
   AstDataType return_type = ast_node_get_data_type(return_type_node);
@@ -60,7 +60,7 @@ const char* ast_get_node_identifier(Ctx* ctx, AstNode* node) {
     // For functions, parameters, their name is the first child
     case AST_NODE_DEF: {
       AstNode* ident_child;
-      ast_node_get_child(ctx, node, 0, &ident_child);
+      ast_node_get_child(ctx, node, AST_DEF_IDENT, &ident_child);
 
       return ast_get_node_identifier(ctx, ident_child);
     }
