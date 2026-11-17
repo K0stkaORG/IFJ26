@@ -79,7 +79,7 @@ The value a function body yields: the value of its last statement, or, when that
 _Avoid_: tail, last value, final expression
 
 **On-demand inference**:
-Checking a function whose return type is omitted at the moment a call needs its type, instead of waiting for its place in source order, so a call before the `def` gets the right type. The function is marked as being checked meanwhile; a call that reaches it again is a cycle through a function without a declared return type (exit 6), while a cycle through a function with a declared type is cut there and compiles.
+Checking a function whose return type is omitted at the moment a call needs its type, instead of waiting for its place in source order, so a call before the `def` gets the right type. The function is marked as being checked meanwhile; a call that reaches it again is a cycle through a function without a declared return type (exit 6). A cycle that passes through a function with a declared type stops inference there, so a final phase searches the calls for it instead; every function in a cycle must declare its type (ADR-0005).
 _Avoid_: lazy inference, forward inference, demand-driven checking
 
 **Member**:
