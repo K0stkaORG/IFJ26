@@ -40,6 +40,7 @@ int main(int argc, char** argv) {
     ctx_allocate(ctx);
 
     // Run the compiler
+    parser_parse(ctx);
   }
   CATCH {
     // No need to do anything special in case of error, ctx_free will handle it
