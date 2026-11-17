@@ -134,7 +134,7 @@ bool parse_cli_args(int argc, char* argv[], Flags* flags) {
 ExitCode ctx_free(Ctx* ctx) {
   parser_cleanup(ctx);
 
-  // Free allocated memory
+  // Free the lexer state
   array_free(&ctx->lexer.buffer);
   array_free(&ctx->lexer.stack);
   array_free(&ctx->lexer.saved_stack);

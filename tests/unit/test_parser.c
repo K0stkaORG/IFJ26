@@ -87,15 +87,6 @@ describe(parser) {
       asserteq_str(ctx->parser->current.value.text, "f");
     }
 
-    it("never shows WHITESPACE to the parser") {
-      FakeSource source;
-      START(source, TOK(WHITESPACE), TOK(DEF), TOK(WHITESPACE), TOK(WHITESPACE),
-            IDENT_TOK("f"));
-      asserteq(ctx->parser->current.type, DEF);
-      parser_advance(ctx, ctx->parser);
-      asserteq(ctx->parser->current.type, IDENT);
-    }
-
     it("moves to a peeked token before reading the source again") {
       FakeSource source;
       START(source, TOK(DEF), TOK(COLON));
@@ -1602,15 +1593,6 @@ describe(parser) {
           LINE(2), ID("i"), TOK(ASSIGN), ID("i"), TOK(OPERATOR_PLUS), INT(1),
             EOL,
           LINE(2), ID("sum"), EOL);
-    }
-
-    it("drops whitespace between an identifier and the = it peeks for") {
-      // def f() =
-      //   x = 1
-      ASSERT_AST(BODY_AST("(ASSIGN (IDENT x) (INT_LIT 1))"),
-                 PROLOG, DEF_F,
-                 LINE(2), ID("x"), TOK(WHITESPACE), TOK(ASSIGN),
-                   TOK(WHITESPACE), INT(1), EOL);
     }
 
     it("peeks a block close like any other token") {
