@@ -1228,7 +1228,7 @@ describe(semantics) {
     // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
     // review fixes"
     // Changes:
-    // Review fix 1: an unflagged multi-line if that ends a branch of an if
+    // An unflagged multi-line if that ends a branch of an if
     // expression yields its value (recursively), and is widened inside.
     it("takes the value of an if that ends a multi-line branch of an if "
        "expression") {
@@ -1480,7 +1480,7 @@ describe(semantics) {
     // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
     // review fixes"
     // Changes:
-    // Review fix 1: the value of a nested if counts, so a String if next to
+    // The value of a nested if counts, so a String if next to
     // an Int branch is exit 6.
     it("rejects an if expression whose multi-line branch ends in an if of "
        "another type") {
@@ -1660,7 +1660,7 @@ describe(semantics) {
     // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
     // review fixes"
     // Changes:
-    // Review fix 2: the target is checked before the value, so a wrong
+    // The target is checked before the value, so a wrong
     // value assigned to a val is exit 7, not 6.
     it("rejects an assignment to a val before checking the value's type") {
       // val a = 1
@@ -1954,7 +1954,7 @@ describe(semantics) {
     // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
     // review fixes"
     // Changes:
-    // Review fix 4: a parenthesised zero step is still the literal 0.
+    // A parenthesised zero step is still the literal 0.
     it("rejects a parenthesised literal step 0 with exit 10") {
       // for i <- 1 to 3 by (0) do print(i)
       ASSERT_SEMANTIC_ERROR(E_SEMANTIC_OTHER_ERROR,
@@ -2146,7 +2146,7 @@ describe(semantics) {
     // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
     // review fixes"
     // Changes:
-    // Review fix 3: arguments are checked left to right before the argument
+    // Arguments are checked left to right before the argument
     // count, so a mistake inside an argument (exit 6) wins over a wrong count.
     it("reports an error inside an argument before a wrong argument count") {
       // @main def main() = none("a" - 1)
@@ -2654,7 +2654,7 @@ describe(semantics) {
     // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
     // review fixes"
     // Changes:
-    // Review fix 6: a branch ending in return yields no value, so inside an
+    // A branch ending in return yields no value, so inside an
     // if expression it is compatible with the other branch, whose type the
     // expression takes (both returning gives Unit).
     it("types an if expression with a returning then branch by the else "
@@ -3059,7 +3059,7 @@ describe(semantics) {
     // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
     // review fixes"
     // Changes:
-    // Review fix 7 (spec "Ambiguities decided here"): a cycle that passes
+    // A cycle that passes
     // through a function with a declared return type is broken there and
     // compiles, as in Scala; f is inferred as Int.
     it("accepts mutual recursion through a function with a declared return "

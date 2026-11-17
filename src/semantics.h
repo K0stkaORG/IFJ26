@@ -9,7 +9,7 @@
 // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
 // review fixes"
 // Changes:
-// Review fix 13: the documented exit codes now list every code the pass can
+// The documented exit codes now list every code the pass can
 // raise (3, 4, 5, 6, 7, 10 and the internal 99).
 /**
  * @file semantics.h
