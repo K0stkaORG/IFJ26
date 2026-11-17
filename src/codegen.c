@@ -69,6 +69,14 @@ static void cg_print_localframe_slot(FILE* out, size_t id) {
   fprintf(out, "LF@slot_%zu", id);
 }
 
+static void cg_print_tempframe_arg(FILE* out, size_t id) {
+  fprintf(out, "TF@arg_%zu", id);
+}
+
+static void cg_print_localframe_arg(FILE* out, size_t id) {
+  fprintf(out, "LF@arg_%zu", id);
+}
+
 static void cg_print_operand(FILE* out, IrOperand* op) {
   switch (op->type) {
     case IR_OP_VALUE:
@@ -122,7 +130,7 @@ static void cg_print_not_result(FILE* out, size_t result) {
   cg_print_nl(out);
 }
 
-static void cg_generate_instruction(FILE* out, IrInstruction* inst) {
+static void cg_generate_instruction(Ctx* ctx, FILE* out, IrInstruction* inst) {
   switch (inst->type) {
     case IR_INST_ADD:
       cg_print_binary_inst(out, "ADD", inst);
@@ -186,6 +194,35 @@ static void cg_generate_instruction(FILE* out, IrInstruction* inst) {
       cg_print_operand(out, &inst->operands.store.source);
       cg_print_nl(out);
       break;
+    case IR_INST_CALL:
+      if (inst->operands.call.type == IR_FX_USER) {
+        fputs("CREATEFRAME", out);
+        cg_print_nl(out);
+
+        for (size_t i = 0; i < inst->operands.call.arg_count; i++) {
+          fputs("DEFVAR ", out);
+          cg_print_tempframe_arg(out, i);
+          cg_print_nl(out);
+
+          fputs("MOVE ", out);
+          cg_print_tempframe_arg(out, i);
+          cg_print_ws(out);
+          cg_print_operand(out, &inst->operands.call.args[i]);
+          cg_print_nl(out);
+        }
+
+        fputs("CALL $$", out);
+        fputs(ctx->ir.functions.data[inst->operands.call.id].name, out);
+        cg_print_nl(out);
+
+        if (inst->result != IR_INVALID_ID) {
+          fputs("MOVE ", out);
+          cg_print_localframe_val(out, inst->result);
+          fputs(" TF@%ret", out);
+          cg_print_nl(out);
+        }
+      }
+      break;
   }
 }
 
@@ -195,7 +232,8 @@ static void cg_print_block_label(FILE* out, char* fn_name, size_t block_id) {
   fprintf(out, "$%s$b%zu", fn_name, block_id);
 }
 
-static void cg_generate_block(FILE* out,
+static void cg_generate_block(Ctx* ctx,
+                              FILE* out,
                               IrFunction* fn,
                               size_t block_id,
                               IrBlock* block) {
@@ -205,7 +243,7 @@ static void cg_generate_block(FILE* out,
 
   for (size_t i = 0; i < block->instructions.count; i++) {
     IrInstruction* inst = &block->instructions.data[i];
-    cg_generate_instruction(out, inst);
+    cg_generate_instruction(ctx, out, inst);
   }
 
   switch (block->terminator.type) {
@@ -255,7 +293,7 @@ static void cg_generate_block(FILE* out,
 
 // Functions
 
-static void cg_generate_function(FILE* out, IrFunction* fn) {
+static void cg_generate_function(Ctx* ctx, FILE* out, IrFunction* fn) {
   fputs("LABEL $$", out);
   fputs(fn->name, out);
   cg_print_nl(out);
@@ -279,9 +317,23 @@ static void cg_generate_function(FILE* out, IrFunction* fn) {
     cg_print_nl(out);
   }
 
+  for (size_t i = 0; i < fn->parameter_count; i++) {
+    fputs("MOVE ", out);
+    cg_print_localframe_slot(out, i);
+    cg_print_ws(out);
+    cg_print_localframe_arg(out, i);
+    cg_print_nl(out);
+  }
+
+  if (fn->entrypoint != IR_INVALID_ID && fn->entrypoint != 0) {
+    fputs("JUMP ", out);
+    cg_print_block_label(out, fn->name, fn->entrypoint);
+    cg_print_nl(out);
+  }
+
   for (size_t i = 0; i < fn->blocks.count; i++) {
     IrBlock* block = &fn->blocks.data[i];
-    cg_generate_block(out, fn, i, block);
+    cg_generate_block(ctx, out, fn, i, block);
   }
 
   fputs("POPFRAME", out);
@@ -308,6 +360,6 @@ void cg_generate(FILE* out, Ctx* ctx) {
 
   for (size_t i = 0; i < ctx->ir.functions.count; i++) {
     IrFunction* fn = &ctx->ir.functions.data[i];
-    cg_generate_function(out, fn);
+    cg_generate_function(ctx, out, fn);
   }
 }
