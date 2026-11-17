@@ -16,7 +16,8 @@
 
 #include <stdio.h>  // fprintf, stderr
 
-#include "ctx.h"  // Shared memory and error context
+#include "codegen.h"  // cg_generate
+#include "ctx.h"      // Shared memory and error context
 
 /**
  * @brief Entrypoint of the IFJ26 compiler
@@ -45,6 +46,9 @@ int main(int argc, char** argv) {
   ctx_allocate(&context);
 
   // Run the compiler
+
+  // Codegen
+  cg_generate(stdout, &context);
 
   // Free allocated resources and exit
   return ctx_free(&context);
