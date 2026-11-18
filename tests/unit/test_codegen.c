@@ -429,10 +429,10 @@ describe(codegen) {
       const char* result = read_output();
 
       assert(strstr(result, "CREATEFRAME") != NULL);
-      assert(strstr(result, "DEFVAR TF@arg_0") != NULL);
-      assert(strstr(result, "MOVE TF@arg_0 int@10") != NULL);
-      assert(strstr(result, "DEFVAR TF@arg_1") != NULL);
-      assert(strstr(result, "MOVE TF@arg_1 int@20") != NULL);
+      assert(strstr(result, "DEFVAR TF@slot_0") != NULL);
+      assert(strstr(result, "MOVE TF@slot_0 int@10") != NULL);
+      assert(strstr(result, "DEFVAR TF@slot_1") != NULL);
+      assert(strstr(result, "MOVE TF@slot_1 int@20") != NULL);
       assert(strstr(result, "CALL $$add") != NULL);
       assert(strstr(result, "MOVE LF@val_0 TF@%ret") != NULL);
     }
@@ -471,6 +471,7 @@ describe(codegen) {
       IrFunctionId fid = ir_add_function(ctx, "foo", IR_UNIT);
       ir_add_parameter(ctx, fid, "a", IR_INT);
       ir_add_parameter(ctx, fid, "b", IR_DOUBLE);
+      ir_add_slot(ctx, fid, "c", IR_INT);
       IrBlockId bid = ir_add_block(ctx, fid);
       ctx->ir.functions.data[fid].entrypoint = bid;
       ctx->ir.entrypoint = fid;
@@ -478,10 +479,9 @@ describe(codegen) {
       cg_generate(out, ctx);
       const char* result = read_output();
 
-      assert(strstr(result, "DEFVAR LF@slot_0") != NULL);
-      assert(strstr(result, "DEFVAR LF@slot_1") != NULL);
-      assert(strstr(result, "MOVE LF@slot_0 LF@arg_0") != NULL);
-      assert(strstr(result, "MOVE LF@slot_1 LF@arg_1") != NULL);
+      assert(strstr(result, "DEFVAR LF@slot_0") == NULL);
+      assert(strstr(result, "DEFVAR LF@slot_1") == NULL);
+      assert(strstr(result, "DEFVAR LF@slot_2") != NULL);
     }
 
     it("generates jump to entrypoint if entrypoint is not block 0") {

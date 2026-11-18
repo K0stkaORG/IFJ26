@@ -118,21 +118,12 @@ static void cg_print_localframe_slot(FILE* out, size_t id) {
 }
 
 /**
- * @brief Print TF@arg
+ * @brief Print TF@slot
  * @param out File to print to
- * @param id ID of arg
+ * @param id ID of slot
  */
-static void cg_print_tempframe_arg(FILE* out, size_t id) {
-  fprintf(out, "TF@arg_%zu", id);
-}
-
-/**
- * @brief Print LF@arg
- * @param out File to print to
- * @param id ID of arg
- */
-static void cg_print_localframe_arg(FILE* out, size_t id) {
-  fprintf(out, "LF@arg_%zu", id);
+static void cg_print_tempframe_slot(FILE* out, size_t id) {
+  fprintf(out, "TF@slot_%zu", id);
 }
 
 /**
@@ -344,11 +335,10 @@ static void cg_generate_instruction(Ctx* ctx, FILE* out, IrInstruction* inst) {
 
         for (size_t i = 0; i < inst->operands.call.arg_count; i++) {
           fputs("DEFVAR ", out);
-          cg_print_tempframe_arg(out, i);
+          cg_print_tempframe_slot(out, i);
           cg_print_nl(out);
-
           fputs("MOVE ", out);
-          cg_print_tempframe_arg(out, i);
+          cg_print_tempframe_slot(out, i);
           cg_print_ws(out);
           cg_print_operand(out, &inst->operands.call.args[i]);
           cg_print_nl(out);
@@ -481,17 +471,9 @@ static void cg_generate_function(Ctx* ctx, FILE* out, IrFunction* fn) {
     cg_print_nl(out);
   }
 
-  for (size_t i = 0; i < fn->slots.count; i++) {
+  for (size_t i = fn->parameter_count; i < fn->slots.count; i++) {
     fputs("DEFVAR ", out);
     cg_print_localframe_slot(out, i);
-    cg_print_nl(out);
-  }
-
-  for (size_t i = 0; i < fn->parameter_count; i++) {
-    fputs("MOVE ", out);
-    cg_print_localframe_slot(out, i);
-    cg_print_ws(out);
-    cg_print_localframe_arg(out, i);
     cg_print_nl(out);
   }
 
