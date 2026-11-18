@@ -40,7 +40,7 @@ bool lexer_populate_token(Ctx* ctx,
                           const char* lexeme,
                           size_t length) {
   token->value.text = NULL;
-  token->value_type = TEXT;
+  token->value_type = INTEGER;
   size_t prefix = 0;
   size_t suffix = 0;
   bool decode_escapes = false;

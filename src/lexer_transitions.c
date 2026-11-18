@@ -400,6 +400,10 @@ static const Transition triple_quote_text_double_quote_transitions[] = {
     KEEP(a7_triple_string_char, ALL_STACK_TOPS, T_STRING_WITH_TEXT),
 };  // q30
 
+static const Transition triple_string_state_transitions[] = {
+    KEEP(literal_quote, ALL_STACK_TOPS, TRIPLE_STRING_STATE),
+};  // q31
+
 static const Transition number_dot_transitions[] = {
     KEEP(a4_digits, ALL_STACK_TOPS, DOUBLE),
 };  // q32
@@ -583,6 +587,10 @@ static const Transition double_quote_transitions[] = {
     KEEP(a18_triple_s_string_char, ALL_STACK_TOPS, TRIPLE_S_STRING_STRING),
 };  // q73
 
+static const Transition triple_quote_transitions[] = {
+    KEEP(literal_quote, ALL_STACK_TOPS, TRIPLE_QUOTE),
+};  // q74
+
 static const Transition text_in_string_2_transitions[] = {
     KEEP(a17_s_string_char, ALL_STACK_TOPS, TEXT_IN_STRING_2),
     KEEP(literal_backslash, ALL_STACK_TOPS, ESCAPED_2),
@@ -636,7 +644,7 @@ static const StateTransitions state_transitions[UNIT_WITH_WHITESPACE + 1] = {
     [T_STRING_WITH_TEXT] = OUTGOING(t_string_with_text_transitions, false),
     [TRIPLE_QUOTE_TEXT_DOUBLE_QUOTE] =
         OUTGOING(triple_quote_text_double_quote_transitions, false),
-    [TRIPLE_STRING_STATE] = {.accepting = true},
+    [TRIPLE_STRING_STATE] = OUTGOING(triple_string_state_transitions, true),
     [NUMBER_DOT] = OUTGOING(number_dot_transitions, false),
     [DOUBLE] = OUTGOING(double_transitions, true),
     [NUMBER_DOT_NUMBER_E] = OUTGOING(number_dot_number_e_transitions, false),
@@ -683,7 +691,7 @@ static const StateTransitions state_transitions[UNIT_WITH_WHITESPACE + 1] = {
     [QUOTE_1] = {.accepting = true},
     [QUOTE_2] = OUTGOING(quote_2_transitions, true),
     [DOUBLE_QUOTE] = OUTGOING(double_quote_transitions, true),
-    [TRIPLE_QUOTE] = {.accepting = true},
+    [TRIPLE_QUOTE] = OUTGOING(triple_quote_transitions, true),
     [DOLLAR_EXPRESSION_START_STATE] = {.accepting = true},
     [DOLLAR_EXPRESSION_END_STATE] = {.accepting = true},
     [TEXT_IN_STRING_2] = OUTGOING(text_in_string_2_transitions, true),
