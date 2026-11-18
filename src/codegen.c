@@ -50,7 +50,7 @@ static void cg_print_preamble(FILE* out) {
  * @param value value to print
  */
 static void cg_print_int(FILE* out, IrInt value) {
-  fprintf(out, "int@%d", value);
+  fprintf(out, "int@%ld", value);
 }
 
 /**
