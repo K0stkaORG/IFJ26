@@ -70,11 +70,18 @@ Token next_token(Ctx* ctx) {
       }
     }
 
+    // top of the stack
+    int top = stack->count == 0 ? STACK_EMPTY : stack->data[stack->count - 1];
+
     // indentation handling
-    if (current == '\n' &&
+    if (current == '\n' && top != STACK_MULTILINE_S_STRING &&
+        top != STACK_S_STRING &&
         (current_state == START || current_state == WHITESPACE_STATE)) {
       ctx->lexer.indent_flag = INDENTATION;
       ctx->lexer.indent_level = 0;
+
+      ctx->lexer.line++;
+      ctx->lexer.column = 1;
       token.type = EOL_TOKEN;
       lexer_discard_consumed(ctx);
       return token;
@@ -126,8 +133,12 @@ Token next_token(Ctx* ctx) {
       THROW(E_LEXER_ERROR, "indentation error");
     }
 
-    // top of the stack
-    int top = stack->count == 0 ? STACK_EMPTY : stack->data[stack->count - 1];
+    if (current == '\n') {
+      ctx->lexer.line++;
+      ctx->lexer.column = 1;
+    } else if (current != EOF) {
+      ctx->lexer.column++;
+    }
 
     const Transition* transition =
         lexer_find_transition(current_state, current, top);
