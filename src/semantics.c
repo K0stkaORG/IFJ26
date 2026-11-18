@@ -2,7 +2,7 @@
 // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
 // semantic analysis tickets 02-09 and review fixes;
 // mattpocock-skills:implement, review judgement calls and fixes matching the
-// PDF spec"
+// PDF spec; mattpocock-skills:implement, AST wrap operation (ast_node_wrap)"
 // Changes: new module, semantic analysis. Each function notes what changed.
 /**
  * @file semantics.c
@@ -49,7 +49,7 @@ static size_t def_param_list(Ctx* ctx, AstNode* def, AstNode** params) {
   *params = NULL;
   if (ast_node_get_child_count(def) <= AST_DEF_PARAM_LIST)
     return 0;
-  ast_node_get_child(ctx, def, AST_DEF_PARAM_LIST, params);
+  *params = ast_node_child(ctx, def, AST_DEF_PARAM_LIST);
   return ast_node_get_child_count(*params);
 }
 
@@ -99,10 +99,8 @@ static IrType annotation_to_ir(Ctx* ctx, AstNode* annotation) {
 
 // Changes: new, the IR type of the parameter at index of a PARAM_LIST.
 static IrType param_type(Ctx* ctx, AstNode* params, size_t index) {
-  AstNode* param = NULL;
-  AstNode* type = NULL;
-  ast_node_get_child(ctx, params, index, &param);
-  ast_node_get_child(ctx, param, AST_PARAM_TYPE, &type);
+  AstNode* param = ast_node_child(ctx, params, index);
+  AstNode* type = ast_node_child(ctx, param, AST_PARAM_TYPE);
   return annotation_to_ir(ctx, type);
 }
 
@@ -147,60 +145,39 @@ static bool is_number(AstDataType type) {
   return type == AST_DATA_TYPE_INT || type == AST_DATA_TYPE_DOUBLE;
 }
 
-// Changes: new, wraps the Int expression at index of parent in an INT_TO_DOUBLE
-// at the same index. The wrapper is allocated first, so a THROW never leaves
-// the detached child without an owner.
-static void widen_child(Ctx* ctx, AstNode* parent, size_t index) {
-  AstNode* child = NULL;
-  ast_node_get_child(ctx, parent, index, &child);
-  if (ast_node_get_data_type(child) != AST_DATA_TYPE_INT)
+// Changes: new, wraps the Int expression in an INT_TO_DOUBLE in its parent's
+// slot (ast_node_wrap). The node stays valid, its slot now holds the wrapper.
+static void widen_node(Ctx* ctx, AstNode* node) {
+  if (ast_node_get_data_type(node) != AST_DATA_TYPE_INT)
     THROW(E_INTERNAL_ERROR, "only an Int can be widened, at %d:%d",
-          ast_node_get_line(child), ast_node_get_column(child));
-
-  AstNode* wrapper = NULL;
-  ast_node_create(ctx, &wrapper);
-  ast_node_set_type(wrapper, AST_NODE_INT_TO_DOUBLE);
+          ast_node_get_line(node), ast_node_get_column(node));
+  AstNode* wrapper = ast_node_wrap(ctx, node, AST_NODE_INT_TO_DOUBLE);
   ast_node_set_data_type(wrapper, AST_DATA_TYPE_DOUBLE);
-  ast_node_set_position(wrapper, ast_node_get_line(child),
-                        ast_node_get_column(child));
-
-  ast_node_detach_child(ctx, parent, index, &child);
-  ast_node_insert_child(ctx, parent, index, wrapper);
-  ast_node_append_child(ctx, wrapper, child);
 }
 
-// Changes: new, the checked expression at index of parent must fit target: same
-// type passes, Int is widened to Double, anything else stops with code (6
-// values, 5 arguments); what names the construct in the message.
+// Changes: new, the checked expression must fit target: same type passes, Int
+// is widened to Double in place, anything else stops with code (6 values, 5
+// arguments); what names the construct in the message.
 static void require_compatible(Ctx* ctx,
-                               AstNode* parent,
-                               size_t index,
+                               AstNode* node,
                                AstDataType target,
                                ExitCode code,
                                const char* what) {
-  AstNode* child = NULL;
-  ast_node_get_child(ctx, parent, index, &child);
-  AstDataType actual = expr_type(ctx, child);
+  AstDataType actual = expr_type(ctx, node);
   if (!is_compatible(actual, target))
     THROW(code, "%s at %d:%d needs %s but the value is %s", what,
-          ast_node_get_line(child), ast_node_get_column(child),
+          ast_node_get_line(node), ast_node_get_column(node),
           data_type_name(target), data_type_name(actual));
   if (actual == AST_DATA_TYPE_INT && target == AST_DATA_TYPE_DOUBLE)
-    widen_child(ctx, parent, index);
+    widen_node(ctx, node);
 }
 
-// Changes: new, the expression at index of parent must be a Boolean (exit 6),
-// nothing is widened.
-static void require_boolean(Ctx* ctx,
-                            AstNode* parent,
-                            size_t index,
-                            const char* what) {
-  AstNode* child = NULL;
-  ast_node_get_child(ctx, parent, index, &child);
-  AstDataType actual = expr_type(ctx, child);
+// Changes: new, the expression must be a Boolean (exit 6), nothing is widened.
+static void require_boolean(Ctx* ctx, AstNode* node, const char* what) {
+  AstDataType actual = expr_type(ctx, node);
   if (actual != AST_DATA_TYPE_BOOLEAN)
     THROW(E_SEMANTIC_TYPE_ERROR, "%s at %d:%d must be Boolean but is %s", what,
-          ast_node_get_line(child), ast_node_get_column(child),
+          ast_node_get_line(node), ast_node_get_column(node),
           data_type_name(actual));
 }
 
@@ -256,8 +233,7 @@ static void insert_members(Ctx* ctx, Sema* sema) {
 // global is exit 4, an omitted return type is a Unit placeholder until
 // inferred, a @main with a parameter is exit 5.
 static void collect_function(Ctx* ctx, Sema* sema, AstNode* def, size_t id) {
-  AstNode* ident = NULL;
-  ast_node_get_child(ctx, def, AST_DEF_IDENT, &ident);
+  AstNode* ident = ast_node_child(ctx, def, AST_DEF_IDENT);
   const char* name = ast_node_get_name(ident);
 
   if (symtable_lookup(sema->scope, (char*)name, false) != NULL)
@@ -265,8 +241,7 @@ static void collect_function(Ctx* ctx, Sema* sema, AstNode* def, size_t id) {
           "redefinition of function '%s' at %d:%d", name,
           ast_node_get_line(ident), ast_node_get_column(ident));
 
-  AstNode* rettype = NULL;
-  ast_node_get_child(ctx, def, AST_DEF_RETTYPE, &rettype);
+  AstNode* rettype = ast_node_child(ctx, def, AST_DEF_RETTYPE);
   IrType return_type = IR_UNIT;
   if (ast_node_get_type(rettype) != AST_NODE_NONE)
     return_type = annotation_to_ir(ctx, rettype);
@@ -298,8 +273,7 @@ static void collect_functions(Ctx* ctx, Sema* sema) {
   size_t mains = 0;
   size_t count = ast_node_get_child_count(sema->program);
   for (size_t id = 0; id < count; id++) {
-    AstNode* def = NULL;
-    ast_node_get_child(ctx, sema->program, id, &def);
+    AstNode* def = ast_node_child(ctx, sema->program, id);
     if (ast_node_get_type(def) != AST_NODE_DEF)
       THROW(E_INTERNAL_ERROR, "unexpected top-level node at %d:%d",
             ast_node_get_line(def), ast_node_get_column(def));
@@ -307,8 +281,7 @@ static void collect_functions(Ctx* ctx, Sema* sema) {
     if (ast_node_get_flags(def) & (unsigned)AST_FLAG_MAIN) {
       mains++;
       if (mains > 1) {
-        AstNode* ident = NULL;
-        ast_node_get_child(ctx, def, AST_DEF_IDENT, &ident);
+        AstNode* ident = ast_node_child(ctx, def, AST_DEF_IDENT);
         THROW(E_SEMANTIC_REDEFINITION_ERROR,
               "more than one @main function, second one '%s' at %d:%d",
               ast_node_get_name(ident), ast_node_get_line(ident),
@@ -380,10 +353,8 @@ static AstNode* def_of_symbol(Ctx* ctx,
                               const SymtableData* symbol) {
   if (symbol->ir_index >= ast_node_get_child_count(sema->program))
     return NULL;
-  AstNode* def = NULL;
-  AstNode* ident = NULL;
-  ast_node_get_child(ctx, sema->program, symbol->ir_index, &def);
-  ast_node_get_child(ctx, def, AST_DEF_IDENT, &ident);
+  AstNode* def = ast_node_child(ctx, sema->program, symbol->ir_index);
+  AstNode* ident = ast_node_child(ctx, def, AST_DEF_IDENT);
   return ast_node_get_symbol(ident) == symbol ? def : NULL;
 }
 
@@ -398,8 +369,7 @@ static void check_expr_children(Ctx* ctx,
                                 size_t first) {
   size_t count = ast_node_get_child_count(node);
   for (size_t i = first; i < count; i++) {
-    AstNode* child = NULL;
-    ast_node_get_child(ctx, node, i, &child);
+    AstNode* child = ast_node_child(ctx, node, i);
     check_expr(ctx, sema, child);
   }
 }
@@ -408,19 +378,16 @@ static void check_expr_children(Ctx* ctx,
 // (it still sees a shadowed outer name); it gives the type, or must fit the
 // annotation (exit 6).
 static void check_val_var(Ctx* ctx, Sema* sema, AstNode* node) {
-  AstNode* ident = NULL;
-  AstNode* annotation = NULL;
-  AstNode* init = NULL;
-  ast_node_get_child(ctx, node, AST_VAL_IDENT, &ident);
-  ast_node_get_child(ctx, node, AST_VAL_TYPE, &annotation);
-  ast_node_get_child(ctx, node, AST_VAL_INIT, &init);
+  AstNode* ident = ast_node_child(ctx, node, AST_VAL_IDENT);
+  AstNode* annotation = ast_node_child(ctx, node, AST_VAL_TYPE);
+  AstNode* init = ast_node_child(ctx, node, AST_VAL_INIT);
 
   check_expr(ctx, sema, init);
 
   IrType type = IR_UNIT;
   if (ast_node_get_type(annotation) != AST_NODE_NONE) {
     type = annotation_to_ir(ctx, annotation);
-    require_compatible(ctx, node, AST_VAL_INIT, ir_to_data_type(ctx, type),
+    require_compatible(ctx, init, ir_to_data_type(ctx, type),
                        E_SEMANTIC_TYPE_ERROR, "initializer");
   } else {
     type = data_type_to_ir(ctx, expr_type(ctx, init));
@@ -450,15 +417,12 @@ static void check_assign_target(Ctx* ctx, Sema* sema, AstNode* target) {
 // Changes: new, an ASSIGN: writable target, then a value compatible with its
 // type (exit 6).
 static void check_assign(Ctx* ctx, Sema* sema, AstNode* node) {
-  AstNode* target = NULL;
-  AstNode* value = NULL;
-  ast_node_get_child(ctx, node, AST_ASSIGN_IDENT, &target);
-  ast_node_get_child(ctx, node, AST_ASSIGN_VALUE, &value);
+  AstNode* target = ast_node_child(ctx, node, AST_ASSIGN_IDENT);
+  AstNode* value = ast_node_child(ctx, node, AST_ASSIGN_VALUE);
   check_assign_target(ctx, sema, target);
   const SymtableData* symbol = ast_node_get_symbol(target);
   check_expr(ctx, sema, value);
-  require_compatible(ctx, node, AST_ASSIGN_VALUE,
-                     ir_to_data_type(ctx, symbol->ir_type),
+  require_compatible(ctx, value, ir_to_data_type(ctx, symbol->ir_type),
                      E_SEMANTIC_TYPE_ERROR, "assigned value");
 }
 
@@ -492,8 +456,7 @@ static const ResultRule IF_EXPRESSION_RULE = {
 // Changes: new, the body result rule of a DEF, the one place that knows whether
 // a function declares its return type.
 static ResultRule body_rule(Ctx* ctx, AstNode* def) {
-  AstNode* rettype = NULL;
-  ast_node_get_child(ctx, def, AST_DEF_RETTYPE, &rettype);
+  AstNode* rettype = ast_node_child(ctx, def, AST_DEF_RETTYPE);
   ResultRule rule = {
       .declared = false, .type = AST_DATA_TYPE_UNIT, .else_required = false};
   if (ast_node_get_type(rettype) != AST_NODE_NONE) {
@@ -507,8 +470,7 @@ static ResultRule body_rule(Ctx* ctx, AstNode* def) {
 // declared return type any return is exit 6, a declared Unit discards the
 // value, any other type needs a compatible value.
 static void check_return(Ctx* ctx, Sema* sema, AstNode* node) {
-  AstNode* value = NULL;
-  ast_node_get_child(ctx, node, AST_RETURN_VALUE, &value);
+  AstNode* value = ast_node_child(ctx, node, AST_RETURN_VALUE);
   bool has_value = ast_node_get_type(value) != AST_NODE_NONE;
   if (has_value)
     check_expr(ctx, sema, value);
@@ -525,8 +487,8 @@ static void check_return(Ctx* ctx, Sema* sema, AstNode* node) {
           "bare return at %d:%d in a function returning %s",
           ast_node_get_line(node), ast_node_get_column(node),
           data_type_name(rule.type));
-  require_compatible(ctx, node, AST_RETURN_VALUE, rule.type,
-                     E_SEMANTIC_TYPE_ERROR, "returned value");
+  require_compatible(ctx, value, rule.type, E_SEMANTIC_TYPE_ERROR,
+                     "returned value");
 }
 
 // Changes: new, whether the rule asks for a value of a declared non-Unit type.
@@ -548,27 +510,26 @@ static bool is_unit_statement(AstNodeType type) {
 }
 
 // Changes: new, widens what a branch of an if expression yields: the last
-// statement of a BLOCK, both branches of an else-if IF, or an Int expression. A
-// branch without a value is left alone.
+// statement of a BLOCK, both branches of an else-if IF, or an Int expression
+// (wrapped in place). A branch without a value is left alone.
 // NOLINTNEXTLINE(misc-no-recursion)
-static void widen_branch(Ctx* ctx, AstNode* parent, size_t index) {
-  AstNode* node = NULL;
-  ast_node_get_child(ctx, parent, index, &node);
+static void widen_branch(Ctx* ctx, AstNode* node) {
   switch (ast_node_get_type(node)) {
     case AST_NODE_BLOCK:
       if (ast_node_get_child_count(node) > 0)
-        widen_branch(ctx, node, ast_node_get_child_count(node) - 1);
+        widen_branch(
+            ctx, ast_node_child(ctx, node, ast_node_get_child_count(node) - 1));
       break;
     case AST_NODE_IF:
-      widen_branch(ctx, node, AST_IF_THEN);
-      widen_branch(ctx, node, AST_IF_ELSE);
+      widen_branch(ctx, ast_node_child(ctx, node, AST_IF_THEN));
+      widen_branch(ctx, ast_node_child(ctx, node, AST_IF_ELSE));
       ast_node_set_data_type(node, AST_DATA_TYPE_DOUBLE);
       break;
     case AST_NODE_NONE:
     case AST_NODE_RETURN:
       break;
     default:
-      widen_child(ctx, parent, index);
+      widen_node(ctx, node);
       break;
   }
 }
@@ -595,32 +556,28 @@ static AstDataType unify_branches(Ctx* ctx,
           "branches of the if at %d:%d have different types %s and %s",
           ast_node_get_line(node), ast_node_get_column(node),
           data_type_name(then_type), data_type_name(else_type));
-  widen_branch(ctx, node,
-               then_type == AST_DATA_TYPE_INT ? AST_IF_THEN : AST_IF_ELSE);
+  size_t int_side = then_type == AST_DATA_TYPE_INT ? AST_IF_THEN : AST_IF_ELSE;
+  widen_branch(ctx, ast_node_child(ctx, node, int_side));
   return AST_DATA_TYPE_DOUBLE;
 }
 
 static AstDataType check_result_stmt(Ctx* ctx,
                                      Sema* sema,
-                                     AstNode* parent,
-                                     size_t index,
+                                     AstNode* stmt,
                                      const ResultRule* rule);
 static AstDataType check_block(Ctx* ctx,
                                Sema* sema,
                                AstNode* block,
                                const ResultRule* rule);
 
-// Changes: new, checks the branch at index of an IF under the rule and returns
-// what it yields (NULL rule: a statement, Unit).
+// Changes: new, checks a branch of an IF under the rule and returns what it
+// yields (NULL rule: a statement, Unit).
 static AstDataType check_branch(Ctx* ctx,
                                 Sema* sema,
-                                AstNode* node,
-                                size_t index,
+                                AstNode* branch,
                                 const ResultRule* rule) {
   if (rule != NULL)
-    return check_result_stmt(ctx, sema, node, index, rule);
-  AstNode* branch = NULL;
-  ast_node_get_child(ctx, node, index, &branch);
+    return check_result_stmt(ctx, sema, branch, rule);
   check_stmt(ctx, sema, branch);
   return AST_DATA_TYPE_UNIT;
 }
@@ -634,14 +591,13 @@ static AstDataType check_if_node(Ctx* ctx,
                                  Sema* sema,
                                  AstNode* node,
                                  const ResultRule* rule) {
-  AstNode* cond = NULL;
-  AstNode* else_branch = NULL;
-  ast_node_get_child(ctx, node, AST_IF_COND, &cond);
-  ast_node_get_child(ctx, node, AST_IF_ELSE, &else_branch);
+  AstNode* cond = ast_node_child(ctx, node, AST_IF_COND);
+  AstNode* else_branch = ast_node_child(ctx, node, AST_IF_ELSE);
   check_expr(ctx, sema, cond);
-  require_boolean(ctx, node, AST_IF_COND, "condition of if");
+  require_boolean(ctx, cond, "condition of if");
 
-  AstDataType then_type = check_branch(ctx, sema, node, AST_IF_THEN, rule);
+  AstNode* then_branch = ast_node_child(ctx, node, AST_IF_THEN);
+  AstDataType then_type = check_branch(ctx, sema, then_branch, rule);
   AstDataType else_type = AST_DATA_TYPE_UNIT;
   switch (ast_node_get_type(else_branch)) {
     case AST_NODE_NONE:
@@ -654,7 +610,7 @@ static AstDataType check_if_node(Ctx* ctx,
       else_type = check_if_node(ctx, sema, else_branch, rule);
       break;
     default:
-      else_type = check_branch(ctx, sema, node, AST_IF_ELSE, rule);
+      else_type = check_branch(ctx, sema, else_branch, rule);
       break;
   }
 
@@ -673,18 +629,15 @@ static void check_if(Ctx* ctx, Sema* sema, AstNode* node) {
   (void)check_if_node(ctx, sema, node, as_expr ? &IF_EXPRESSION_RULE : NULL);
 }
 
-// Changes: new, checks the last statement at index of parent under the rule and
-// returns what it yields: BLOCK/IF by recursion (an EXPR-flagged IF is an if
-// expression wherever it stands), return UNKNOWN, val/var/assign/while/for
-// Unit, an expression its type, widened to a declared type.
+// Changes: new, checks the last statement under the rule and returns what it
+// yields: BLOCK/IF by recursion (an EXPR-flagged IF is an if expression
+// wherever it stands), return UNKNOWN, val/var/assign/while/for Unit, an
+// expression its type, widened in place to a declared type.
 // NOLINTNEXTLINE(misc-no-recursion)
 static AstDataType check_result_stmt(Ctx* ctx,
                                      Sema* sema,
-                                     AstNode* parent,
-                                     size_t index,
+                                     AstNode* stmt,
                                      const ResultRule* rule) {
-  AstNode* stmt = NULL;
-  ast_node_get_child(ctx, parent, index, &stmt);
   AstNodeType kind = ast_node_get_type(stmt);
   if (kind == AST_NODE_BLOCK)
     return check_block(ctx, sema, stmt, rule);
@@ -694,8 +647,8 @@ static AstDataType check_result_stmt(Ctx* ctx,
       if (type == AST_DATA_TYPE_UNKNOWN || !rule->declared)
         return type;
       if (must_yield_value(rule))
-        require_compatible(ctx, parent, index, rule->type,
-                           E_SEMANTIC_TYPE_ERROR, "result of the function");
+        require_compatible(ctx, stmt, rule->type, E_SEMANTIC_TYPE_ERROR,
+                           "result of the function");
       return rule->type;
     }
     ResultRule nested = *rule;
@@ -719,7 +672,7 @@ static AstDataType check_result_stmt(Ctx* ctx,
   if (!rule->declared)
     return expr_type(ctx, stmt);
   if (must_yield_value(rule))
-    require_compatible(ctx, parent, index, rule->type, E_SEMANTIC_TYPE_ERROR,
+    require_compatible(ctx, stmt, rule->type, E_SEMANTIC_TYPE_ERROR,
                        "result of the function");
   return rule->type;
 }
@@ -743,10 +696,10 @@ static AstDataType check_block(Ctx* ctx,
   AstDataType result = AST_DATA_TYPE_UNIT;
   for (size_t i = 0; i < count; i++) {
     if (rule != NULL && i + 1 == count) {
-      result = check_result_stmt(ctx, sema, block, i, rule);
+      AstNode* last = ast_node_child(ctx, block, i);
+      result = check_result_stmt(ctx, sema, last, rule);
     } else {
-      AstNode* stmt = NULL;
-      ast_node_get_child(ctx, block, i, &stmt);
+      AstNode* stmt = ast_node_child(ctx, block, i);
       check_stmt(ctx, sema, stmt);
     }
   }
@@ -757,12 +710,10 @@ static AstDataType check_block(Ctx* ctx,
 // Changes: new, a WHILE: Boolean condition in the enclosing scope, body in its
 // own scope.
 static void check_while(Ctx* ctx, Sema* sema, AstNode* node) {
-  AstNode* cond = NULL;
-  AstNode* body = NULL;
-  ast_node_get_child(ctx, node, AST_WHILE_COND, &cond);
-  ast_node_get_child(ctx, node, AST_WHILE_BODY, &body);
+  AstNode* cond = ast_node_child(ctx, node, AST_WHILE_COND);
+  AstNode* body = ast_node_child(ctx, node, AST_WHILE_BODY);
   check_expr(ctx, sema, cond);
-  require_boolean(ctx, node, AST_WHILE_COND, "condition of while");
+  require_boolean(ctx, cond, "condition of while");
   check_stmt(ctx, sema, body);
 }
 
@@ -771,8 +722,7 @@ static void check_while(Ctx* ctx, Sema* sema, AstNode* node) {
 static bool is_zero_literal(Ctx* ctx, AstNode* node) {
   if (ast_node_get_type(node) == AST_NODE_NEG &&
       ast_node_get_child_count(node) == 1) {
-    AstNode* operand = NULL;
-    ast_node_get_child(ctx, node, AST_UNARY_OPERAND, &operand);
+    AstNode* operand = ast_node_child(ctx, node, AST_UNARY_OPERAND);
     node = operand;
   }
   return ast_node_get_type(node) == AST_NODE_INT_LIT &&
@@ -784,8 +734,7 @@ static bool is_zero_literal(Ctx* ctx, AstNode* node) {
 static void check_range(Ctx* ctx, Sema* sema, AstNode* node) {
   size_t count = ast_node_get_child_count(node);
   for (size_t i = 0; i < count; i++) {
-    AstNode* child = NULL;
-    ast_node_get_child(ctx, node, i, &child);
+    AstNode* child = ast_node_child(ctx, node, i);
     if (ast_node_get_type(child) == AST_NODE_NONE)
       continue;
     check_expr(ctx, sema, child);
@@ -805,12 +754,9 @@ static void check_range(Ctx* ctx, Sema* sema, AstNode* node) {
 // scope (owned by the FOR) with the read-only Int loop variable, Boolean guards
 // in it, the body scope nested inside.
 static void check_for(Ctx* ctx, Sema* sema, AstNode* node) {
-  AstNode* ident = NULL;
-  AstNode* source = NULL;
-  AstNode* body = NULL;
-  ast_node_get_child(ctx, node, AST_FOR_IDENT, &ident);
-  ast_node_get_child(ctx, node, AST_FOR_SOURCE, &source);
-  ast_node_get_child(ctx, node, AST_FOR_BODY, &body);
+  AstNode* ident = ast_node_child(ctx, node, AST_FOR_IDENT);
+  AstNode* source = ast_node_child(ctx, node, AST_FOR_SOURCE);
+  AstNode* body = ast_node_child(ctx, node, AST_FOR_BODY);
 
   check_expr(ctx, sema, source);
 
@@ -820,10 +766,9 @@ static void check_for(Ctx* ctx, Sema* sema, AstNode* node) {
   ast_node_set_data_type(ident, AST_DATA_TYPE_INT);
   size_t count = ast_node_get_child_count(node);
   for (size_t i = AST_FOR_FIRST_GUARD; i < count; i++) {
-    AstNode* guard = NULL;
-    ast_node_get_child(ctx, node, i, &guard);
+    AstNode* guard = ast_node_child(ctx, node, i);
     check_expr(ctx, sema, guard);
-    require_boolean(ctx, node, i, "guard of for");
+    require_boolean(ctx, guard, "guard of for");
   }
   check_stmt(ctx, sema, body);
   sema->scope = outer;
@@ -923,8 +868,9 @@ static AstDataType unify_numbers(Ctx* ctx,
     operand_error(ctx, node, left, right);
   if (left == right)
     return left;
-  widen_child(ctx, node,
-              left == AST_DATA_TYPE_INT ? AST_BINARY_LEFT : AST_BINARY_RIGHT);
+  size_t int_side =
+      left == AST_DATA_TYPE_INT ? AST_BINARY_LEFT : AST_BINARY_RIGHT;
+  widen_node(ctx, ast_node_child(ctx, node, int_side));
   return AST_DATA_TYPE_DOUBLE;
 }
 
@@ -933,10 +879,8 @@ static AstDataType unify_numbers(Ctx* ctx,
 // anything else is exit 6.
 static void check_binary(Ctx* ctx, Sema* sema, AstNode* node) {
   check_expr_children(ctx, sema, node, 0);
-  AstNode* left = NULL;
-  AstNode* right = NULL;
-  ast_node_get_child(ctx, node, AST_BINARY_LEFT, &left);
-  ast_node_get_child(ctx, node, AST_BINARY_RIGHT, &right);
+  AstNode* left = ast_node_child(ctx, node, AST_BINARY_LEFT);
+  AstNode* right = ast_node_child(ctx, node, AST_BINARY_RIGHT);
   AstDataType lt = expr_type(ctx, left);
   AstDataType rt = expr_type(ctx, right);
 
@@ -985,8 +929,7 @@ static void check_binary(Ctx* ctx, Sema* sema, AstNode* node) {
 // type); anything else is exit 6.
 static void check_unary(Ctx* ctx, Sema* sema, AstNode* node) {
   check_expr_children(ctx, sema, node, 0);
-  AstNode* operand = NULL;
-  ast_node_get_child(ctx, node, AST_UNARY_OPERAND, &operand);
+  AstNode* operand = ast_node_child(ctx, node, AST_UNARY_OPERAND);
   AstDataType type = expr_type(ctx, operand);
   if (ast_node_get_type(node) == AST_NODE_NOT) {
     if (type != AST_DATA_TYPE_BOOLEAN)
@@ -1015,8 +958,7 @@ static AstDataType call_result_type(Ctx* ctx,
     unsigned flags = ast_node_get_flags(def);
     if (!body_rule(ctx, def).declared) {
       if (flags & (unsigned)AST_FLAG_DEF_CHECKING) {
-        AstNode* ident = NULL;
-        ast_node_get_child(ctx, def, AST_DEF_IDENT, &ident);
+        AstNode* ident = ast_node_child(ctx, def, AST_DEF_IDENT);
         THROW(E_SEMANTIC_TYPE_ERROR,
               "function '%s' at %d:%d is used while its return type is being "
               "inferred, give it a declared return type",
@@ -1052,7 +994,7 @@ static void check_call_arguments(Ctx* ctx,
     IrType param = symbol->param_types[i];
     if (builtin && param == IR_UNIT)
       continue;
-    require_compatible(ctx, node, AST_CALL_FIRST_ARG + i,
+    require_compatible(ctx, ast_node_child(ctx, node, AST_CALL_FIRST_ARG + i),
                        ir_to_data_type(ctx, param), E_SEMANTIC_ARGUMENT_ERROR,
                        "an argument");
   }
@@ -1062,8 +1004,7 @@ static void check_call_arguments(Ctx* ctx,
 // for built-ins, arguments checked left to right and against the signature,
 // type from call_result_type.
 static void check_call(Ctx* ctx, Sema* sema, AstNode* node) {
-  AstNode* callee = NULL;
-  ast_node_get_child(ctx, node, AST_CALL_CALLEE, &callee);
+  AstNode* callee = ast_node_child(ctx, node, AST_CALL_CALLEE);
   if (ast_node_get_type(callee) != AST_NODE_IDENT)
     THROW(E_INTERNAL_ERROR, "callee at %d:%d is not a function name",
           ast_node_get_line(callee), ast_node_get_column(callee));
@@ -1107,8 +1048,7 @@ static bool member_exists_elsewhere(Ctx* ctx,
 // name exit 3.
 static void check_member(Ctx* ctx, Sema* sema, AstNode* node) {
   check_expr_children(ctx, sema, node, 0);
-  AstNode* receiver = NULL;
-  ast_node_get_child(ctx, node, AST_MEMBER_RECEIVER, &receiver);
+  AstNode* receiver = ast_node_child(ctx, node, AST_MEMBER_RECEIVER);
   AstDataType receiver_type = expr_type(ctx, receiver);
   const char* member = ast_node_get_name(node);
 
@@ -1212,15 +1152,13 @@ static void check_stmt(Ctx* ctx, Sema* sema, AstNode* node) {
 // Changes: new, checks the DEF's body BLOCK in its parameter scope under
 // body_rule; an omitted return type becomes the inferred type.
 static void check_body(Ctx* ctx, Sema* sema) {
-  AstNode* body = NULL;
-  ast_node_get_child(ctx, sema->def, AST_DEF_BODY, &body);
+  AstNode* body = ast_node_child(ctx, sema->def, AST_DEF_BODY);
   ResultRule rule = body_rule(ctx, sema->def);
   AstDataType result = check_block(ctx, sema, body, &rule);
   if (rule.declared)
     return;
 
-  AstNode* ident = NULL;
-  ast_node_get_child(ctx, sema->def, AST_DEF_IDENT, &ident);
+  AstNode* ident = ast_node_child(ctx, sema->def, AST_DEF_IDENT);
   SymtableData* symbol = symtable_lookup(
       &ctx->global_symtable, (char*)ast_node_get_name(ident), false);
   if (symbol == NULL)
@@ -1242,12 +1180,9 @@ static void check_def(Ctx* ctx, Sema* sema, AstNode* def) {
                      ast_node_get_flags(def) | (unsigned)AST_FLAG_DEF_CHECKING);
   sema->scope = ast_node_attach_scope(ctx, def, &ctx->global_symtable);
   for (size_t i = 0; i < param_count; i++) {
-    AstNode* param = NULL;
-    AstNode* ident = NULL;
-    AstNode* type = NULL;
-    ast_node_get_child(ctx, params, i, &param);
-    ast_node_get_child(ctx, param, AST_PARAM_IDENT, &ident);
-    ast_node_get_child(ctx, param, AST_PARAM_TYPE, &type);
+    AstNode* param = ast_node_child(ctx, params, i);
+    AstNode* ident = ast_node_child(ctx, param, AST_PARAM_IDENT);
+    AstNode* type = ast_node_child(ctx, param, AST_PARAM_TYPE);
     declare_variable(ctx, sema, ident, annotation_to_ir(ctx, type), true, i);
   }
 
@@ -1260,8 +1195,7 @@ static void check_def(Ctx* ctx, Sema* sema, AstNode* def) {
   ast_node_set_flags(
       def, (ast_node_get_flags(def) & ~(unsigned)AST_FLAG_DEF_CHECKING) |
                (unsigned)AST_FLAG_DEF_CHECKED);
-  AstNode* ident = NULL;
-  ast_node_get_child(ctx, def, AST_DEF_IDENT, &ident);
+  AstNode* ident = ast_node_child(ctx, def, AST_DEF_IDENT);
   if ((ast_node_get_flags(def) & (unsigned)AST_FLAG_MAIN) &&
       ast_node_get_symbol(ident)->ir_type != IR_UNIT)
     THROW(E_SEMANTIC_TYPE_ERROR,
@@ -1275,8 +1209,7 @@ static void check_def(Ctx* ctx, Sema* sema, AstNode* def) {
 static void check_functions(Ctx* ctx, Sema* sema) {
   size_t count = ast_node_get_child_count(sema->program);
   for (size_t i = 0; i < count; i++) {
-    AstNode* def = NULL;
-    ast_node_get_child(ctx, sema->program, i, &def);
+    AstNode* def = ast_node_child(ctx, sema->program, i);
     if (ast_node_get_flags(def) & (unsigned)AST_FLAG_DEF_CHECKED)
       continue;
     check_def(ctx, sema, def);
@@ -1292,8 +1225,7 @@ static bool calls_reach(Ctx* ctx,
                         AstNode* node,
                         const AstNode* target) {
   if (ast_node_get_type(node) == AST_NODE_CALL) {
-    AstNode* callee = NULL;
-    ast_node_get_child(ctx, node, AST_CALL_CALLEE, &callee);
+    AstNode* callee = ast_node_child(ctx, node, AST_CALL_CALLEE);
     AstNode* def = def_of_symbol(ctx, sema, ast_node_get_symbol(callee));
     if (def == target)
       return true;
@@ -1301,16 +1233,14 @@ static bool calls_reach(Ctx* ctx,
         !(ast_node_get_flags(def) & (unsigned)AST_FLAG_DEF_CHECKING)) {
       ast_node_set_flags(
           def, ast_node_get_flags(def) | (unsigned)AST_FLAG_DEF_CHECKING);
-      AstNode* body = NULL;
-      ast_node_get_child(ctx, def, AST_DEF_BODY, &body);
+      AstNode* body = ast_node_child(ctx, def, AST_DEF_BODY);
       if (calls_reach(ctx, sema, body, target))
         return true;
     }
   }
   size_t count = ast_node_get_child_count(node);
   for (size_t i = 0; i < count; i++) {
-    AstNode* child = NULL;
-    ast_node_get_child(ctx, node, i, &child);
+    AstNode* child = ast_node_child(ctx, node, i);
     if (calls_reach(ctx, sema, child, target))
       return true;
   }
@@ -1322,22 +1252,18 @@ static bool calls_reach(Ctx* ctx,
 static void check_recursion(Ctx* ctx, const Sema* sema) {
   size_t count = ast_node_get_child_count(sema->program);
   for (size_t i = 0; i < count; i++) {
-    AstNode* def = NULL;
-    ast_node_get_child(ctx, sema->program, i, &def);
+    AstNode* def = ast_node_child(ctx, sema->program, i);
     if (body_rule(ctx, def).declared)
       continue;
-    AstNode* body = NULL;
-    ast_node_get_child(ctx, def, AST_DEF_BODY, &body);
+    AstNode* body = ast_node_child(ctx, def, AST_DEF_BODY);
     bool recursive = calls_reach(ctx, sema, body, def);
     for (size_t j = 0; j < count; j++) {
-      AstNode* other = NULL;
-      ast_node_get_child(ctx, sema->program, j, &other);
+      AstNode* other = ast_node_child(ctx, sema->program, j);
       ast_node_set_flags(
           other, ast_node_get_flags(other) & ~(unsigned)AST_FLAG_DEF_CHECKING);
     }
     if (recursive) {
-      AstNode* ident = NULL;
-      ast_node_get_child(ctx, def, AST_DEF_IDENT, &ident);
+      AstNode* ident = ast_node_child(ctx, def, AST_DEF_IDENT);
       THROW(E_SEMANTIC_TYPE_ERROR,
             "recursive function '%s' at %d:%d needs a declared return type",
             ast_node_get_name(ident), ast_node_get_line(ident),
