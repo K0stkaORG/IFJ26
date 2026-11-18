@@ -18,14 +18,26 @@
 
 // Code structure
 
+/**
+ * @brief Print new line
+ * @param out File to print to
+ */
 static void cg_print_nl(FILE* out) {
   fputs("\n", out);
 }
 
+/**
+ * @brief Print a space
+ * @param out File to print to
+ */
 static void cg_print_ws(FILE* out) {
   fputs(" ", out);
 }
 
+/**
+ * @brief Print IFJcode26 preamble
+ * @param out File to print to
+ */
 static void cg_print_preamble(FILE* out) {
   fputs(".IFJcode26", out);
   cg_print_nl(out);
@@ -33,22 +45,46 @@ static void cg_print_preamble(FILE* out) {
 
 // Data types
 
+/**
+ * @brief Print int in IFJcode26
+ * @param out File to print to
+ * @param value value to print
+ */
 static void cg_print_int(FILE* out, IrInt value) {
   fprintf(out, "int@%d", value);
 }
 
+/**
+ * @brief Print float in IFJcode26
+ * @param out File to print to
+ * @param value value to print
+ */
 static void cg_print_float(FILE* out, IrDouble value) {
   fprintf(out, "float@%a", value);
 }
 
+/**
+ * @brief Print bool in IFJcode26
+ * @param out File to print to
+ * @param value value to print
+ */
 static void cg_print_bool(FILE* out, IrBool value) {
   fputs(value ? "bool@true" : "bool@false", out);
 }
 
+/**
+ * @brief Print nil in IFJcode26
+ * @param out File to print to
+ */
 static void cg_print_nil(FILE* out) {
   fputs("nil@nil", out);
 }
 
+/**
+ * @brief Escape and print string in IFJcode26
+ * @param out File to print to
+ * @param str value to print
+ */
 static void cg_print_string(FILE* out, char* str) {
   fputs("string@", out);
   for (size_t i = 0; i < strlen(str); i++) {
@@ -62,22 +98,47 @@ static void cg_print_string(FILE* out, char* str) {
 
 // Operands
 
+/**
+ * @brief Print LF@val
+ * @param out File to print to
+ * @param id ID of value
+ */
 static void cg_print_localframe_val(FILE* out, size_t id) {
   fprintf(out, "LF@val_%zu", id);
 }
 
+/**
+ * @brief Print LF@slot
+ * @param out File to print to
+ * @param id ID of slot
+ */
 static void cg_print_localframe_slot(FILE* out, size_t id) {
   fprintf(out, "LF@slot_%zu", id);
 }
 
+/**
+ * @brief Print TF@arg
+ * @param out File to print to
+ * @param id ID of arg
+ */
 static void cg_print_tempframe_arg(FILE* out, size_t id) {
   fprintf(out, "TF@arg_%zu", id);
 }
 
+/**
+ * @brief Print LF@arg
+ * @param out File to print to
+ * @param id ID of arg
+ */
 static void cg_print_localframe_arg(FILE* out, size_t id) {
   fprintf(out, "LF@arg_%zu", id);
 }
 
+/**
+ * @brief Print operand
+ * @param out File to print to
+ * @param op operand
+ */
 static void cg_print_operand(FILE* out, IrOperand* op) {
   switch (op->type) {
     case IR_OP_VALUE:
@@ -110,6 +171,12 @@ static void cg_print_operand(FILE* out, IrOperand* op) {
 // TF@%ret into LF@val_<result> if a result is expected." Changes: Add helper
 // function cg_print_builtin_call for emitting built-in runtime function calls
 // with argument passing and return value retrieval.
+/**
+ * @brief Print call of builtin function
+ * @param out File to print to
+ * @param name name of the function
+ * @param inst instruction
+ */
 static void cg_print_builtin_call(FILE* out,
                                   const char* name,
                                   IrInstruction* inst) {
@@ -138,6 +205,11 @@ static void cg_print_builtin_call(FILE* out,
   }
 }
 
+/**
+ * @brief Print builtin function execution (call or inline)
+ * @param out File to print to
+ * @param inst instruction
+ */
 static void cg_print_builtin(FILE* out, IrInstruction* inst) {
   switch (inst->operands.call.type) {
     // inline
@@ -196,6 +268,12 @@ static void cg_print_builtin(FILE* out, IrInstruction* inst) {
 
 // Instructions
 
+/**
+ * @brief Print unary instruction
+ * @param out File to print to
+ * @param opcode opcode
+ * @param inst instruction
+ */
 static void cg_print_unary_inst(FILE* out, char* opcode, IrInstruction* inst) {
   fputs(opcode, out);
   cg_print_ws(out);
@@ -205,6 +283,12 @@ static void cg_print_unary_inst(FILE* out, char* opcode, IrInstruction* inst) {
   cg_print_nl(out);
 }
 
+/**
+ * @brief Print binary instruction
+ * @param out File to print to
+ * @param opcode opcode
+ * @param inst instruction
+ */
 static void cg_print_binary_inst(FILE* out, char* opcode, IrInstruction* inst) {
   fputs(opcode, out);
   cg_print_ws(out);
@@ -216,6 +300,11 @@ static void cg_print_binary_inst(FILE* out, char* opcode, IrInstruction* inst) {
   cg_print_nl(out);
 }
 
+/**
+ * @brief Print negated value of result
+ * @param out File to print to
+ * @param result result
+ */
 static void cg_print_not_result(FILE* out, size_t result) {
   fputs("NOT ", out);
   cg_print_localframe_val(out, result);
@@ -224,6 +313,12 @@ static void cg_print_not_result(FILE* out, size_t result) {
   cg_print_nl(out);
 }
 
+/**
+ * @brief Generate inline instruction
+ * @param ctx Context
+ * @param out File to print to
+ * @param inst instruction
+ */
 static void cg_generate_instruction(Ctx* ctx, FILE* out, IrInstruction* inst) {
   switch (inst->type) {
     case IR_INST_ADD:
@@ -324,10 +419,24 @@ static void cg_generate_instruction(Ctx* ctx, FILE* out, IrInstruction* inst) {
 
 // Blocks
 
+/**
+ * @brief Print block label
+ * @param out File to print to
+ * @param fn_name function name
+ * @param block_id ID of the block
+ */
 static void cg_print_block_label(FILE* out, char* fn_name, size_t block_id) {
   fprintf(out, "$%s$b%zu", fn_name, block_id);
 }
 
+/**
+ * @brief Generate block
+ * @param ctx Context
+ * @param out File to print to
+ * @param fn function
+ * @param block_id ID of the block
+ * @param block block
+ */
 static void cg_generate_block(Ctx* ctx,
                               FILE* out,
                               IrFunction* fn,
@@ -389,6 +498,12 @@ static void cg_generate_block(Ctx* ctx,
 
 // Functions
 
+/**
+ * @brief Generate function
+ * @param ctx Context
+ * @param out File to print to
+ * @param fn function
+ */
 static void cg_generate_function(Ctx* ctx, FILE* out, IrFunction* fn) {
   fputs("LABEL $$", out);
   fputs(fn->name, out);

@@ -16,8 +16,8 @@
 
 /**
  * @brief IFJcode26 generator
+ * @param out File to output to
  * @param ctx Compiler context
- * @param output File to output to
  */
 void cg_generate(FILE* out, Ctx* ctx);
 
