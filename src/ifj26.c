@@ -31,21 +31,20 @@ int main(int argc, char** argv) {
 
   // Initialize shared memory and error context
   static Ctx context;  // Static to survive long jump
-  ctx_init(&context, flags);
+  Ctx* ctx = &context;
+  ctx_init(ctx, flags);
 
-  // If an error is thrown at any point during the program execution, an error
-  // message will be printed to stderr and the CPU will jump back to here. If we
-  // got here because of a thrown error, the jump_result will be 1 and we will
-  // clean up and exit with the thrown error code.
-  int jump_result = setjmp(context.error_target);
-  if (jump_result != 0)
-    return ctx_free(&context);
+  // For unified error handling, wrap the compilation process in a TRY block
+  TRY {
+    // Allocate memory for the shared context
+    ctx_allocate(ctx);
 
-  // Allocate memory for the shared context
-  ctx_allocate(&context);
-
-  // Run the compiler
+    // Run the compiler
+  }
+  CATCH {
+    // No need to do anything special in case of error, ctx_free will handle it
+  }
 
   // Free allocated resources and exit
-  return ctx_free(&context);
+  return ctx_free(ctx);
 }
