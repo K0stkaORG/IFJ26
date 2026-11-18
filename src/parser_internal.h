@@ -2,9 +2,11 @@
 // Prompt (summary): parser structure (/grill-with-docs, /implement, /tdd);
 // "implementation done using skill: mattpocock-skills:implement-spec, tickets
 // 04-05 and review fixes; mattpocock-skills:implement, review judgement calls";
-// preparing the parser for the lexer's next_token and the column-0 INDENT fix
-// Changes: new header, private parser state and token helpers. Each
-// declaration notes what changed.
+// preparing the parser for the lexer's next_token and the column-0 INDENT fix;
+// "implementation done using skill: mattpocock-skills:implement, give the
+// parser's Token layer its own module (architecture-review candidate 1)"
+// Changes: new header, private parser state and token helpers; the token layer
+// moved to token_layer.h. Each declaration notes what changed.
 /**
  * @file parser_internal.h
  * Project: IFJ26
@@ -15,7 +17,9 @@
  * @brief Private parser state and token helpers
  *
  * Shared by the recursive descent (parser.c), the precedence parser
- * (expr_parser.c) and unit tests. Not part of the public interface.
+ * (expr_parser.c) and unit tests. Not part of the public interface. The token
+ * layer has its own module (token_layer.h); the grammar code reaches it only
+ * through the parser_* functions below.
  *
  * Vocabulary follows guidance/parser-structure/GLOSSARY.md.
  */
@@ -23,26 +27,14 @@
 #ifndef PARSER_INTERNAL_H
 #define PARSER_INTERNAL_H
 
-#include "array.h"  // ARRAY_TYPE
-#include "ast.h"    // AstNode
-#include "ctx.h"    // Ctx
-#include "lexer.h"  // Token, TokenType
+#include "array.h"        // ARRAY_TYPE
+#include "ast.h"          // AstNode
+#include "ctx.h"          // Ctx
+#include "lexer.h"        // Token, TokenType
+#include "token_layer.h"  // TokenLayer, TokenSourceNext
 
 #include <stdbool.h>  // bool
 #include <stddef.h>   // size_t
-
-/**
- * @brief Function producing the next raw token from a token source.
- *
- * The real source is the lexer (see lexer_source_next); unit tests use a fixed
- * token array. The returned token is owned by the parser.
- */
-typedef Token (*TokenSourceNext)(Ctx* ctx, void* source);
-
-/**
- * @brief Stack of indentations of the currently open blocks
- */
-ARRAY_TYPE(IndentStack, int);
 
 /**
  * @brief Terminals of the precedence table (its rows and columns), in the
@@ -95,62 +87,15 @@ typedef struct {
  */
 ARRAY_TYPE(PrecStack, PrecEntry);
 
-// Changes: new fields: the pending slot (no leak when an append fails),
-// at_line_start (no raw indent in column 0), paren/string/dollar depths (hidden
-// line breaks, ADR-0007), the hidden-line-break flags (trailing comma) and the
-// put-back token (a raw indent is decided after the token behind it).
+// Changes: the token-layer fields moved into the embedded TokenLayer; kept the
+// pending slot (no leak when an append fails).
 /**
  * @brief State of a running parse, owned by ctx->parser
  */
 struct Parser {
-  // Token source and its state
-  TokenSourceNext next;
-  void* source;
-
-  // Current token, the LL table is indexed by it. Owned by the parser.
-  Token current;
-
-  // Peeked token (valid when has_peeked), see parser_peek. Owned by the parser.
-  Token peeked;
-  bool has_peeked;
-
-  // Indentations of the open blocks, the bottom is always 0 (top level)
-  IndentStack indents;
-
-  // Block closes still to be delivered as INDENT tokens, and their position
-  size_t pending_closes;
-  Token pending_close;
-
-  // Whether the last token read from the source was an EOL_TOKEN, so the next
-  // one starts a line; a line starting without a raw indent is in column 0
-  bool at_line_start;
-
-  // Token that closed blocks without being a raw indent (a line in column 0,
-  // the end of file), delivered after those closes (valid when has_held).
-  // Owned by the parser.
-  Token held;
-  bool has_held;
-
-  // Parentheses read from the source and not yet closed; while any is open,
-  // EOL_TOKEN and INDENT are line breaks inside an expression and hidden
-  size_t paren_depth;
-
-  // Interpolated strings and ${ read from the source and not yet closed; a
-  // line break is in string text while more strings than ${ are open
-  size_t string_depth;
-  size_t dollar_depth;
-
-  // Whether a line break inside parentheses was hidden right before the
-  // current, the peeked and the last fetched token (a trailing comma needs
-  // one before the `)`, ADR-0005)
-  bool current_after_break;
-  bool peeked_after_break;
-  bool fetched_after_break;
-
-  // Token read from the source and put back (valid when has_put_back), read
-  // again before the source. Owned by the parser.
-  Token put_back;
-  bool has_put_back;
+  // The token layer between the lexer and the grammar code, the only way to
+  // reach the current token is parser_current
+  TokenLayer tokens;
 
   // Precedence stack; parser_cleanup destroys the subtrees left on it
   PrecStack prec_stack;
@@ -181,6 +126,9 @@ struct Parser {
 void parser_run(Ctx* ctx, TokenSourceNext next, void* source);
 
 // === TOKEN LAYER ===
+//
+// The token layer is token_layer.h (guidance/parser-structure/adr/0008); the
+// grammar code uses only the functions below.
 
 /**
  * @brief Creates the parser state in ctx->parser and reads the first token.
@@ -192,19 +140,35 @@ void parser_run(Ctx* ctx, TokenSourceNext next, void* source);
  */
 void parser_init(Ctx* ctx, TokenSourceNext next, void* source);
 
-// Changes: no WHITESPACE in the description, the lexer never returns it.
+// Changes: new, the delivered current token (the LL table is indexed by it).
+/**
+ * @brief Returns the current token.
+ *
+ * @param[in] parser Parser state
+ * @return The current token, owned by the parser, valid until the next advance
+ */
+const Token* parser_current(const Parser* parser);
+
+// Changes: new, whether a line break was hidden before the current token.
+/**
+ * @brief Returns whether a line break inside parentheses was hidden right
+ * before the current token (GLOSSARY.md, Hidden line break).
+ *
+ * @param[in] parser Parser state
+ * @return Whether the current token came after a hidden line break
+ */
+bool parser_after_line_break(const Parser* parser);
+
+// Changes: forwards to token_layer_advance.
 /**
  * @brief Moves to the next token, freeing the current one.
- *
- * Raw tokens are translated before the parser sees them: raw indents become
- * block open / block close INDENT tokens and the lexer's stream is adapted as
- * parser-structure ADR-0007 describes (see GLOSSARY.md, Raw indent).
  *
  * @param[in,out] ctx Non-null pointer to an initialized context
  * @param[in,out] parser Parser state
  */
 void parser_advance(Ctx* ctx, Parser* parser);
 
+// Changes: forwards to token_layer_peek.
 /**
  * @brief Returns the token after the current token without consuming it.
  *

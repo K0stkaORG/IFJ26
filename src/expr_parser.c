@@ -2,7 +2,8 @@
 // Prompt (summary): parser structure (/grill-with-docs, /implement, /tdd);
 // "implementation done using skill: mattpocock-skills:implement-spec, tickets
 // 04, 05, 07 and review fixes; mattpocock-skills:implement, review judgement
-// calls"
+// calls; give the parser's Token layer its own module (architecture-review
+// candidate 1)"
 // Changes: new module, precedence parser (the precedence table and algorithm
 // are the parser author's). Each function notes what changed.
 /**
@@ -130,7 +131,7 @@ static bool is_binary(PrecTerminal terminal) {
 }
 
 // Changes: new, an identifier followed by `(` or the unit token becomes a CALL
-// operand.
+// operand; reads the current token through parser_current.
 /**
  * @brief Turns the IDENT operand at stack index operand into a CALL whose
  * callee it is, and parses the call's arguments (CALL_ARGS).
@@ -160,7 +161,7 @@ static void build_call(Ctx* ctx, Parser* parser, size_t operand) {
 
   // CALL_ARGS -> TYPE_UNIT | L_PAREN ARG_LIST R_PAREN (rules 85, 86); the
   // callback is ARG_LIST with the CALL as parent
-  if (parser->current.type == TYPE_UNIT) {
+  if (parser_current(parser)->type == TYPE_UNIT) {
     parser_advance(ctx, parser);
     return;
   }
@@ -170,7 +171,8 @@ static void build_call(Ctx* ctx, Parser* parser, size_t operand) {
 }
 
 // Changes: new, an interpolated string is one operand whose parts are parsed in
-// place and appended with parser_attach.
+// place and appended with parser_attach; reads the current token through
+// parser_current.
 /**
  * @brief Parses the parts of an interpolated string (INTERP_PARTS) up to its
  * closing token and attaches them to the INTERP_STRING node.
@@ -189,8 +191,8 @@ static void build_interp_string(Ctx* ctx,
                                 Parser* parser,
                                 AstNode* string,
                                 TokenType close) {
-  while (parser->current.type != close) {
-    const Token* token = &parser->current;
+  while (parser_current(parser)->type != close) {
+    const Token* token = parser_current(parser);
     if (token->type == DOLLAR_EXPRESSION_START) {
       parser_advance(ctx, parser);
       parse_inline_value(ctx, parser, string);
@@ -218,7 +220,7 @@ static void build_interp_string(Ctx* ctx,
 }
 
 // Changes: builds an INTERP_STRING or a CALL operand; the literal kind comes
-// from the token info table.
+// from the token info table; reads the current token through parser_current.
 /**
  * @brief Shifts the operand starting at the current token as one `i`
  *
@@ -229,7 +231,7 @@ static void shift_operand(Ctx* ctx, Parser* parser) {
   PrecStack* stack = &parser->prec_stack;
   size_t index = stack_push(ctx, stack, PREC_ENTRY_TERMINAL, PREC_OPERAND);
 
-  const Token* token = &parser->current;
+  const Token* token = parser_current(parser);
   AstNode* node;
   ast_node_create(ctx, &node);
   stack->data[index].node = node;
@@ -277,23 +279,25 @@ static void shift_operand(Ctx* ctx, Parser* parser) {
   parser_advance(ctx, parser);
 
   // `(` or the unit token directly after an identifier is a call
-  if (is_ident &&
-      (parser->current.type == L_PAREN || parser->current.type == TYPE_UNIT))
+  if (is_ident && (parser_current(parser)->type == L_PAREN ||
+                   parser_current(parser)->type == TYPE_UNIT))
     build_call(ctx, parser, index);
 }
 
-// Changes: new, peeks past a `(` for `if`.
+// Changes: new, peeks past a `(` for `if`; reads the current token through
+// parser_current.
 /**
  * @brief Returns whether the current token is a `(` directly followed by `if`,
  * the start of an if expression operand
  */
 static bool starts_inline_if(Ctx* ctx, Parser* parser) {
-  return parser->current.type == L_PAREN &&
+  return parser_current(parser)->type == L_PAREN &&
          parser_peek(ctx, parser)->type == IF;
 }
 
 // Changes: new, an if expression in parentheses is one operand whose IF is
-// built by the IF_INLINE callback.
+// built by the IF_INLINE callback; reads the current token through
+// parser_current.
 /**
  * @brief Shifts `( if ... )` as one `i`, the operand being the IF
  *
@@ -311,7 +315,8 @@ static void shift_inline_if(Ctx* ctx, Parser* parser) {
   ast_node_create(ctx, &holder);
   stack->data[index].node = holder;
   ast_node_set_type(holder, AST_NODE_NONE);
-  ast_node_set_position(holder, parser->current.line, parser->current.column);
+  ast_node_set_position(holder, parser_current(parser)->line,
+                        parser_current(parser)->column);
 
   // NO_IDENT_OPERAND -> L_PAREN INLINE_VALUE R_PAREN, the value is an if
   parser_advance(ctx, parser);
@@ -327,13 +332,14 @@ static void shift_inline_if(Ctx* ctx, Parser* parser) {
 // === PRECEDENCE PARSER ===
 
 // Changes: a `(` followed by `if` is shifted as an if expression operand; the
-// operator node comes from the token info table.
+// operator node comes from the token info table; reads the current token
+// through parser_current.
 /**
  * @brief Shifts the current token as the given precedence terminal
  */
 static void shift(Ctx* ctx, Parser* parser, PrecTerminal input) {
   if (input == PREC_OPERAND) {
-    if (parser->current.type == L_PAREN)
+    if (parser_current(parser)->type == L_PAREN)
       shift_inline_if(ctx, parser);
     else
       shift_operand(ctx, parser);
@@ -343,7 +349,7 @@ static void shift(Ctx* ctx, Parser* parser, PrecTerminal input) {
   PrecStack* stack = &parser->prec_stack;
   size_t index = stack_push(ctx, stack, PREC_ENTRY_TERMINAL, input);
 
-  const Token* token = &parser->current;
+  const Token* token = parser_current(parser);
   const TokenInfo* token_info = parser_token_info(token->type);
   AstNodeType kind = input == PREC_PREFIX ? token_info->prefix_node
                                           : token_info->operator_node;
@@ -359,9 +365,10 @@ static void shift(Ctx* ctx, Parser* parser, PrecTerminal input) {
 
   // .m is PERIOD IDENT, the member name is the IDENT's text
   if (input == PREC_MEMBER) {
-    if (parser->current.type != IDENT)
+    if (parser_current(parser)->type != IDENT)
       parser_syntax_error(ctx, parser, "member name");
-    ast_node_set_name(ctx, stack->data[index].node, parser->current.value.text);
+    ast_node_set_name(ctx, stack->data[index].node,
+                      parser_current(parser)->value.text);
     parser_advance(ctx, parser);
   }
 }
@@ -384,14 +391,15 @@ static size_t open_parens(const PrecStack* stack, size_t base) {
 }
 
 // Changes: a `(` directly followed by `if` is an operand (peeks, so the parser
-// is not const); the binary class comes from the token info table.
+// is not const); the binary class comes from the token info table; reads the
+// current token through parser_current.
 /**
  * @brief Maps the current token to the precedence terminal it stands for, or
  * PREC_END at the expression end (GLOSSARY.md, Expression end)
  */
 static PrecTerminal classify(Ctx* ctx, Parser* parser, size_t base) {
   const PrecStack* stack = &parser->prec_stack;
-  TokenType type = parser->current.type;
+  TokenType type = parser_current(parser)->type;
   bool after_operand = stack_ends_with_operand(stack, base);
 
   // A token that could start an operand ends the expression right after a

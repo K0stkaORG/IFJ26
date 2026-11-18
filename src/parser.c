@@ -3,9 +3,11 @@
 // "implementation done using skill: mattpocock-skills:implement-spec, tickets
 // 03-07 and review fixes; mattpocock-skills:implement, review judgement calls
 // and fixes matching the PDF specification"; preparing the parser for the
-// lexer's next_token, the column-0 INDENT fix and running it from ifj26.c
-// Changes: new module, recursive descent parser and its token layer. Each
-// function notes what changed.
+// lexer's next_token, the column-0 INDENT fix and running it from ifj26.c;
+// "implementation done using skill: mattpocock-skills:implement, give the
+// parser's Token layer its own module (architecture-review candidate 1)"
+// Changes: new module, recursive descent parser; the token layer moved to
+// token_layer.c. Each function notes what changed.
 /**
  * @file parser.c
  * Project: IFJ26
@@ -20,36 +22,18 @@
 #include "ast.h"              // AstNode
 #include "expr_parser.h"      // expr_parse
 #include "parser_internal.h"  // Parser, token layer
+#include "token_layer.h"      // token_layer_*
 
 #include <stdlib.h>  // free
 #include <string.h>  // strcmp
 
 // === PARSER STATE ===
 
-// Changes: frees only text the lexer marks with value_type TEXT (ADR-0002).
-/**
- * @brief Frees the text owned by a token (if any)
- */
-static void token_free(Token* token) {
-  if (token->value_type == TEXT) {
-    free(token->value.text);
-    token->value.text = NULL;
-  }
-}
-
-// Changes: the pending slot starts empty; no token is held back and the first
-// token starts a line.
+// Changes: the token-layer state is set up by token_layer_init, which reads the
+// first token; the pending slot starts empty.
 void parser_init(Ctx* ctx, TokenSourceNext next, void* source) {
   Parser* parser = TRY_MALLOC(sizeof(*parser));
   *parser = (Parser){
-      .next = next,
-      .source = source,
-      .current = {.type = EOF_TOKEN},
-      .has_peeked = false,
-      .indents = ARRAY_EMPTY,
-      .pending_closes = 0,
-      .at_line_start = true,
-      .has_held = false,
       .prec_stack = ARRAY_EMPTY,
       .pending = NULL,
   };
@@ -57,13 +41,10 @@ void parser_init(Ctx* ctx, TokenSourceNext next, void* source) {
   // Registered before anything that can throw, so ctx_free can release it
   ctx->parser = parser;
 
-  // Top level, the bottom of the indentation stack
-  array_append(ctx, &parser->indents, 0);
-
-  parser_advance(ctx, parser);
+  token_layer_init(ctx, &parser->tokens, next, source);
 }
 
-// Changes: also destroys the pending node and frees the held-back and put-back
+// Changes: also destroys the pending node; the token layer frees its own
 // tokens.
 void parser_cleanup(Ctx* ctx) {
   Parser* parser = ctx->parser;
@@ -71,14 +52,7 @@ void parser_cleanup(Ctx* ctx) {
     return;
 
   ctx->parser = NULL;
-  token_free(&parser->current);
-  if (parser->has_peeked)
-    token_free(&parser->peeked);
-  if (parser->has_held)
-    token_free(&parser->held);
-  if (parser->has_put_back)
-    token_free(&parser->put_back);
-  array_free(&parser->indents);
+  token_layer_free(&parser->tokens);
 
   // Subtrees still owned by the precedence stack after a THROW (ADR-0004)
   PrecStack* stack = &parser->prec_stack;
@@ -96,199 +70,39 @@ void parser_cleanup(Ctx* ctx) {
 }
 
 // === TOKEN LAYER ===
+//
+// The token layer lives in token_layer.c; these are the grammar code's thin
+// entry points to it (ADR-0008).
 
-// Changes: new, reads the put-back token first.
-/**
- * @brief Reads the next token from the source, or the one put back
- */
-static Token source_read(Ctx* ctx, Parser* parser) {
-  if (parser->has_put_back) {
-    parser->has_put_back = false;
-    return parser->put_back;
-  }
-  return parser->next(ctx, parser->source);
+// Changes: new, the delivered current token, owned by the token layer.
+const Token* parser_current(const Parser* parser) {
+  return token_layer_current(&parser->tokens);
 }
 
-// Changes: new, puts a token back for source_read.
-/**
- * @brief Puts a token back, source_read returns it next
- */
-static void source_put_back(Parser* parser, Token token) {
-  parser->put_back = token;
-  parser->has_put_back = true;
+// Changes: new, whether a hidden line break came before the current token.
+bool parser_after_line_break(const Parser* parser) {
+  return token_layer_after_line_break(&parser->tokens);
 }
 
-// Changes: new, counts the open parentheses, interpolated strings and ${.
-/**
- * @brief Counts the constructs a source token opens or closes
- *
- * A closing token never takes a count below 0, a stray one is a syntax error
- * the grammar reports.
- */
-static void track_nesting(Parser* parser, TokenType type) {
-  size_t* depth;
-  bool opens;
-  switch (type) {
-    case L_PAREN:
-    case R_PAREN:
-      depth = &parser->paren_depth;
-      opens = type == L_PAREN;
-      break;
-    case S_STRING_START:
-    case TRIPLE_S_STRING_START:
-    case S_STRING_END:
-    case TRIPLE_S_STRING_END:
-      depth = &parser->string_depth;
-      opens = type == S_STRING_START || type == TRIPLE_S_STRING_START;
-      break;
-    case DOLLAR_EXPRESSION_START:
-    case DOLLAR_EXPRESSION_END:
-      depth = &parser->dollar_depth;
-      opens = type == DOLLAR_EXPRESSION_START;
-      break;
-    default:
-      return;
-  }
-  if (opens)
-    (*depth)++;
-  else if (*depth > 0)
-    (*depth)--;
-}
-
-// Changes: adapts the lexer's stream (ADR-0007): reads through the put-back
-// slot, maps `()` to TYPE_UNIT, hides line breaks inside parentheses, skips
-// blank and comment-only lines, ends a last line without a line break, treats a
-// line without a raw indent as column 0 (closes every block) and holds back the
-// token that closed blocks.
-/**
- * @brief Reads the next token the parser should see from the token source
- */
-static Token fetch_token(Ctx* ctx, Parser* parser) {
-  parser->fetched_after_break = false;
-
-  // Deliver block closes left over from a drop by more than one level
-  if (parser->pending_closes > 0) {
-    parser->pending_closes--;
-    return parser->pending_close;
-  }
-
-  if (parser->has_held) {
-    parser->has_held = false;
-    return parser->held;
-  }
-
-  while (true) {
-    Token token = source_read(ctx, parser);
-
-    // The lexer's `()` is the grammar's TYPE_UNIT
-    if (token.type == UNIT)
-      token.type = TYPE_UNIT;
-
-    track_nesting(parser, token.type);
-    // Line breaks inside parentheses are hidden, except in string text
-    bool in_string_text = parser->string_depth > parser->dollar_depth;
-    if (parser->paren_depth > 0 && !in_string_text &&
-        (token.type == EOL_TOKEN || token.type == INDENT)) {
-      parser->fetched_after_break = true;
-      continue;
-    }
-
-    // An EOL_TOKEN starting a line ends a blank or comment-only line
-    if (token.type == EOL_TOKEN && parser->at_line_start)
-      continue;
-
-    // A raw indent followed by the end of its line or of the file starts a
-    // blank or comment-only line and decides nothing
-    if (token.type == INDENT) {
-      Token after = source_read(ctx, parser);
-      if (after.type == EOF_TOKEN)
-        source_put_back(parser, after);
-      if (after.type == EOL_TOKEN || after.type == EOF_TOKEN)
-        continue;
-      source_put_back(parser, after);
-    }
-
-    // The end of file ends a last line written without a line break
-    if (token.type == EOF_TOKEN && !parser->at_line_start) {
-      source_put_back(parser, token);
-      parser->at_line_start = true;
-      return (Token){
-          .type = EOL_TOKEN, .line = token.line, .column = token.column};
-    }
-
-    // A line without a raw indent is in column 0 and the end of file ends the
-    // last line: both close every open block, as a raw indent of 0 would.
-    bool starts_line = parser->at_line_start;
-    parser->at_line_start =
-        token.type == EOL_TOKEN || token.type == EOF_TOKEN;
-    bool closes_all = (token.type == EOF_TOKEN || starts_line) &&
-                      token.type != INDENT && token.type != EOL_TOKEN &&
-                      parser->indents.count > 1;
-    if (token.type != INDENT && !closes_all)
-      return token;
-
-    IndentStack* indents = &parser->indents;
-    int indentation = closes_all ? 0 : token.value.integer;
-    int enclosing = indents->data[indents->count - 1];
-
-    // Same block, the raw indent is not visible to the parser
-    if (indentation == enclosing)
-      continue;
-
-    // Deeper, block open
-    if (indentation > enclosing) {
-      array_append(ctx, indents, indentation);
-      return token;
-    }
-
-    // Shallower, one block close per closed level
-    size_t closes = 0;
-    while (indents->data[indents->count - 1] > indentation) {
-      indents->count--;
-      closes++;
-    }
-    if (indents->data[indents->count - 1] != indentation)
-      THROW(E_SYNTAX_ERROR,
-            "%zu:%zu: syntax error: indentation of %d matches no enclosing block",
-            token.line, token.column, indentation);
-
-    // A raw indent is spent, any other token comes after the closes
-    if (token.type != INDENT) {
-      parser->held = token;
-      parser->has_held = true;
-    }
-    Token close = {.type = INDENT, .line = token.line, .column = token.column};
-    parser->pending_closes = closes - 1;
-    parser->pending_close = close;
-    return close;
-  }
-}
-
-// Changes: the hidden line break comes with the token.
+// Changes: moved to token_layer_advance, this only forwards to it.
 void parser_advance(Ctx* ctx, Parser* parser) {
-  token_free(&parser->current);
+  token_layer_advance(ctx, &parser->tokens);
+}
 
-  // A peeked token was already fetched (and translated), it comes next
-  if (parser->has_peeked) {
-    parser->current = parser->peeked;
-    parser->current_after_break = parser->peeked_after_break;
-    parser->has_peeked = false;
-    return;
-  }
-
-  parser->current = fetch_token(ctx, parser);
-  parser->current_after_break = parser->fetched_after_break;
+// Changes: moved to token_layer_peek, this only forwards to it.
+const Token* parser_peek(Ctx* ctx, Parser* parser) {
+  return token_layer_peek(ctx, &parser->tokens);
 }
 
 // Changes: reads the token info table.
 void parser_expect(Ctx* ctx, Parser* parser, TokenType type) {
-  if (parser->current.type != type)
+  if (parser_current(parser)->type != type)
     parser_syntax_error(ctx, parser, parser_token_info(type)->name);
   parser_advance(ctx, parser);
 }
 
 bool parser_accept(Ctx* ctx, Parser* parser, TokenType type) {
-  if (parser->current.type != type)
+  if (parser_current(parser)->type != type)
     return false;
   parser_advance(ctx, parser);
   return true;
@@ -296,7 +110,7 @@ bool parser_accept(Ctx* ctx, Parser* parser, TokenType type) {
 
 // Changes: reads the token info table; token positions are size_t.
 void parser_syntax_error(Ctx* ctx, const Parser* parser, const char* expected) {
-  const Token* token = &parser->current;
+  const Token* token = parser_current(parser);
   THROW(E_SYNTAX_ERROR, "%zu:%zu: syntax error: expected %s, got %s", token->line,
         token->column, expected, parser_token_info(token->type)->name);
 }
@@ -400,17 +214,6 @@ const TokenInfo* parser_token_info(TokenType type) {
   return &token_infos[type];
 }
 
-// Changes: new, fetches the token after the current one through the token layer
-// and keeps it until parser_advance moves to it.
-const Token* parser_peek(Ctx* ctx, Parser* parser) {
-  if (!parser->has_peeked) {
-    parser->peeked = fetch_token(ctx, parser);
-    parser->peeked_after_break = parser->fetched_after_break;
-    parser->has_peeked = true;
-  }
-  return &parser->peeked;
-}
-
 // === NONTERMINAL FUNCTIONS ===
 //
 // One function per nonterminal of the LL table (IFJ26 Table Maker project),
@@ -421,7 +224,7 @@ const Token* parser_peek(Ctx* ctx, Parser* parser) {
 //   // <NONTERMINAL> -> ...   (LL table rules N, M)
 //   static void parse_<nonterminal>(Ctx* ctx, Parser* parser, AstNode* parent)
 //   {
-//     switch (parser->current.type) {
+//     switch (parser_current(parser)->type) {
 //       // Rule N: <NONTERMINAL> -> <terminal A> <OTHER_NONTERMINAL>
 //       case <terminal in the predict set of rule N>: {
 //         // Create the node and attach it to parent right away, before
@@ -429,7 +232,7 @@ const Token* parser_peek(Ctx* ctx, Parser* parser) {
 //         AstNode* node = attach_node(ctx, parser, parent, AST_NODE_...);
 //
 //         // Copy token text before consuming the token (it is freed)
-//         ast_node_set_name(ctx, node, parser->current.value.text);
+//         ast_node_set_name(ctx, node, parser_current(parser)->value.text);
 //         parser_expect(ctx, parser, <terminal A>);
 //         parse_<other_nonterminal>(ctx, parser, node);
 //         return;
@@ -467,7 +270,8 @@ static AstNode* attach_node(Ctx* ctx,
   AstNode* node;
   ast_node_create(ctx, &node);
   ast_node_set_type(node, type);
-  ast_node_set_position(node, parser->current.line, parser->current.column);
+  ast_node_set_position(node, parser_current(parser)->line,
+                        parser_current(parser)->column);
   parser_attach(ctx, parser, parent, node);
   return node;
 }
@@ -476,10 +280,10 @@ static AstNode* attach_node(Ctx* ctx,
  * @brief Attaches an IDENT node for the current token and consumes it
  */
 static void attach_ident(Ctx* ctx, Parser* parser, AstNode* parent) {
-  if (parser->current.type != IDENT)
+  if (parser_current(parser)->type != IDENT)
     parser_syntax_error(ctx, parser, "identifier");
   AstNode* ident = attach_node(ctx, parser, parent, AST_NODE_IDENT);
-  ast_node_set_name(ctx, ident, parser->current.value.text);
+  ast_node_set_name(ctx, ident, parser_current(parser)->value.text);
   parser_advance(ctx, parser);
 }
 
@@ -500,7 +304,7 @@ static void attach_expr(Ctx* ctx, Parser* parser, AstNode* parent) {
 // (rules 9 to 13)
 static void parse_type(Ctx* ctx, Parser* parser, AstNode* parent) {
   AstDataType data_type;
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case TYPE_INT:
       data_type = AST_DATA_TYPE_INT;
       break;
@@ -528,7 +332,7 @@ static void parse_type(Ctx* ctx, Parser* parser, AstNode* parent) {
 
 // PARAM -> IDENT COLON TYPE (rule 23)
 static void parse_param(Ctx* ctx, Parser* parser, AstNode* parent) {
-  if (parser->current.type != IDENT)
+  if (parser_current(parser)->type != IDENT)
     parser_syntax_error(ctx, parser, "identifier");
 
   AstNode* param = attach_node(ctx, parser, parent, AST_NODE_PARAM);
@@ -541,7 +345,7 @@ static void parse_param_tail(Ctx* ctx, Parser* parser, AstNode* parent);
 
 // PARAM_NEXT -> PARAM PARAM_TAIL | ε (rules 21, 22)
 static void parse_param_next(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case IDENT:
       parse_param(ctx, parser, parent);
       parse_param_tail(ctx, parser, parent);
@@ -558,7 +362,8 @@ static void parse_param_next(Ctx* ctx, Parser* parser, AstNode* parent) {
 // `)` (PDF 1.2).
 static void parse_list_comma(Ctx* ctx, Parser* parser) {
   parser_advance(ctx, parser);
-  if (parser->current.type == R_PAREN && !parser->current_after_break)
+  if (parser_current(parser)->type == R_PAREN &&
+      !parser_after_line_break(parser))
     parser_syntax_error(ctx, parser,
                         "a line break between the trailing , and )");
 }
@@ -566,7 +371,7 @@ static void parse_list_comma(Ctx* ctx, Parser* parser) {
 // Changes: the COMMA goes through parse_list_comma.
 // PARAM_TAIL -> COMMA PARAM_NEXT | ε (rules 19, 20)
 static void parse_param_tail(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case COMMA:
       parse_list_comma(ctx, parser);
       parse_param_next(ctx, parser, parent);
@@ -580,7 +385,7 @@ static void parse_param_tail(Ctx* ctx, Parser* parser, AstNode* parent) {
 
 // PARAM_LIST -> PARAM PARAM_TAIL | ε (rules 17, 18)
 static void parse_param_list(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case IDENT:
       parse_param(ctx, parser, parent);
       parse_param_tail(ctx, parser, parent);
@@ -595,7 +400,7 @@ static void parse_param_list(Ctx* ctx, Parser* parser, AstNode* parent) {
 // FUNC_PARAMS -> TYPE_UNIT | L_PAREN PARAM_LIST R_PAREN (rules 15, 16)
 // Attaches the PARAM_LIST, empty for `def f()`.
 static void parse_func_params(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     // `()` is one token, the unit value (GLOSSARY.md, Unit value)
     case TYPE_UNIT:
       attach_node(ctx, parser, parent, AST_NODE_PARAM_LIST);
@@ -616,7 +421,7 @@ static void parse_func_params(Ctx* ctx, Parser* parser, AstNode* parent) {
 // FUNC_TYPE -> COLON TYPE | ε (rules 24, 25)
 // Attaches the return type, NONE when omitted.
 static void parse_func_type(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case COLON:
       parser_advance(ctx, parser);
       parse_type(ctx, parser, parent);
@@ -674,7 +479,7 @@ static void parse_statement_for(Ctx* ctx, Parser* parser, AstNode* parent);
 // STATEMENT_TAIL -> SEMICOLON STATEMENT_BASE | EOL_TOKEN (rules 105, 106)
 // A statement after `;` is the next sibling in the enclosing BLOCK.
 static void parse_statement_tail(Ctx* ctx, Parser* parser, AstNode* block) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case SEMICOLON:
       parser_advance(ctx, parser);
       parse_statement_base(ctx, parser, block);
@@ -693,7 +498,7 @@ static void parse_statement_tail(Ctx* ctx, Parser* parser, AstNode* block) {
 // belongs to the BLOCK the statement is in, the statement's parent.
 static void parse_rvalue(Ctx* ctx, Parser* parser, AstNode* statement) {
   // clang-format off
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     // Rule 96, predict set is FIRST(EXPR)
     CASE_FIRST_EXPR:
       attach_expr(ctx, parser, statement);
@@ -722,7 +527,7 @@ static void parse_rvalue(Ctx* ctx, Parser* parser, AstNode* statement) {
 // VAR_TYPE -> COLON TYPE | ε (rules 112, 113)
 // Attaches the type annotation, NONE when omitted.
 static void parse_var_type(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case COLON:
       parser_advance(ctx, parser);
       parse_type(ctx, parser, parent);
@@ -739,7 +544,7 @@ static void parse_var_type(Ctx* ctx, Parser* parser, AstNode* parent) {
 // RETURN_VAL -> RVALUE | STATEMENT_TAIL (rules 114, 115)
 // Attaches the value to the RETURN given as parent, NONE when omitted.
 static void parse_return_val(Ctx* ctx, Parser* parser, AstNode* ret) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case SEMICOLON:
     case EOL_TOKEN:
       attach_node(ctx, parser, ret, AST_NODE_NONE);
@@ -785,13 +590,13 @@ static void parse_statement_id(Ctx* ctx, Parser* parser, AstNode* block) {
 // statement is the expression node itself.
 static void parse_statement_base(Ctx* ctx, Parser* parser, AstNode* block) {
   // clang-format off
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     // Rules 107 and 108: VAL and VAR [ident, type|NONE, init]
     case VAL:
     case VAR: {
       AstNode* declaration = attach_node(
           ctx, parser, block,
-          parser->current.type == VAL ? AST_NODE_VAL : AST_NODE_VAR);
+          parser_current(parser)->type == VAL ? AST_NODE_VAL : AST_NODE_VAR);
       parser_advance(ctx, parser);
       attach_ident(ctx, parser, declaration);
       parse_var_type(ctx, parser, declaration);
@@ -828,7 +633,7 @@ static void parse_statement_base(Ctx* ctx, Parser* parser, AstNode* block) {
 // STATEMENT -> STATEMENT_BASE | STATEMENT_IF | STATEMENT_WHILE | STATEMENT_FOR
 // (rules 101 to 104)
 static void parse_statement(Ctx* ctx, Parser* parser, AstNode* block) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case IDENT:
     case VAL:
     case VAR:
@@ -865,7 +670,8 @@ static void parse_statement(Ctx* ctx, Parser* parser, AstNode* block) {
  * token layer with value.integer 0.
  */
 static bool at_block_close(const Parser* parser) {
-  return parser->current.type == INDENT && parser->current.value.integer == 0;
+  return parser_current(parser)->type == INDENT &&
+         parser_current(parser)->value.integer == 0;
 }
 
 // Changes: new, consumes a block close; a block open there is a syntax error.
@@ -894,7 +700,7 @@ static void parse_statement_list(Ctx* ctx, Parser* parser, AstNode* block) {
 // Attaches a BLOCK [stmt...] to parent; the first INDENT is the block open, the
 // last one the block close.
 static void parse_block(Ctx* ctx, Parser* parser, AstNode* parent) {
-  if (parser->current.type != INDENT || at_block_close(parser))
+  if (parser_current(parser)->type != INDENT || at_block_close(parser))
     parser_syntax_error(ctx, parser, "indented block");
 
   AstNode* block = attach_node(ctx, parser, parent, AST_NODE_BLOCK);
@@ -929,7 +735,7 @@ static AstNode* enclosing_block(AstNode* node) {
 // Attaches the value to the RETURN given as parent, NONE when omitted.
 static void parse_inline_return_val(Ctx* ctx, Parser* parser, AstNode* ret) {
   // clang-format off
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     CASE_FIRST_EXPR:
       attach_expr(ctx, parser, ret);
       return;
@@ -975,7 +781,7 @@ static void parse_inline_id(Ctx* ctx, Parser* parser, AstNode* block) {
 // follows it.
 static void parse_inline_body(Ctx* ctx, Parser* parser, AstNode* block) {
   // clang-format off
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     // Rule 118: RETURN [expr|NONE]
     case RETURN: {
       AstNode* ret = attach_node(ctx, parser, block, AST_NODE_RETURN);
@@ -1007,7 +813,7 @@ static void parse_inline_body(Ctx* ctx, Parser* parser, AstNode* block) {
 // IF of an `else if`, or a BLOCK.
 static void parse_else_body(Ctx* ctx, Parser* parser, AstNode* if_node) {
   // clang-format off
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     // Rule 135: `else if` is an IF as the else child
     case IF:
       parse_statement_if(ctx, parser, if_node);
@@ -1039,7 +845,7 @@ static void parse_else_body(Ctx* ctx, Parser* parser, AstNode* if_node) {
 // Attaches the else child to the IF given as parent, NONE when there is no
 // `else`: a missing else is never a syntax error by itself.
 static void parse_else_part(Ctx* ctx, Parser* parser, AstNode* if_node) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case ELSE:
       parser_advance(ctx, parser);
       parse_else_body(ctx, parser, if_node);
@@ -1059,7 +865,7 @@ static void parse_else_part(Ctx* ctx, Parser* parser, AstNode* if_node) {
     CASE_FIRST_NO_IDENT_OPERAND:
     case INDENT:
     case EOF_TOKEN:
-      if (parser->current.type == INDENT && !at_block_close(parser))
+      if (parser_current(parser)->type == INDENT && !at_block_close(parser))
         parser_syntax_error(ctx, parser, "else or the next statement");
       attach_node(ctx, parser, if_node, AST_NODE_NONE);
       return;
@@ -1074,7 +880,7 @@ static void parse_else_part(Ctx* ctx, Parser* parser, AstNode* if_node) {
 //                   | EOL_TOKEN ELSE_PART (rules 132 to 134)
 // Attaches the else child to the IF given as parent.
 static void parse_inline_else_part(Ctx* ctx, Parser* parser, AstNode* if_node) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case ELSE:
       parser_advance(ctx, parser);
       parse_else_body(ctx, parser, if_node);
@@ -1105,7 +911,7 @@ static void parse_inline_else_part(Ctx* ctx, Parser* parser, AstNode* if_node) {
 // as parent.
 static void parse_if_body(Ctx* ctx, Parser* parser, AstNode* if_node) {
   // clang-format off
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     // Rule 128: the then branch is the indented block on the following lines
     case EOL_TOKEN:
       parser_advance(ctx, parser);
@@ -1133,7 +939,7 @@ static void parse_if_body(Ctx* ctx, Parser* parser, AstNode* if_node) {
 // flag is not set here: the right side of `val`, `var`, `=` and `return` sets
 // it on the IF it gets.
 static void parse_statement_if(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case IF: {
       AstNode* if_node = attach_node(ctx, parser, parent, AST_NODE_IF);
       parser_advance(ctx, parser);
@@ -1152,7 +958,7 @@ static void parse_statement_if(Ctx* ctx, Parser* parser, AstNode* parent) {
 // Attaches the body BLOCK to the loop given as parent.
 static void parse_loop_body(Ctx* ctx, Parser* parser, AstNode* loop) {
   // clang-format off
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     // Rule 149: the body is the indented block on the following lines
     case EOL_TOKEN:
       parser_advance(ctx, parser);
@@ -1178,7 +984,7 @@ static void parse_loop_body(Ctx* ctx, Parser* parser, AstNode* loop) {
 // STATEMENT_WHILE -> WHILE EXPR DO LOOP_BODY (rule 138)
 // Attaches a WHILE [cond, BLOCK] to parent.
 static void parse_statement_while(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case WHILE: {
       AstNode* loop = attach_node(ctx, parser, parent, AST_NODE_WHILE);
       parser_advance(ctx, parser);
@@ -1200,8 +1006,8 @@ static void parse_statement_while(Ctx* ctx, Parser* parser, AstNode* parent) {
  * The text is only compared, the token is not consumed.
  */
 static bool at_contextual_keyword(const Parser* parser, const char* keyword) {
-  return parser->current.type == IDENT &&
-         strcmp(parser->current.value.text, keyword) == 0;
+  return parser_current(parser)->type == IDENT &&
+         strcmp(parser_current(parser)->value.text, keyword) == 0;
 }
 
 // Changes: new, RANGE_STEP.
@@ -1209,7 +1015,7 @@ static bool at_contextual_keyword(const Parser* parser, const char* keyword) {
 // Attaches the step to the RANGE_TO or RANGE_UNTIL given as parent, NONE when
 // there is no `by`.
 static void parse_range_step(Ctx* ctx, Parser* parser, AstNode* range) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     // Rule 143: the IDENT is the contextual keyword `by`, any other word is a
     // syntax error
     case IDENT:
@@ -1236,7 +1042,7 @@ static void parse_range_step(Ctx* ctx, Parser* parser, AstNode* range) {
 // Attaches the loop variable IDENT and the range, a RANGE_TO or RANGE_UNTIL
 // [from, to, step|NONE], to the FOR given as parent.
 static void parse_generator(Ctx* ctx, Parser* parser, AstNode* for_node) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case IDENT: {
       attach_ident(ctx, parser, for_node);
       parser_expect(ctx, parser, CONTROL_ARROW);
@@ -1269,7 +1075,7 @@ static void parse_generator(Ctx* ctx, Parser* parser, AstNode* for_node) {
 static void parse_guard_list(Ctx* ctx, Parser* parser, AstNode* for_node) {
   // The right recursion is a loop, so long guard lists do not nest calls
   while (true) {
-    switch (parser->current.type) {
+    switch (parser_current(parser)->type) {
       case IF:
         parser_advance(ctx, parser);
         attach_expr(ctx, parser, for_node);
@@ -1291,7 +1097,7 @@ static void parse_guard_list(Ctx* ctx, Parser* parser, AstNode* for_node) {
 static void parse_guard_lines(Ctx* ctx, Parser* parser, AstNode* for_node) {
   // The right recursion is a loop, so long guard lists do not nest calls
   while (true) {
-    switch (parser->current.type) {
+    switch (parser_current(parser)->type) {
       case IF:
         parser_advance(ctx, parser);
         attach_expr(ctx, parser, for_node);
@@ -1319,7 +1125,7 @@ static void parse_guard_lines(Ctx* ctx, Parser* parser, AstNode* for_node) {
 // parent. In the multi-line form the first INDENT is a block open and the last
 // a block close.
 static void parse_for_header(Ctx* ctx, Parser* parser, AstNode* for_node) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case IDENT:
       parse_generator(ctx, parser, for_node);
       parse_guard_list(ctx, parser, for_node);
@@ -1327,7 +1133,7 @@ static void parse_for_header(Ctx* ctx, Parser* parser, AstNode* for_node) {
 
     case EOL_TOKEN:
       parser_advance(ctx, parser);
-      if (parser->current.type != INDENT || at_block_close(parser))
+      if (parser_current(parser)->type != INDENT || at_block_close(parser))
         parser_syntax_error(ctx, parser, "indented generator");
       parser_advance(ctx, parser);
       parse_generator(ctx, parser, for_node);
@@ -1346,7 +1152,7 @@ static void parse_for_header(Ctx* ctx, Parser* parser, AstNode* for_node) {
 // Attaches a FOR [ident, RANGE_TO|RANGE_UNTIL, BLOCK, guard...] to parent. The
 // guards are parsed before the body, so the body BLOCK is moved before them.
 static void parse_statement_for(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case FOR: {
       AstNode* for_node = attach_node(ctx, parser, parent, AST_NODE_FOR);
       parser_advance(ctx, parser);
@@ -1372,7 +1178,7 @@ static void parse_statement_for(Ctx* ctx, Parser* parser, AstNode* parent) {
 // (rules 26 to 28). Attaches the body as a BLOCK.
 static void parse_func_body(Ctx* ctx, Parser* parser, AstNode* parent) {
   // clang-format off
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     // Rule 26, predict set is FIRST(EXPR); a single-line body is wrapped in a
     // BLOCK
     CASE_FIRST_EXPR: {
@@ -1406,7 +1212,7 @@ static void parse_func_body(Ctx* ctx, Parser* parser, AstNode* parent) {
 // or in `${...}`.
 void parse_inline_value(Ctx* ctx, Parser* parser, AstNode* parent) {
   // clang-format off
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     CASE_FIRST_EXPR:
       attach_expr(ctx, parser, parent);
       return;
@@ -1425,7 +1231,7 @@ void parse_inline_value(Ctx* ctx, Parser* parser, AstNode* parent) {
 // parent. A value after `then` or `else` is wrapped in a BLOCK, except that an
 // `else if` is an IF as the else child, like for if statements.
 void parse_if_inline(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case IF: {
       AstNode* if_node = attach_node(ctx, parser, parent, AST_NODE_IF);
       ast_node_set_flags(if_node, (unsigned)AST_FLAG_EXPR);
@@ -1437,7 +1243,7 @@ void parse_if_inline(Ctx* ctx, Parser* parser, AstNode* parent) {
       parse_inline_value(ctx, parser, then_block);
       parser_expect(ctx, parser, ELSE);
 
-      if (parser->current.type == IF) {
+      if (parser_current(parser)->type == IF) {
         parse_inline_value(ctx, parser, if_node);
         return;
       }
@@ -1456,7 +1262,7 @@ static void parse_arg_tail(Ctx* ctx, Parser* parser, AstNode* parent);
 // Changes: new, ARG_NEXT.
 // ARG_NEXT -> INLINE_VALUE ARG_TAIL | ε (rules 91, 92)
 static void parse_arg_next(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case IF:
     CASE_FIRST_EXPR:
       parse_inline_value(ctx, parser, parent);
@@ -1473,7 +1279,7 @@ static void parse_arg_next(Ctx* ctx, Parser* parser, AstNode* parent) {
 // Changes: new, ARG_TAIL; the COMMA goes through parse_list_comma.
 // ARG_TAIL -> COMMA ARG_NEXT | ε (rules 89, 90)
 static void parse_arg_tail(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case COMMA:
       parse_list_comma(ctx, parser);
       parse_arg_next(ctx, parser, parent);
@@ -1488,7 +1294,7 @@ static void parse_arg_tail(Ctx* ctx, Parser* parser, AstNode* parent) {
 // Changes: new, ARG_LIST, the callback for call arguments.
 // ARG_LIST -> INLINE_VALUE ARG_TAIL | ε (rules 87, 88)
 void parse_arg_list(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case IF:
     CASE_FIRST_EXPR:
       parse_inline_value(ctx, parser, parent);
@@ -1503,7 +1309,7 @@ void parse_arg_list(Ctx* ctx, Parser* parser, AstNode* parent) {
 
 // MAIN_TAIL -> EOL_TOKEN | ε (rules 7, 8)
 static void parse_main_tail(Ctx* ctx, Parser* parser) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case EOL_TOKEN:
       parser_advance(ctx, parser);
       return;
@@ -1517,7 +1323,7 @@ static void parse_main_tail(Ctx* ctx, Parser* parser) {
 // MAIN -> AT_MAIN MAIN_TAIL | ε (rules 5, 6)
 // Sets the MAIN flag of the DEF given as parent.
 static void parse_main(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case AT_MAIN:
       ast_node_set_flags(parent,
                          ast_node_get_flags(parent) | (unsigned)AST_FLAG_MAIN);
@@ -1535,7 +1341,7 @@ static void parse_main(Ctx* ctx, Parser* parser, AstNode* parent) {
 // FUNC -> MAIN DEF IDENT FUNC_PARAMS FUNC_TYPE ASSIGN FUNC_BODY (rule 14)
 // Attaches a DEF [ident, rettype|NONE, BLOCK, PARAM_LIST].
 static void parse_func(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case AT_MAIN:
     case DEF: {
       AstNode* def = attach_node(ctx, parser, parent, AST_NODE_DEF);
@@ -1563,7 +1369,7 @@ static void parse_func(Ctx* ctx, Parser* parser, AstNode* parent) {
 static void parse_func_list(Ctx* ctx, Parser* parser, AstNode* parent) {
   // The right recursion is a loop, so long programs do not nest calls
   while (true) {
-    switch (parser->current.type) {
+    switch (parser_current(parser)->type) {
       case AT_MAIN:
       case DEF:
         parse_func(ctx, parser, parent);
@@ -1582,8 +1388,8 @@ static void parse_prolog(Ctx* ctx, Parser* parser) {
   parser_expect(ctx, parser, IMPORT);
 
   // `ifj26` is a contextual keyword (GLOSSARY.md, Contextual keyword)
-  if (parser->current.type != IDENT ||
-      strcmp(parser->current.value.text, "ifj26") != 0)
+  if (parser_current(parser)->type != IDENT ||
+      strcmp(parser_current(parser)->value.text, "ifj26") != 0)
     parser_syntax_error(ctx, parser, "ifj26");
   parser_advance(ctx, parser);
 
@@ -1595,7 +1401,7 @@ static void parse_prolog(Ctx* ctx, Parser* parser) {
 // PROGRAM -> PROLOG FUNC_LIST EOF_TOKEN (rule 1), the start nonterminal
 // Attaches the functions to the PROGRAM root given as parent.
 static void parse_program(Ctx* ctx, Parser* parser, AstNode* parent) {
-  switch (parser->current.type) {
+  switch (parser_current(parser)->type) {
     case IMPORT:
       parse_prolog(ctx, parser);
       parse_func_list(ctx, parser, parent);
@@ -1608,28 +1414,6 @@ static void parse_program(Ctx* ctx, Parser* parser, AstNode* parent) {
 
 // === ENTRY POINT ===
 
-// Changes: calls the lexer's next_token; the contract describes the stream the
-// lexer emits, which fetch_token adapts.
-/**
- * @brief Reads the next token from the lexer (TokenSourceNext).
- *
- * The lexer keeps its state in ctx->lexer, so source is unused. What the parser
- * relies on (guidance/parser-structure/adr/0002 and 0007):
- *  - lexical errors are thrown by the lexer (E_LEXER_ERROR),
- *  - the returned token is owned by the parser; value.text is heap memory
- *    (freed with free()) exactly when value_type is TEXT,
- *  - an indented line starts with an INDENT whose value.integer is the line's
- *    indentation; a line in column 0 has none,
- *  - every '\n' outside a string or block comment ends with an EOL_TOKEN, also
- *    inside parentheses and on blank and comment-only lines,
- *  - `()` is the UNIT token, the grammar's TYPE_UNIT,
- *  - after the end of input, EOF_TOKEN is returned on every call.
- */
-static Token lexer_source_next(Ctx* ctx, void* source) {
-  (void)source;
-  return next_token(ctx);
-}
-
 void parser_run(Ctx* ctx, TokenSourceNext next, void* source) {
   parser_init(ctx, next, source);
 
@@ -1638,8 +1422,8 @@ void parser_run(Ctx* ctx, TokenSourceNext next, void* source) {
   AstNode* root;
   ast_node_create(ctx, &root);
   ast_node_set_type(root, AST_NODE_PROGRAM);
-  ast_node_set_position(root, ctx->parser->current.line,
-                        ctx->parser->current.column);
+  ast_node_set_position(root, parser_current(ctx->parser)->line,
+                        parser_current(ctx->parser)->column);
   ctx->ast = root;
 
   parse_program(ctx, ctx->parser, root);
@@ -1647,7 +1431,7 @@ void parser_run(Ctx* ctx, TokenSourceNext next, void* source) {
   parser_cleanup(ctx);
 }
 
-// Changes: the lexer state lives in ctx->lexer.
+// Changes: the lexer is the token layer's token source.
 void parser_parse(Ctx* ctx) {
-  parser_run(ctx, lexer_source_next, NULL);
+  parser_run(ctx, token_layer_lexer_next, NULL);
 }

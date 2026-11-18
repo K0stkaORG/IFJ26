@@ -3,8 +3,11 @@
 // "implementation done using skill: mattpocock-skills:implement-spec, tickets
 // 03-07 and review fixes; mattpocock-skills:implement, fixes matching the PDF
 // specification"; preparing the parser for the lexer's next_token and the
-// column-0 INDENT fix
-// Changes: new test suite; sections and tests note what changed.
+// column-0 INDENT fix; "implementation done using skill:
+// mattpocock-skills:implement, give the parser's Token layer its own module
+// (architecture-review candidate 1)"
+// Changes: new test suite; sections and tests note what changed. The token
+// layer tests moved to test_token_layer.c.
 /**
  * @file test_parser.c
  * Project: IFJ26
@@ -12,7 +15,7 @@
  * @author Lukáš Pollák (xpollal00)
  * @date 14. 11. 2026
  *
- * @brief Unit tests for the parser token layer
+ * @brief Unit tests for the parser
  *
  * The fake token source and the program-shaped token macros live in
  * helpers/fake_tokens.h, shared with the semantic analysis tests.
@@ -53,61 +56,12 @@
   assertThrow(E_SYNTAX_ERROR, { PARSE(__VA_ARGS__); })
 
 describe(parser) {
-  subdesc(reading_tokens) {
-    it("makes the first token current") {
-      FakeSource source;
-      START(source, TOK(DEF), IDENT_TOK("f"));
-      asserteq(ctx->parser->current.type, DEF);
-    }
-
-    it("moves to the next token and keeps its text") {
-      FakeSource source;
-      START(source, TOK(DEF), IDENT_TOK("f"));
-      parser_advance(ctx, ctx->parser);
-      asserteq(ctx->parser->current.type, IDENT);
-      asserteq_str(ctx->parser->current.value.text, "f");
-    }
-
-    it("moves to a peeked token before reading the source again") {
-      FakeSource source;
-      START(source, TOK(DEF), TOK(COLON));
-      // Sets the peeked token by hand, as parser_peek would, so only
-      // parser_advance is tested
-      ctx->parser->peeked = TOK(ASSIGN);
-      ctx->parser->has_peeked = true;
-      parser_advance(ctx, ctx->parser);
-      asserteq(ctx->parser->current.type, ASSIGN);
-      asserteq(ctx->parser->has_peeked, false);
-      parser_advance(ctx, ctx->parser);
-      asserteq(ctx->parser->current.type, COLON);
-    }
-    // The lexer's `()` token is the grammar's TYPE_UNIT.
-    it("reads the lexer's unit token as the grammar's TYPE_UNIT") {
-      FakeSource source;
-      START(source, IDENT_TOK("f"), TOK(UNIT));
-      parser_advance(ctx, ctx->parser);
-      asserteq(ctx->parser->current.type, TYPE_UNIT);
-    }
-
-    // The lexer marks heap text with value_type TEXT and leaves the
-    // interpolated string delimiters without text.
-    it("frees only the text the lexer marks as TEXT") {
-      FakeSource source;
-      // The value bits are no pointer, as the lexer leaves them
-      START(source,
-            ((Token){.type = S_STRING_START, .value.decimal = 1.0}),
-            TOK(S_STRING_END));
-      parser_advance(ctx, ctx->parser);
-      asserteq(ctx->parser->current.type, S_STRING_END);
-    }
-  }
-
   subdesc(expect_and_accept) {
     it("expect consumes a matching token") {
       FakeSource source;
       START(source, TOK(DEF), IDENT_TOK("f"));
       parser_expect(ctx, ctx->parser, DEF);
-      asserteq(ctx->parser->current.type, IDENT);
+      asserteq(parser_current(ctx->parser)->type, IDENT);
     }
 
     it("expect throws a syntax error on a different token") {
@@ -120,185 +74,14 @@ describe(parser) {
       FakeSource source;
       START(source, TOK(COLON), IDENT_TOK("Int"));
       asserteq(parser_accept(ctx, ctx->parser, COLON), true);
-      asserteq(ctx->parser->current.type, IDENT);
+      asserteq(parser_current(ctx->parser)->type, IDENT);
     }
 
     it("accept leaves a different token current") {
       FakeSource source;
       START(source, TOK(ASSIGN), IDENT_TOK("x"));
       asserteq(parser_accept(ctx, ctx->parser, COLON), false);
-      asserteq(ctx->parser->current.type, ASSIGN);
-    }
-  }
-
-  subdesc(blocks) {
-    // The first line holds a `=`, an EOL starting a line is a blank line and
-    // hidden.
-    it("turns deeper indentation into a block open") {
-      FakeSource source;
-      START(source, TOK(ASSIGN), TOK(EOL_TOKEN), INDENT_TOK(2),
-            IDENT_TOK("a"));
-      parser_expect(ctx, ctx->parser, ASSIGN);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      parser_expect(ctx, ctx->parser, INDENT);
-      asserteq(ctx->parser->current.type, IDENT);
-    }
-
-    // The equal indentation is inside a block, the lexer emits no raw indent of
-    // 0.
-    it("hides indentation equal to the enclosing block") {
-      FakeSource source;
-      START(source, INDENT_TOK(2), IDENT_TOK("a"), TOK(EOL_TOKEN),
-            INDENT_TOK(2), IDENT_TOK("b"));
-      parser_expect(ctx, ctx->parser, INDENT);  // open 2
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      asserteq(ctx->parser->current.type, IDENT);
-    }
-
-    // Drops to an open block deeper than the top level, the lexer emits no raw
-    // indent of 0.
-    it("closes one block per level the indentation drops") {
-      FakeSource source;
-      START(source, INDENT_TOK(2), IDENT_TOK("a"), INDENT_TOK(4),
-            IDENT_TOK("b"), INDENT_TOK(6), IDENT_TOK("c"), INDENT_TOK(2),
-            IDENT_TOK("d"));
-      parser_expect(ctx, ctx->parser, INDENT);  // open 2
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, INDENT);  // open 4
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, INDENT);  // open 6
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, INDENT);  // close 6
-      parser_expect(ctx, ctx->parser, INDENT);  // close 4
-      asserteq(ctx->parser->current.type, IDENT);
-      asserteq_str(ctx->parser->current.value.text, "d");
-    }
-
-    // The lexer emits no raw indent for a line in column 0, so a line starting
-    // without one after an end of line closes every open block.
-    it("closes every open block at a line without a raw indent") {
-      FakeSource source;
-      // The first line holds a `=`, an EOL starting a line is a blank line and
-      // hidden.
-      START(source, TOK(ASSIGN), TOK(EOL_TOKEN), INDENT_TOK(2), IDENT_TOK("a"),
-            TOK(EOL_TOKEN), INDENT_TOK(4), IDENT_TOK("b"), TOK(EOL_TOKEN),
-            TOK(DEF));
-      parser_expect(ctx, ctx->parser, ASSIGN);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      parser_expect(ctx, ctx->parser, INDENT);  // open 2
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      parser_expect(ctx, ctx->parser, INDENT);  // open 4
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      parser_expect(ctx, ctx->parser, INDENT);  // close 4
-      parser_expect(ctx, ctx->parser, INDENT);  // close 2
-      asserteq(ctx->parser->current.type, DEF);
-      // The end of file ends the last line.
-      parser_advance(ctx, ctx->parser);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      asserteq(ctx->parser->current.type, EOF_TOKEN);
-    }
-
-    // The end of file ends the last line before the closes.
-    it("closes every open block at the end of file") {
-      FakeSource source;
-      START(source, INDENT_TOK(2), IDENT_TOK("a"), INDENT_TOK(4),
-            IDENT_TOK("b"));
-      parser_expect(ctx, ctx->parser, INDENT);
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, INDENT);
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      parser_expect(ctx, ctx->parser, INDENT);
-      parser_expect(ctx, ctx->parser, INDENT);
-      asserteq(ctx->parser->current.type, EOF_TOKEN);
-    }
-
-    // The lexer emits EOL and INDENT inside parentheses too.
-    it("hides line breaks and indentation inside parentheses") {
-      FakeSource source;
-      START(source, IDENT_TOK("f"), TOK(L_PAREN), IDENT_TOK("a"), TOK(COMMA),
-            TOK(EOL_TOKEN), INDENT_TOK(6), TOK(L_PAREN), IDENT_TOK("b"),
-            TOK(EOL_TOKEN), TOK(R_PAREN), TOK(R_PAREN), TOK(EOL_TOKEN));
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, L_PAREN);
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, COMMA);
-      parser_expect(ctx, ctx->parser, L_PAREN);
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, R_PAREN);
-      parser_expect(ctx, ctx->parser, R_PAREN);
-      asserteq(ctx->parser->current.type, EOL_TOKEN);
-    }
-
-    // The lexer emits an EOL for a blank line.
-    it("hides a blank line inside a block") {
-      FakeSource source;
-      START(source, TOK(ASSIGN), TOK(EOL_TOKEN), INDENT_TOK(2),
-            IDENT_TOK("a"), TOK(EOL_TOKEN), TOK(EOL_TOKEN), INDENT_TOK(2),
-            IDENT_TOK("b"));
-      parser_expect(ctx, ctx->parser, ASSIGN);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      parser_expect(ctx, ctx->parser, INDENT);  // open 2
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      asserteq(ctx->parser->current.type, IDENT);
-      asserteq_str(ctx->parser->current.value.text, "b");
-    }
-
-    // The lexer emits a raw indent for an indented blank or comment-only line.
-    it("ignores the indentation of a blank or comment-only line") {
-      FakeSource source;
-      START(source, INDENT_TOK(4), IDENT_TOK("a"), TOK(EOL_TOKEN),
-            INDENT_TOK(2), TOK(EOL_TOKEN), INDENT_TOK(8), TOK(EOL_TOKEN),
-            INDENT_TOK(4), IDENT_TOK("b"));
-      parser_expect(ctx, ctx->parser, INDENT);  // open 4
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      asserteq(ctx->parser->current.type, IDENT);
-      asserteq_str(ctx->parser->current.value.text, "b");
-    }
-
-    // The lexer emits no EOL for a last line without '\n'.
-    it("ends a last line without a line break before the end of file") {
-      FakeSource source;
-      START(source, IDENT_TOK("a"));
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      asserteq(ctx->parser->current.type, EOF_TOKEN);
-      parser_advance(ctx, ctx->parser);
-      asserteq(ctx->parser->current.type, EOF_TOKEN);
-    }
-
-    // A line break in the text of an interpolated string is no line break
-    // inside parentheses, only one inside its ${...} is.
-    it("shows a line break in the text of a string inside parentheses") {
-      FakeSource source;
-      START(source, TOK(L_PAREN), TOK(TRIPLE_S_STRING_START),
-            TOK(DOLLAR_EXPRESSION_START), TOK(L_PAREN), IDENT_TOK("a"),
-            TOK(EOL_TOKEN), TOK(R_PAREN), TOK(DOLLAR_EXPRESSION_END),
-            TOK(EOL_TOKEN), IDENT_TOK("b"));
-      parser_expect(ctx, ctx->parser, L_PAREN);
-      parser_expect(ctx, ctx->parser, TRIPLE_S_STRING_START);
-      parser_expect(ctx, ctx->parser, DOLLAR_EXPRESSION_START);
-      parser_expect(ctx, ctx->parser, L_PAREN);
-      parser_expect(ctx, ctx->parser, IDENT);
-      parser_expect(ctx, ctx->parser, R_PAREN);
-      parser_expect(ctx, ctx->parser, DOLLAR_EXPRESSION_END);
-      parser_expect(ctx, ctx->parser, EOL_TOKEN);
-      asserteq(ctx->parser->current.type, IDENT);
-    }
-
-    // The line at indentation 2 holds a token, a raw indent right before the
-    // end of file is an empty last line.
-    it("rejects indentation matching no open block") {
-      FakeSource source;
-      START(source, INDENT_TOK(4), IDENT_TOK("a"), INDENT_TOK(2),
-            IDENT_TOK("b"));
-      parser_expect(ctx, ctx->parser, INDENT);
-      assertThrow(E_SYNTAX_ERROR, { parser_expect(ctx, ctx->parser, IDENT); });
+      asserteq(parser_current(ctx->parser)->type, ASSIGN);
     }
   }
 
