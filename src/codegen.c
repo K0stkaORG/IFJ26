@@ -505,11 +505,6 @@ static void cg_generate_function(Ctx* ctx, FILE* out, IrFunction* fn) {
     IrBlock* block = &fn->blocks.data[i];
     cg_generate_block(ctx, out, fn, i, block);
   }
-
-  fputs("POPFRAME", out);
-  cg_print_nl(out);
-  fputs("RETURN", out);
-  cg_print_nl(out);
 }
 
 // Generator
