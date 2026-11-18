@@ -351,9 +351,14 @@ static void cg_generate_instruction(Ctx* ctx, FILE* out, IrInstruction* inst) {
         cg_print_nl(out);
 
         if (inst->result != IR_INVALID_ID) {
+          IrFunction* callee = &ctx->ir.functions.data[inst->operands.call.id];
           fputs("MOVE ", out);
           cg_print_localframe_val(out, inst->result);
-          fputs(" TF@%ret", out);
+          if (callee->return_type == IR_UNIT) {
+            fputs(" nil@nil", out);
+          } else {
+            fputs(" TF@%ret", out);
+          }
           cg_print_nl(out);
         }
       } else {
