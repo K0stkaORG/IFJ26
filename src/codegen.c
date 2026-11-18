@@ -172,6 +172,8 @@ static void cg_print_operand(FILE* out, IrOperand* op) {
  * @param inst instruction
  */
 static void cg_print_unary_inst(FILE* out, char* opcode, IrInstruction* inst) {
+  if (inst->result == IR_INVALID_ID)
+    return;
   fputs(opcode, out);
   cg_print_ws(out);
   cg_print_localframe_val(out, inst->result);
@@ -187,6 +189,8 @@ static void cg_print_unary_inst(FILE* out, char* opcode, IrInstruction* inst) {
  * @param inst instruction
  */
 static void cg_print_binary_inst(FILE* out, char* opcode, IrInstruction* inst) {
+  if (inst->result == IR_INVALID_ID)
+    return;
   fputs(opcode, out);
   cg_print_ws(out);
   cg_print_localframe_val(out, inst->result);
@@ -203,6 +207,8 @@ static void cg_print_binary_inst(FILE* out, char* opcode, IrInstruction* inst) {
  * @param result result
  */
 static void cg_print_not_result(FILE* out, size_t result) {
+  if (result == IR_INVALID_ID)
+    return;
   fputs("NOT ", out);
   cg_print_localframe_val(out, result);
   cg_print_ws(out);
