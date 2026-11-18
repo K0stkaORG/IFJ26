@@ -180,11 +180,13 @@ static void cg_print_unary_inst(FILE* out, char* opcode, IrInstruction* inst) {
  * @param inst instruction
  */
 static void cg_print_binary_inst(FILE* out, char* opcode, IrInstruction* inst) {
-  if (inst->result == IR_INVALID_ID)
-    return;
   fputs(opcode, out);
   cg_print_ws(out);
-  cg_print_localframe_val(out, inst->result);
+  if (inst->result == IR_INVALID_ID) {
+    fputs("GF@$tmp1", out);
+  } else {
+    cg_print_localframe_val(out, inst->result);
+  }
   cg_print_ws(out);
   cg_print_operand(out, &inst->operands.binary.left);
   cg_print_ws(out);
