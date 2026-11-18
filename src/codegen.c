@@ -218,6 +218,8 @@ static void cg_print_builtin(Ctx* ctx, FILE* out, IrInstruction* inst) {
   switch (inst->operands.call.type) {
     // verify helper enough of GF vars is created for every inline
     case IR_FX_STR_LEN:
+      if (inst->result == IR_INVALID_ID)
+        break;
       fputs("STRLEN ", out);
       cg_print_localframe_val(out, inst->result);
       cg_print_ws(out);
@@ -225,6 +227,8 @@ static void cg_print_builtin(Ctx* ctx, FILE* out, IrInstruction* inst) {
       cg_print_nl(out);
       break;
     case IR_FX_TO_INT:
+      if (inst->result == IR_INVALID_ID)
+        break;
       fputs("FLOAT2INT ", out);
       cg_print_localframe_val(out, inst->result);
       cg_print_ws(out);
@@ -233,7 +237,11 @@ static void cg_print_builtin(Ctx* ctx, FILE* out, IrInstruction* inst) {
       break;
     case IR_FX_CHR:
       fputs("INT2CHAR ", out);
-      cg_print_localframe_val(out, inst->result);
+      if (inst->result == IR_INVALID_ID) {
+        fputs("GF@$tmp1", out);
+      } else {
+        cg_print_localframe_val(out, inst->result);
+      }
       cg_print_ws(out);
       cg_print_operand(out, &inst->operands.call.args[0]);
       cg_print_nl(out);
@@ -317,6 +325,8 @@ static void cg_generate_instruction(Ctx* ctx, FILE* out, IrInstruction* inst) {
       cg_print_not_result(out, inst->result);
       break;
     case IR_INST_LOAD:
+      if (inst->result == IR_INVALID_ID)
+        break;
       fputs("MOVE ", out);
       cg_print_localframe_val(out, inst->result);
       cg_print_ws(out);
@@ -519,8 +529,13 @@ void cg_generate(FILE* out, Ctx* ctx) {
           } else if (fx_type == IR_FX_ORD || fx_type == IR_FX_TO_STR ||
                      fx_type == IR_FX_READ_LINE || fx_type == IR_FX_READ_INT ||
                      fx_type == IR_FX_READ_BOOL ||
-                     fx_type == IR_FX_READ_DOUBLE) {
+                     fx_type == IR_FX_READ_DOUBLE ||
+                     (fx_type == IR_FX_CHR && inst->result == IR_INVALID_ID)) {
             needed = 1;
+          }
+          if ((inst->type == IR_INST_DIV || inst->type == IR_INST_IDIV) &&
+              inst->result == IR_INVALID_ID && needed < 1) {
+            needed++;
           }
           if (needed > max_helper_vars) {
             max_helper_vars = needed;
