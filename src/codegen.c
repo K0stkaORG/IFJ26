@@ -180,6 +180,10 @@ static void cg_print_unary_inst(FILE* out, char* opcode, IrInstruction* inst) {
  * @param inst instruction
  */
 static void cg_print_binary_inst(FILE* out, char* opcode, IrInstruction* inst) {
+  if (inst->result == IR_INVALID_ID && strcmp(opcode, "DIV") != 0 &&
+      strcmp(opcode, "IDIV") != 0) {
+    return;
+  }
   fputs(opcode, out);
   cg_print_ws(out);
   if (inst->result == IR_INVALID_ID) {
@@ -521,10 +525,10 @@ void cg_generate(FILE* out, Ctx* ctx) {
       IrBlock* block = &fn->blocks.data[j];
       for (size_t k = 0; k < block->instructions.count; k++) {
         IrInstruction* inst = &block->instructions.data[k];
+        size_t needed = 0;
         if (inst->type == IR_INST_CALL &&
             inst->operands.call.type != IR_FX_USER) {
           IrFunctionType fx_type = inst->operands.call.type;
-          size_t needed = 0;
           if (fx_type == IR_FX_STR_SUB) {
             needed = 3;
           } else if (fx_type == IR_FX_ORD || fx_type == IR_FX_TO_STR ||
@@ -534,13 +538,12 @@ void cg_generate(FILE* out, Ctx* ctx) {
                      (fx_type == IR_FX_CHR && inst->result == IR_INVALID_ID)) {
             needed = 1;
           }
-          if ((inst->type == IR_INST_DIV || inst->type == IR_INST_IDIV) &&
-              inst->result == IR_INVALID_ID && needed < 1) {
-            needed++;
-          }
-          if (needed > max_helper_vars) {
-            max_helper_vars = needed;
-          }
+        } else if ((inst->type == IR_INST_DIV || inst->type == IR_INST_IDIV) &&
+                   inst->result == IR_INVALID_ID) {
+          needed = 1;
+        }
+        if (needed > max_helper_vars) {
+          max_helper_vars = needed;
         }
       }
     }
