@@ -133,6 +133,22 @@ ifeq ($(OS),Windows_NT)
     CFLAGS_UNIT += -Itests/vendor/snow_win -DSNOW_USE_FORK=0 -DSNOW_USE_FNMATCH=0
 endif
 
+# Dependencies for memory test (Linux only, requires Valgrind)
+ifeq ($(HOST_OS),linux)
+    # Modified ifj26.c with renamed main to compiler_main
+    $(DEBUG_BUILD_DIR)/memory_main.o: $(SRC_DIR)/ifj26.c | $(DEBUG_BUILD_DIR)
+	@$(CC) $(CFLAGS_DEBUG) -Dmain=compiler_main -c -o $@ $<
+
+    # Memory test executable
+    $(DEBUG_BUILD_DIR)/memory_driver: tests/memory_driver.c $(DEBUG_BUILD_DIR)/memory_main.o $(UNIT_OBJS)
+	@$(CC) $(CFLAGS_DEBUG) -Isrc -Wl,--wrap=ctx_malloc_helper,--wrap=ctx_realloc_helper -o $@ $^
+
+    # Add recepie dependency
+    test-memory: $(DEBUG_BUILD_DIR)/memory_driver
+
+    # Correctly invalidate memory_main.d on rebuild
+    -include $(DEBUG_BUILD_DIR)/memory_main.d
+endif
 
 ################################################################################
 # Recipes                                                                      #
@@ -172,9 +188,9 @@ test-unit: $(UNIT_BINS)
 test-e2e: debug
 	@$(PY) scripts/run_e2e.py $(VALGRIND_FLAG) --compiler "$(DEBUG_BIN)" --build-dir "$(TEST_BUILD_DIR)"
 
-# Run memory tests
+# Run memory tests (Linux only, requires Valgrind)
 test-memory: debug
-	@$(PY) scripts/run_e2e.py $(VALGRIND_FLAG) --compiler "$(DEBUG_BIN)" --build-dir "$(TEST_BUILD_DIR)" --memory
+	@$(PY) scripts/run_e2e.py --compiler "$(DEBUG_BIN)" --build-dir "$(TEST_BUILD_DIR)" --memory $(if $(filter linux,$(HOST_OS)),--memory-driver "$(DEBUG_BUILD_DIR)/memory_driver")
 
 # Run all tests
 test: test-unit test-e2e test-memory
