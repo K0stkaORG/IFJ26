@@ -89,7 +89,7 @@ static void cg_print_string(FILE* out, char* str) {
   unsigned char* s = (unsigned char*)str;
   size_t s_len = strlen(str);
   for (size_t i = 0; i < s_len; i++) {
-    if (s[i] <= 32 || s[i] == 35 || s[i] == 92) {
+    if (s[i] <= 32 || s[i] == 35 || s[i] == 92 || s[i] >= 127) {
       fprintf(out, "\\%03u", s[i]);
     } else {
       fputc(s[i], out);
