@@ -2,9 +2,12 @@
 // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
 // ticket 01: prefactor, AST scope ownership and shared test helpers"; preparing
 // the parser for the lexer's next_token; the column-0 INDENT fix; fixes
-// matching the PDF specification
+// matching the PDF specification; "implementation done using skill:
+// mattpocock-skills:implement, trimming parser tests by necessity rank and
+// filling coverage gaps"
 // Changes: new shared test helper, the fake token source and program-shaped
-// token macros moved from test_parser.c. Each declaration notes what changed.
+// token macros moved from test_parser.c, the shared asserts and the error
+// table (ROW, ASSERT_SYNTAX_ERRORS) added. Each declaration notes what changed.
 /**
  * @file fake_tokens.h
  * Project: IFJ26
@@ -29,7 +32,10 @@
 #include "lexer.h"
 #include "parser_internal.h"  // parser_init, parser_run
 
+#include "ast_test_string.h"  // ast_to_test_string
+
 #include <stddef.h>  // size_t
+#include <stdlib.h>  // free
 
 // Changes: counts source lines; FAKE_LINE_BREAK marks a line break the lexer
 // reports by line number only.
@@ -130,5 +136,78 @@ Token fake_next(Ctx* ctx, void* state);
         .tokens = program_, .count = sizeof(program_) / sizeof(*program_)}; \
     parser_run(ctx, fake_next, &program_source_);                           \
   } while (0)
+
+// Changes: new, tokens with a column for the position tests; the line is the
+// fake source's current line.
+#define AT(t, col) ((Token){.type = (t), .column = (col)})
+#define AT_ID(name, col) \
+  ((Token){.type = IDENT, .value.text = (name), .column = (col)})
+#define AT_INT(n, col) \
+  ((Token){.type = NUMBER_INT, .value.integer = (n), .column = (col)})
+
+// === ASSERTS ===
+//
+// Changes: new, the parser and expression parser suites share these. The
+// asserts expect the snow test environment's `ctx`.
+
+// The AST of BODY with the given expression subtree
+#define BODY_AST(expr) \
+  "(PROGRAM (DEF (IDENT f) NONE (BLOCK " expr ") (PARAM_LIST)))"
+
+/**
+ * @brief Parses the given tokens and asserts the AST renders as expected
+ */
+#define ASSERT_AST(expected, ...)                 \
+  do {                                            \
+    PARSE(__VA_ARGS__);                           \
+    char* actual_ = ast_to_test_string(ctx->ast); \
+    defer(free(actual_));                         \
+    asserteq_str(actual_, (expected));            \
+  } while (0)
+
+/**
+ * @brief A token array with its length, one row of an error table
+ */
+typedef struct {
+  const Token* tokens;
+  size_t count;
+} FakeRow;
+
+/**
+ * @brief One row of an error table, the tokens of a whole program
+ */
+#define ROW(...) \
+  {(const Token[]){__VA_ARGS__}, sizeof((const Token[]){__VA_ARGS__}) / sizeof(Token)}
+
+/// A row of a def with a single-expression body: PROLOG, def f() = <expression>
+#define ONE(...) ROW(BODY(__VA_ARGS__))
+/// A row of a def with a multi-line body, the body lines at indent 2 follow
+#define MANY(...) ROW(PROLOG, DEF_F, __VA_ARGS__)
+
+/**
+ * @brief Parses the row in a fresh context and returns the exit code the
+ * parse ended with, the context (and any partly built tree) is freed
+ */
+ExitCode fake_parse_exit(FakeRow row);
+
+/**
+ * @brief Asserts that parsing every ROW(...) ends with the exit code, the
+ * failure names the row
+ */
+#define ASSERT_ERRORS(code, ...)                                           \
+  do {                                                                     \
+    const FakeRow rows_[] = {__VA_ARGS__};                                 \
+    for (size_t row_ = 0; row_ < sizeof(rows_) / sizeof(*rows_); row_++) { \
+      ExitCode got_ = fake_parse_exit(rows_[row_]);                        \
+      if (got_ != (code))                                                  \
+        fail("row %zu ended with exit code %d, expected %d", row_,         \
+             (int)got_, (int)(code));                                      \
+    }                                                                      \
+  } while (0)
+
+/**
+ * @brief Asserts that parsing every ROW(...) is a syntax error
+ */
+#define ASSERT_SYNTAX_ERRORS(...) ASSERT_ERRORS(E_SYNTAX_ERROR, __VA_ARGS__)
 
 #endif

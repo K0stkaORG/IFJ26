@@ -5,9 +5,12 @@
 // specification"; preparing the parser for the lexer's next_token and the
 // column-0 INDENT fix; "implementation done using skill:
 // mattpocock-skills:implement, give the parser's Token layer its own module
-// (architecture-review candidate 1)"
-// Changes: new test suite; sections and tests note what changed. The token
-// layer tests moved to test_token_layer.c.
+// (architecture-review candidate 1)"; "implementation done using skill:
+// mattpocock-skills:implement, trimming parser tests by necessity rank and
+// filling coverage gaps"
+// Changes: new test suite, trimmed to one table-driven error test per grammar
+// area; the expression tests moved to test_expr_parser.c, the token layer
+// tests to test_token_layer.c.
 /**
  * @file test_parser.c
  * Project: IFJ26
@@ -17,8 +20,9 @@
  *
  * @brief Unit tests for the parser
  *
- * The fake token source and the program-shaped token macros live in
- * helpers/fake_tokens.h, shared with the semantic analysis tests.
+ * The fake token source, the program-shaped token macros and the asserts live
+ * in helpers/fake_tokens.h, shared with the expression parser and semantic
+ * analysis tests.
  */
 
 #define SNOW_ENABLED 1
@@ -29,65 +33,14 @@
 #include "parser.h"
 #include "parser_internal.h"
 
-#include "helpers/ast_test_string.h"  // ast_to_test_string
 #include "helpers/fake_tokens.h"  // FakeSource, fake_next, token macros
 
-#include <stdlib.h>  // free
+#include <stdbool.h>  // bool
 
-// The AST of BODY with the given expression subtree
-#define BODY_AST(expr) \
-  "(PROGRAM (DEF (IDENT f) NONE (BLOCK " expr ") (PARAM_LIST)))"
-
-/**
- * @brief Parses the given tokens and asserts the AST renders as expected
- */
-#define ASSERT_AST(expected, ...)                 \
-  do {                                            \
-    PARSE(__VA_ARGS__);                           \
-    char* actual_ = ast_to_test_string(ctx->ast); \
-    defer(free(actual_));                         \
-    asserteq_str(actual_, (expected));            \
-  } while (0)
-
-/**
- * @brief Asserts that parsing the given tokens is a syntax error
- */
-#define ASSERT_SYNTAX_ERROR(...) \
-  assertThrow(E_SYNTAX_ERROR, { PARSE(__VA_ARGS__); })
-
+// Token arrays below keep one source line per row
+// clang-format off
 describe(parser) {
-  subdesc(expect_and_accept) {
-    it("expect consumes a matching token") {
-      FakeSource source;
-      START(source, TOK(DEF), IDENT_TOK("f"));
-      parser_expect(ctx, ctx->parser, DEF);
-      asserteq(parser_current(ctx->parser)->type, IDENT);
-    }
-
-    it("expect throws a syntax error on a different token") {
-      FakeSource source;
-      START(source, TOK(DEF), IDENT_TOK("f"));
-      assertThrow(E_SYNTAX_ERROR, { parser_expect(ctx, ctx->parser, IDENT); });
-    }
-
-    it("accept consumes a matching token") {
-      FakeSource source;
-      START(source, TOK(COLON), IDENT_TOK("Int"));
-      asserteq(parser_accept(ctx, ctx->parser, COLON), true);
-      asserteq(parser_current(ctx->parser)->type, IDENT);
-    }
-
-    it("accept leaves a different token current") {
-      FakeSource source;
-      START(source, TOK(ASSIGN), IDENT_TOK("x"));
-      asserteq(parser_accept(ctx, ctx->parser, COLON), false);
-      asserteq(parser_current(ctx->parser)->type, ASSIGN);
-    }
-  }
-
-  // Token arrays below keep one source line per row
-  // clang-format off
-  subdesc(programs) {
+  subdesc(programs_and_functions) {
     it("parses a function with a parameter and a return type") {
       ASSERT_AST(
           "(PROGRAM (DEF (IDENT f) (TYPE_ANNOTATION Int) (BLOCK (IDENT a)) "
@@ -98,58 +51,45 @@ describe(parser) {
             TOK(ASSIGN), ID("a"), EOL);
     }
 
-    // Lines in column 0 carry no raw indent, as from the lexer.
-    it("ends a multi-line body at a top-level line without a raw indent") {
+    it("keeps functions in source order and ends a body at a column-0 line") {
+      // import ifj26.*
+      // def one(): Int = 1
+      // @main def main() =
+      //   run
+      //   run
+      // @main
+      // def half(x: Double): Double = 0.5
+      // def f() = ()
+      // def g(): Int = 1
       ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK (IDENT a) (IDENT b)) "
-          "(PARAM_LIST)) (DEF (IDENT g) NONE (BLOCK (IDENT c)) (PARAM_LIST)))",
-          TOK(IMPORT), ID("ifj26"), TOK(PERIOD), TOK(OPERATOR_MULTIPLY), EOL,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), EOL,
-          LINE(2), ID("a"), EOL,
-          LINE(2), ID("b"), EOL,
-          TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN), ID("c"), EOL);
-    }
-  }
-
-  subdesc(functions) {
-    it("marks a function annotated with @main") {
-      ASSERT_AST(
-          "(PROGRAM (DEF [MAIN] (IDENT main) NONE (BLOCK (IDENT run)) "
+          "(PROGRAM "
+          "(DEF (IDENT one) (TYPE_ANNOTATION Int) (BLOCK (INT_LIT 1)) "
+          "(PARAM_LIST)) "
+          "(DEF [MAIN] (IDENT main) NONE (BLOCK (IDENT run) (IDENT run)) "
+          "(PARAM_LIST)) "
+          "(DEF [MAIN] (IDENT half) (TYPE_ANNOTATION Double) "
+          "(BLOCK (DOUBLE_LIT 0.5)) "
+          "(PARAM_LIST (PARAM (IDENT x) (TYPE_ANNOTATION Double)))) "
+          "(DEF (IDENT f) NONE (BLOCK (UNIT_LIT)) (PARAM_LIST)) "
+          "(DEF (IDENT g) (TYPE_ANNOTATION Int) (BLOCK (INT_LIT 1)) "
           "(PARAM_LIST)))",
           PROLOG,
-          TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE, TOK(ASSIGN),
-            ID("run"), EOL);
-    }
-
-    it("marks a function with @main on the line before def") {
-      ASSERT_AST(
-          "(PROGRAM (DEF [MAIN] (IDENT main) NONE (BLOCK (IDENT run)) "
-          "(PARAM_LIST)))",
-          PROLOG,
+          TOK(DEF), ID("one"), UNIT_VALUE, TOK(COLON), TOK(TYPE_INT),
+            TOK(ASSIGN), INT(1), EOL,
+          TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE, TOK(ASSIGN), EOL,
+          LINE(2), ID("run"), EOL,
+          LINE(2), ID("run"), EOL,
           TOK(AT_MAIN), EOL,
-          TOK(DEF), ID("main"), UNIT_VALUE, TOK(ASSIGN), ID("run"),
-            EOL);
+          TOK(DEF), ID("half"), TOK(L_PAREN), ID("x"), TOK(COLON),
+            TOK(TYPE_DOUBLE), TOK(R_PAREN), TOK(COLON), TOK(TYPE_DOUBLE),
+            TOK(ASSIGN), DBL(0.5), EOL,
+          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL,
+          TOK(DEF), ID("g"), TOK(L_PAREN), TOK(R_PAREN), TOK(COLON),
+            TOK(TYPE_INT), TOK(ASSIGN), INT(1), EOL);
     }
 
-    it("leaves an omitted return type as NONE") {
-      // def empty() = ()
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT empty) NONE (BLOCK (UNIT_LIT)) (PARAM_LIST)))",
-          PROLOG,
-          TOK(DEF), ID("empty"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE,
-            EOL);
-    }
-
-    it("gives def f() written with parentheses an empty parameter list") {
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK (INT_LIT 1)) (PARAM_LIST)))",
-          PROLOG,
-          TOK(DEF), ID("f"), TOK(L_PAREN), TOK(R_PAREN),
-            TOK(ASSIGN), INT(1), EOL);
-    }
-
-    // Changes: a trailing comma needs a line break before the `)` (PDF 1.2),
-    // BREAK puts the `)` on the next line.
+    // A trailing comma needs a line break before the `)` (PDF 1.2), BREAK puts
+    // the `)` on the next line.
     it("keeps parameters in order and accepts a trailing comma before a line "
        "break") {
       // def pack(a: Int, b: String, c: Boolean,
@@ -169,40 +109,10 @@ describe(parser) {
             EOL);
     }
 
-    // Changes: new, a trailing comma with the `)` on its line is exit 2.
-    it("rejects a trailing parameter comma with the ) on the same line") {
-      // def pack(a: Int,): Unit = ()
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(DEF), ID("pack"), TOK(L_PAREN),
-            ID("a"), TOK(COLON), TOK(TYPE_INT), TOK(COMMA), TOK(R_PAREN),
-            TOK(COLON), TOK(TYPE_UNIT), TOK(ASSIGN), UNIT_VALUE, EOL);
-    }
-
-    it("keeps several functions in source order") {
-      ASSERT_AST(
-          "(PROGRAM "
-          "(DEF (IDENT one) (TYPE_ANNOTATION Int) (BLOCK (INT_LIT 1)) "
-          "(PARAM_LIST)) "
-          "(DEF [MAIN] (IDENT main) NONE (BLOCK (IDENT one)) (PARAM_LIST)) "
-          "(DEF (IDENT half) (TYPE_ANNOTATION Double) (BLOCK (DOUBLE_LIT 0.5)) "
-          "(PARAM_LIST (PARAM (IDENT x) (TYPE_ANNOTATION Double)))))",
-          PROLOG,
-          TOK(DEF), ID("one"), UNIT_VALUE, TOK(COLON), TOK(TYPE_INT),
-            TOK(ASSIGN), INT(1), EOL,
-          TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE, TOK(ASSIGN),
-            ID("one"), EOL,
-          TOK(DEF), ID("half"), TOK(L_PAREN), ID("x"), TOK(COLON),
-            TOK(TYPE_DOUBLE), TOK(R_PAREN), TOK(COLON), TOK(TYPE_DOUBLE),
-            TOK(ASSIGN), DBL(0.5), EOL);
-    }
-
     it("accepts a program with no functions") {
       ASSERT_AST("(PROGRAM)", PROLOG);
     }
-  }
 
-  subdesc(operands) {
     it("parses literals of every kind as a function body") {
       ASSERT_AST(
           "(PROGRAM "
@@ -211,74 +121,26 @@ describe(parser) {
           "(DEF (IDENT c) NONE (BLOCK (STRING_LIT \"hi\")) (PARAM_LIST)) "
           "(DEF (IDENT d) NONE (BLOCK (STRING_LIT \"x\\ny\")) (PARAM_LIST)) "
           "(DEF (IDENT e) NONE (BLOCK (BOOL_LIT true)) (PARAM_LIST)) "
-          "(DEF (IDENT f) NONE (BLOCK (BOOL_LIT false)) (PARAM_LIST)) "
-          "(DEF (IDENT g) NONE (BLOCK (UNIT_LIT)) (PARAM_LIST)))",
+          "(DEF (IDENT f) NONE (BLOCK (BOOL_LIT false)) (PARAM_LIST)))",
           PROLOG,
           TOK(DEF), ID("a"), UNIT_VALUE, TOK(ASSIGN), INT(42), EOL,
           TOK(DEF), ID("b"), UNIT_VALUE, TOK(ASSIGN), DBL(2.5), EOL,
           TOK(DEF), ID("c"), UNIT_VALUE, TOK(ASSIGN), STR("hi"), EOL,
-          TOK(DEF), ID("d"), UNIT_VALUE, TOK(ASSIGN), TSTR("x\ny"),
-            EOL,
-          TOK(DEF), ID("e"), UNIT_VALUE, TOK(ASSIGN), TOK(BOOL_TRUE),
-            EOL,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-            TOK(BOOL_FALSE), EOL,
-          TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL);
+          TOK(DEF), ID("d"), UNIT_VALUE, TOK(ASSIGN), TSTR("x\ny"), EOL,
+          TOK(DEF), ID("e"), UNIT_VALUE, TOK(ASSIGN), TOK(BOOL_TRUE), EOL,
+          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), TOK(BOOL_FALSE), EOL);
     }
 
-    it("ends the expression at an operand right after an operand") {
-      // def f() = a b
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), ID("a"), ID("b"),
-            EOL);
-    }
-
-    it("rejects an expression with no operand") {
-      // def f() = -, the expression ends before any operand
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-            TOK(OPERATOR_MINUS), EOL);
-    }
-
-    it("rejects a function body starting with no expression") {
-      // def f() = :
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), TOK(COLON), EOL);
-    }
-  }
-
-  subdesc(positions) {
+    // attach_node is the single place that sets a position, so one node kind
+    // of each family is enough
     it("gives every node the position of the token it starts at") {
       // import ifj26.*
       // @main def f(a: Int): Int = a
-      static const Token program[] = {
-          {.type = INDENT, .value.integer = 0, .line = 1, .column = 1},
-          {.type = IMPORT, .line = 1, .column = 1},
-          {.type = IDENT, .value.text = "ifj26", .line = 1, .column = 8},
-          {.type = PERIOD, .line = 1, .column = 13},
-          {.type = OPERATOR_MULTIPLY, .line = 1, .column = 14},
-          {.type = EOL_TOKEN, .line = 1, .column = 15},
-          {.type = INDENT, .value.integer = 0, .line = 2, .column = 1},
-          {.type = AT_MAIN, .line = 2, .column = 1},
-          {.type = DEF, .line = 2, .column = 7},
-          {.type = IDENT, .value.text = "f", .line = 2, .column = 11},
-          {.type = L_PAREN, .line = 2, .column = 12},
-          {.type = IDENT, .value.text = "a", .line = 2, .column = 13},
-          {.type = COLON, .line = 2, .column = 14},
-          {.type = TYPE_INT, .line = 2, .column = 16},
-          {.type = R_PAREN, .line = 2, .column = 19},
-          {.type = COLON, .line = 2, .column = 20},
-          {.type = TYPE_INT, .line = 2, .column = 22},
-          {.type = ASSIGN, .line = 2, .column = 26},
-          {.type = IDENT, .value.text = "a", .line = 2, .column = 28},
-          {.type = EOL_TOKEN, .line = 2, .column = 29},
-      };
-      FakeSource source = {.tokens = program,
-                           .count = sizeof(program) / sizeof(*program)};
-      parser_run(ctx, fake_next, &source);
+      PARSE(PROLOG,
+            AT(AT_MAIN, 1), AT(DEF, 7), AT_ID("f", 11), AT(L_PAREN, 12),
+            AT_ID("a", 13), AT(COLON, 14), AT(TYPE_INT, 16), AT(R_PAREN, 19),
+            AT(COLON, 20), AT(TYPE_INT, 22), AT(ASSIGN, 26), AT_ID("a", 28),
+            EOL);
 
       // DEF [ident, rettype, BLOCK, PARAM_LIST [PARAM [ident, type]]]
       AstNode* def;
@@ -294,1335 +156,254 @@ describe(parser) {
       asserteq(ast_node_get_column(child), 22);
       ast_node_get_child(ctx, def, 2, &child);  // BLOCK
       asserteq(ast_node_get_column(child), 28);
-      ast_node_get_child(ctx, child, 0, &child);  // a
-      asserteq(ast_node_get_line(child), 2);
-      asserteq(ast_node_get_column(child), 28);
-
       ast_node_get_child(ctx, def, 3, &child);  // PARAM_LIST
       asserteq(ast_node_get_column(child), 12);
       ast_node_get_child(ctx, child, 0, &param);
       asserteq(ast_node_get_column(param), 13);
-      ast_node_get_child(ctx, param, 0, &child);  // a
-      asserteq(ast_node_get_column(child), 13);
       ast_node_get_child(ctx, param, 1, &child);  // Int
       asserteq(ast_node_get_column(child), 16);
     }
-  }
 
-  subdesc(syntax_errors) {
-    it("rejects a prolog importing anything but ifj26") {
-      ASSERT_SYNTAX_ERROR(
-          TOK(IMPORT), ID("foo"), TOK(PERIOD),
-            TOK(OPERATOR_MULTIPLY), EOL,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL);
-    }
-
-    it("rejects a program without a prolog") {
-      ASSERT_SYNTAX_ERROR(
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL);
-    }
-
-    it("rejects a prolog not ending the line") {
-      ASSERT_SYNTAX_ERROR(
-          TOK(IMPORT), ID("ifj26"), TOK(PERIOD),
-            TOK(OPERATOR_MULTIPLY), TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-            UNIT_VALUE, EOL);
-    }
-
-    it("rejects a parameter without a type") {
-      // def f(a: Int, b) = a
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
-            TOK(TYPE_INT), TOK(COMMA), ID("b"), TOK(R_PAREN), TOK(ASSIGN),
-            ID("a"), EOL);
-    }
-
-    it("rejects a parameter list with two commas in a row") {
-      // def f(a: Int,, b: Int) = a
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
-            TOK(TYPE_INT), TOK(COMMA), TOK(COMMA), ID("b"), TOK(COLON),
-            TOK(TYPE_INT), TOK(R_PAREN), TOK(ASSIGN), ID("a"), EOL);
-    }
-
-    it("rejects a parameter type that is not a type") {
-      // def f(a: a) = a
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
-            ID("a"), TOK(R_PAREN), TOK(ASSIGN), ID("a"), EOL);
-    }
-
-    it("rejects a function without parameters in parentheses") {
-      // def f = 1
-      ASSERT_SYNTAX_ERROR(
-          PROLOG, TOK(DEF), ID("f"), TOK(ASSIGN), INT(1), EOL);
-    }
-
-    it("rejects a missing = before the body") {
-      // def f(): Int 1
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON), TOK(TYPE_INT),
-            INT(1), EOL);
-    }
-
-    it("rejects @main not followed by def") {
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(AT_MAIN), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE,
-            EOL);
-    }
-
-    it("rejects a stray token between functions") {
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL,
-          ID("g"), EOL);
-    }
-
-    // Changes: accepted: the end of file ends a last line without '\n'
-    // (ADR-0007).
-    it("accepts a last line without a line break") {
-      // def f() = 1 (end of file, no end of line)
-      ASSERT_AST(BODY_AST("(INT_LIT 1)"),
-          PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), INT(1));
+    it("rejects malformed programs and function headers") {
+      ASSERT_SYNTAX_ERRORS(
+          // import foo.* instead of ifj26.*
+          ROW(TOK(IMPORT), ID("foo"), TOK(PERIOD), TOK(OPERATOR_MULTIPLY),
+              EOL),
+          // a program without a prolog
+          ROW(TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL),
+          // a prolog not ending the line
+          ROW(TOK(IMPORT), ID("ifj26"), TOK(PERIOD), TOK(OPERATOR_MULTIPLY),
+              TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE, EOL),
+          // def f(a: Int, b) = a
+          ROW(PROLOG, TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+              TOK(TYPE_INT), TOK(COMMA), ID("b"), TOK(R_PAREN), TOK(ASSIGN),
+              ID("a"), EOL),
+          // def f(a: Int,, b: Int) = a
+          ROW(PROLOG, TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+              TOK(TYPE_INT), TOK(COMMA), TOK(COMMA), ID("b"), TOK(COLON),
+              TOK(TYPE_INT), TOK(R_PAREN), TOK(ASSIGN), ID("a"), EOL),
+          // def f(a: Int,): Unit = (), a trailing comma needs a line break
+          // before the ) (PDF 1.2)
+          ROW(PROLOG, TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+              TOK(TYPE_INT), TOK(COMMA), TOK(R_PAREN), TOK(COLON),
+              TOK(TYPE_UNIT), TOK(ASSIGN), UNIT_VALUE, EOL),
+          // def f(a: a) = a
+          ROW(PROLOG, TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+              ID("a"), TOK(R_PAREN), TOK(ASSIGN), ID("a"), EOL),
+          // def f = 1
+          ROW(PROLOG, TOK(DEF), ID("f"), TOK(ASSIGN), INT(1), EOL),
+          // def f(a: Int b) = a, def f(:) = 1, def f() 1
+          ROW(PROLOG, TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+              TOK(TYPE_INT), ID("b"), TOK(R_PAREN), TOK(ASSIGN), ID("a"), EOL),
+          ROW(PROLOG, TOK(DEF), ID("f"), TOK(L_PAREN), TOK(COLON),
+              TOK(R_PAREN), TOK(ASSIGN), INT(1), EOL),
+          ROW(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, INT(1), EOL),
+          // def f(): Int 1
+          ROW(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON),
+              TOK(TYPE_INT), INT(1), EOL),
+          // @main not followed by def
+          ROW(PROLOG, TOK(AT_MAIN), ID("f"), UNIT_VALUE, TOK(ASSIGN),
+              UNIT_VALUE, EOL),
+          // a stray token between functions
+          ROW(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), UNIT_VALUE,
+              EOL, ID("g"), EOL),
+          // def f() = a b
+          ONE(ID("a"), ID("b")),
+          // def f() = -, the expression ends before any operand
+          ONE(TOK(OPERATOR_MINUS)),
+          // def f() = :
+          ONE(TOK(COLON)));
     }
   }
 
-  subdesc(operators) {
-    it("follows precedence and left associativity") {
-      // def f() = 40 - n * 3 - 2
-      ASSERT_AST(
-          BODY_AST("(SUB (SUB (INT_LIT 40) (MUL (IDENT n) (INT_LIT 3))) "
-                   "(INT_LIT 2))"),
-          BODY(INT(40), TOK(OPERATOR_MINUS), ID("n"), TOK(OPERATOR_MULTIPLY),
-               INT(3), TOK(OPERATOR_MINUS), INT(2)));
-    }
-
-    it("groups with parentheses without leaving a node") {
-      // def f() = (40 - n) * (3 - 2)
-      ASSERT_AST(
-          BODY_AST("(MUL (SUB (INT_LIT 40) (IDENT n)) "
-                   "(SUB (INT_LIT 3) (INT_LIT 2)))"),
-          BODY(TOK(L_PAREN), INT(40), TOK(OPERATOR_MINUS), ID("n"),
-               TOK(R_PAREN), TOK(OPERATOR_MULTIPLY), TOK(L_PAREN), INT(3),
-               TOK(OPERATOR_MINUS), INT(2), TOK(R_PAREN)));
-    }
-
-    it("reads - at the start and after ( as unary minus") {
-      // def f() = -(-n)
-      ASSERT_AST(BODY_AST("(NEG (NEG (IDENT n)))"),
-                 BODY(TOK(OPERATOR_MINUS), TOK(L_PAREN), TOK(OPERATOR_MINUS),
-                      ID("n"), TOK(R_PAREN)));
-    }
-
-    it("reads - after an operator as unary minus") {
-      // def f() = a - -b
-      ASSERT_AST(BODY_AST("(SUB (IDENT a) (NEG (IDENT b)))"),
-                 BODY(ID("a"), TOK(OPERATOR_MINUS), TOK(OPERATOR_MINUS),
-                      ID("b")));
-    }
-
-    it("keeps a negative literal as NEG of the literal") {
-      // def f() = -7 * 2
-      ASSERT_AST(BODY_AST("(MUL (NEG (INT_LIT 7)) (INT_LIT 2))"),
-                 BODY(TOK(OPERATOR_MINUS), INT(7), TOK(OPERATOR_MULTIPLY),
-                      INT(2)));
-    }
-
-    it("binds ! tighter than &&") {
-      // def f() = !x && y
-      ASSERT_AST(BODY_AST("(AND (NOT (IDENT x)) (IDENT y))"),
-                 BODY(TOK(BOOL_NEG), ID("x"), TOK(BOOL_AND), ID("y")));
-    }
-
-    it("reads .name as member access of the operand before it") {
-      // def f() = word.length
-      ASSERT_AST(BODY_AST("(MEMBER length (IDENT word))"),
-                 BODY(ID("word"), TOK(PERIOD), ID("length")));
-    }
-
-    it("chains member access left to right after parentheses") {
-      // def f() = (-3.75).toInt.toString
-      ASSERT_AST(
-          BODY_AST("(MEMBER toString (MEMBER toInt (NEG (DOUBLE_LIT 3.75))))"),
-          BODY(TOK(L_PAREN), TOK(OPERATOR_MINUS), DBL(3.75), TOK(R_PAREN),
-               TOK(PERIOD), ID("toInt"), TOK(PERIOD), ID("toString")));
-    }
-
-    it("binds member access tighter than unary minus") {
-      // def f() = -x.length
-      ASSERT_AST(BODY_AST("(NEG (MEMBER length (IDENT x)))"),
-                 BODY(TOK(OPERATOR_MINUS), ID("x"), TOK(PERIOD), ID("length")));
-    }
-
-    it("reads - after member access as subtraction") {
-      // def f() = word.length - 1
-      ASSERT_AST(BODY_AST("(SUB (MEMBER length (IDENT word)) (INT_LIT 1))"),
-                 BODY(ID("word"), TOK(PERIOD), ID("length"),
-                      TOK(OPERATOR_MINUS), INT(1)));
-    }
-
-    it("reads - after ) as subtraction") {
-      // def f() = (a) - b
-      ASSERT_AST(BODY_AST("(SUB (IDENT a) (IDENT b))"),
-                 BODY(TOK(L_PAREN), ID("a"), TOK(R_PAREN),
-                      TOK(OPERATOR_MINUS), ID("b")));
-    }
-
-    it("binds && tighter than ||") {
-      // def f() = a && b || c
-      ASSERT_AST(BODY_AST("(OR (AND (IDENT a) (IDENT b)) (IDENT c))"),
-                 BODY(ID("a"), TOK(BOOL_AND), ID("b"), TOK(BOOL_OR), ID("c")));
-    }
-
-    it("binds + tighter than == and == tighter than &&") {
-      // def f() = n == 4.0 && "ab" == "a" + "b"
-      ASSERT_AST(
-          BODY_AST("(AND (EQ (IDENT n) (DOUBLE_LIT 4)) "
-                   "(EQ (STRING_LIT \"ab\") "
-                   "(ADD (STRING_LIT \"a\") (STRING_LIT \"b\"))))"),
-          BODY(ID("n"), TOK(COMPARISON_EQ), DBL(4.0), TOK(BOOL_AND), STR("ab"),
-               TOK(COMPARISON_EQ), STR("a"), TOK(OPERATOR_PLUS), STR("b")));
-    }
-
-    it("chains comparisons joined by && from the everything program") {
-      // def f() = "ab" < "ac" && "ab" <= "ab" && "b" > "ab" && "b" >= "b"
-      ASSERT_AST(
-          BODY_AST("(AND (AND (AND "
-                   "(LT (STRING_LIT \"ab\") (STRING_LIT \"ac\")) "
-                   "(LE (STRING_LIT \"ab\") (STRING_LIT \"ab\"))) "
-                   "(GT (STRING_LIT \"b\") (STRING_LIT \"ab\"))) "
-                   "(GE (STRING_LIT \"b\") (STRING_LIT \"b\")))"),
-          BODY(STR("ab"), TOK(COMPARISON_L), STR("ac"), TOK(BOOL_AND),
-               STR("ab"), TOK(COMPARISON_LE), STR("ab"), TOK(BOOL_AND),
-               STR("b"), TOK(COMPARISON_G), STR("ab"), TOK(BOOL_AND),
-               STR("b"), TOK(COMPARISON_GE), STR("b")));
-    }
-
-    it("mixes !, && and != from the everything program") {
-      // def f() = !skippedAnd && skippedOr && active != false
-      ASSERT_AST(
-          BODY_AST("(AND (AND (NOT (IDENT skippedAnd)) (IDENT skippedOr)) "
-                   "(NEQ (IDENT active) (BOOL_LIT false)))"),
-          BODY(TOK(BOOL_NEG), ID("skippedAnd"), TOK(BOOL_AND), ID("skippedOr"),
-               TOK(BOOL_AND), ID("active"), TOK(COMPARISON_NEQ),
-               TOK(BOOL_FALSE)));
-    }
-
-    it("parses a parenthesised || inside && from the everything program") {
-      // def f() = false && (bad || 1 / zero > 0)
-      ASSERT_AST(
-          BODY_AST("(AND (BOOL_LIT false) (OR (IDENT bad) "
-                   "(GT (DIV (INT_LIT 1) (IDENT zero)) (INT_LIT 0))))"),
-          BODY(TOK(BOOL_FALSE), TOK(BOOL_AND), TOK(L_PAREN), ID("bad"),
-               TOK(BOOL_OR), INT(1), TOK(OPERATOR_DIVIDE), ID("zero"),
-               TOK(COMPARISON_G), INT(0), TOK(R_PAREN)));
-    }
-
-    it("gives an operator node the position of its operator token") {
-      // def f() = a+-b, + at 2:12 and - at 2:13
-      static const Token program[] = {
-          PROLOG,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-          {.type = IDENT, .value.text = "a", .line = 2, .column = 11},
-          {.type = OPERATOR_PLUS, .line = 2, .column = 12},
-          {.type = OPERATOR_MINUS, .line = 2, .column = 13},
-          {.type = IDENT, .value.text = "b", .line = 2, .column = 14},
-          {.type = PERIOD, .line = 2, .column = 15},
-          {.type = IDENT, .value.text = "m", .line = 2, .column = 16},
-          EOL,
-      };
-      FakeSource source = {.tokens = program,
-                           .count = sizeof(program) / sizeof(*program)};
-      parser_run(ctx, fake_next, &source);
-
-      // DEF [ident, rettype, BLOCK [ADD [a, NEG [MEMBER m [b]]]], PARAM_LIST]
-      AstNode* node;
-      ast_node_get_child(ctx, ctx->ast, 0, &node);
-      ast_node_get_child(ctx, node, 2, &node);
-      ast_node_get_child(ctx, node, 0, &node);  // ADD
-      asserteq(ast_node_get_line(node), 2);
-      asserteq(ast_node_get_column(node), 12);
-      ast_node_get_child(ctx, node, 1, &node);  // NEG
-      asserteq(ast_node_get_column(node), 13);
-      ast_node_get_child(ctx, node, 0, &node);  // MEMBER
-      asserteq(ast_node_get_column(node), 15);
-    }
-  }
-
-  // Calls as operands through the ARG_LIST callback
-  subdesc(calls) {
-    it("parses a call with no arguments written as the unit token") {
-      // def f() = readInt()
-      ASSERT_AST(BODY_AST("(CALL (IDENT readInt))"),
-                 BODY(ID("readInt"), UNIT_VALUE));
-    }
-
-    it("parses a call with an empty argument list in parentheses") {
-      // def f() = readInt( )
-      ASSERT_AST(BODY_AST("(CALL (IDENT readInt))"),
-                 BODY(ID("readInt"), TOK(L_PAREN), TOK(R_PAREN)));
-    }
-
-    it("parses a call with one argument") {
-      // def f() = print(x)
-      ASSERT_AST(BODY_AST("(CALL (IDENT print) (IDENT x))"),
-                 BODY(ID("print"), TOK(L_PAREN), ID("x"), TOK(R_PAREN)));
-    }
-
-    // Changes: the trailing comma is followed by a line break (PDF 1.2).
-    it("parses several arguments with a trailing comma before a line break") {
-      // def f() = pack(trace("L", n), readInt(), trace("R", n),
-      // )
-      ASSERT_AST(
-          BODY_AST("(CALL (IDENT pack) "
-                   "(CALL (IDENT trace) (STRING_LIT \"L\") (IDENT n)) "
-                   "(CALL (IDENT readInt)) "
-                   "(CALL (IDENT trace) (STRING_LIT \"R\") (IDENT n)))"),
-          BODY(ID("pack"), TOK(L_PAREN),
-               ID("trace"), TOK(L_PAREN), STR("L"), TOK(COMMA), ID("n"),
-               TOK(R_PAREN), TOK(COMMA),
-               ID("readInt"), UNIT_VALUE, TOK(COMMA),
-               ID("trace"), TOK(L_PAREN), STR("R"), TOK(COMMA), ID("n"),
-               TOK(R_PAREN), TOK(COMMA), BREAK, TOK(R_PAREN)));
-    }
-
-    // Changes: new, the line break is the hidden EOL, not a later line number.
-    it("accepts a trailing comma before a line break whatever the token lines") {
-      // def f() = pack(a,
-      // )
-      ASSERT_AST(BODY_AST("(CALL (IDENT pack) (IDENT a))"),
-                 BODY(ID("pack"), TOK(L_PAREN), ID("a"),
-                      ((Token){.type = COMMA, .line = 2}), BREAK,
-                      ((Token){.type = R_PAREN, .line = 2})));
-    }
-
-    // Changes: the single-argument case takes a line break as well, and a `)`
-    // on the comma's line is exit 2.
-    it("accepts a trailing comma after a single argument before a line "
-       "break") {
-      // def f() = pack(a,
-      // )
-      ASSERT_AST(BODY_AST("(CALL (IDENT pack) (IDENT a))"),
-                 BODY(ID("pack"), TOK(L_PAREN), ID("a"), TOK(COMMA), BREAK,
-                      TOK(R_PAREN)));
-    }
-
-    // Changes: new, `print(1,)` on one line is exit 2 (PDF 1.2).
-    it("rejects a trailing argument comma with the ) on the same line") {
-      // def f() = print(1,)
-      ASSERT_SYNTAX_ERROR(
-          PROLOG,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), ID("print"),
-            TOK(L_PAREN), INT(1), TOK(COMMA), TOK(R_PAREN), EOL);
-    }
-
-    it("parses nested calls") {
-      // def f() = a(b(c(x)))
-      ASSERT_AST(BODY_AST("(CALL (IDENT a) (CALL (IDENT b) "
-                          "(CALL (IDENT c) (IDENT x))))"),
-                 BODY(ID("a"), TOK(L_PAREN), ID("b"), TOK(L_PAREN), ID("c"),
-                      TOK(L_PAREN), ID("x"), TOK(R_PAREN), TOK(R_PAREN),
-                      TOK(R_PAREN)));
-    }
-
-    it("parses a call with operator arguments") {
-      // def f() = trace("R", n + 2)
-      ASSERT_AST(BODY_AST("(CALL (IDENT trace) (STRING_LIT \"R\") "
-                          "(ADD (IDENT n) (INT_LIT 2)))"),
-                 BODY(ID("trace"), TOK(L_PAREN), STR("R"), TOK(COMMA),
-                      ID("n"), TOK(OPERATOR_PLUS), INT(2), TOK(R_PAREN)));
-    }
-
-    it("parses parentheses, unary and member operators in arguments") {
-      // def f() = g(-(a + b) * 2, !p, x.m)
-      ASSERT_AST(
-          BODY_AST("(CALL (IDENT g) "
-                   "(MUL (NEG (ADD (IDENT a) (IDENT b))) (INT_LIT 2)) "
-                   "(NOT (IDENT p)) (MEMBER m (IDENT x)))"),
-          BODY(ID("g"), TOK(L_PAREN), TOK(OPERATOR_MINUS), TOK(L_PAREN),
-               ID("a"), TOK(OPERATOR_PLUS), ID("b"), TOK(R_PAREN),
-               TOK(OPERATOR_MULTIPLY), INT(2), TOK(COMMA), TOK(BOOL_NEG),
-               ID("p"), TOK(COMMA), ID("x"), TOK(PERIOD), ID("m"),
-               TOK(R_PAREN)));
-    }
-
-    it("uses a call as an operand of operators") {
-      // def f() = -g(1) * 2 + h()
-      ASSERT_AST(BODY_AST("(ADD (MUL (NEG (CALL (IDENT g) (INT_LIT 1))) "
-                          "(INT_LIT 2)) (CALL (IDENT h)))"),
-                 BODY(TOK(OPERATOR_MINUS), ID("g"), TOK(L_PAREN), INT(1),
-                      TOK(R_PAREN), TOK(OPERATOR_MULTIPLY), INT(2),
-                      TOK(OPERATOR_PLUS), ID("h"), UNIT_VALUE));
-    }
-
-    it("reads - after a call as subtraction") {
-      // def f() = g(1) - 2
-      ASSERT_AST(BODY_AST("(SUB (CALL (IDENT g) (INT_LIT 1)) (INT_LIT 2))"),
-                 BODY(ID("g"), TOK(L_PAREN), INT(1), TOK(R_PAREN),
-                      TOK(OPERATOR_MINUS), INT(2)));
-    }
-
-    it("allows member access on a call") {
-      // def f() = g(1).m
-      ASSERT_AST(BODY_AST("(MEMBER m (CALL (IDENT g) (INT_LIT 1)))"),
-                 BODY(ID("g"), TOK(L_PAREN), INT(1), TOK(R_PAREN),
-                      TOK(PERIOD), ID("m")));
-    }
-
-    it("keeps calls inside parentheses and operators of an enclosing call") {
-      // def f() = g((h(1) + 2) * k(), 3)
-      ASSERT_AST(
-          BODY_AST("(CALL (IDENT g) "
-                   "(MUL (ADD (CALL (IDENT h) (INT_LIT 1)) (INT_LIT 2)) "
-                   "(CALL (IDENT k))) (INT_LIT 3))"),
-          BODY(ID("g"), TOK(L_PAREN), TOK(L_PAREN), ID("h"), TOK(L_PAREN),
-               INT(1), TOK(R_PAREN), TOK(OPERATOR_PLUS), INT(2), TOK(R_PAREN),
-               TOK(OPERATOR_MULTIPLY), ID("k"), UNIT_VALUE, TOK(COMMA), INT(3),
-               TOK(R_PAREN)));
-    }
-
-    it("gives a CALL the position of its callee") {
-      // import ifj26.*
-      // def f() = g(1)
-      static const Token program[] = {
-          {.type = INDENT, .value.integer = 0, .line = 1, .column = 1},
-          {.type = IMPORT, .line = 1, .column = 1},
-          {.type = IDENT, .value.text = "ifj26", .line = 1, .column = 8},
-          {.type = PERIOD, .line = 1, .column = 13},
-          {.type = OPERATOR_MULTIPLY, .line = 1, .column = 14},
-          {.type = EOL_TOKEN, .line = 1, .column = 15},
-          {.type = INDENT, .value.integer = 0, .line = 2, .column = 1},
-          {.type = DEF, .line = 2, .column = 1},
-          {.type = IDENT, .value.text = "f", .line = 2, .column = 5},
-          {.type = TYPE_UNIT, .line = 2, .column = 6},
-          {.type = ASSIGN, .line = 2, .column = 9},
-          {.type = IDENT, .value.text = "g", .line = 2, .column = 11},
-          {.type = L_PAREN, .line = 2, .column = 12},
-          {.type = NUMBER_INT, .value.integer = 1, .line = 2, .column = 13},
-          {.type = R_PAREN, .line = 2, .column = 14},
-          {.type = EOL_TOKEN, .line = 2, .column = 15},
-      };
-      FakeSource source = {.tokens = program,
-                           .count = sizeof(program) / sizeof(*program)};
-      parser_run(ctx, fake_next, &source);
-
-      // DEF [ident, NONE, BLOCK [CALL [g, 1]], PARAM_LIST]
-      AstNode* node;
-      ast_node_get_child(ctx, ctx->ast, 0, &node);
-      ast_node_get_child(ctx, node, 2, &node);
-      ast_node_get_child(ctx, node, 0, &node);  // CALL
-      asserteq(ast_node_get_line(node), 2);
-      asserteq(ast_node_get_column(node), 11);
-      AstNode* child;
-      ast_node_get_child(ctx, node, 0, &child);  // g
-      asserteq(ast_node_get_column(child), 11);
-      ast_node_get_child(ctx, node, 1, &child);  // 1
-      asserteq(ast_node_get_column(child), 13);
-    }
-  }
-
-  // Syntax errors of call argument lists (cleanup with a non-empty precedence
-  // stack)
-  subdesc(call_errors) {
-    it("rejects two arguments with no comma between them") {
-      // def f() = f(a b)
-      ASSERT_SYNTAX_ERROR(BODY(ID("f"), TOK(L_PAREN), ID("a"), ID("b"),
-                               TOK(R_PAREN)));
-    }
-
-    it("rejects two commas in a row in an argument list") {
-      // def f() = f(a,,b)
-      ASSERT_SYNTAX_ERROR(BODY(ID("f"), TOK(L_PAREN), ID("a"), TOK(COMMA),
-                               TOK(COMMA), ID("b"), TOK(R_PAREN)));
-    }
-
-    it("rejects a leading comma in an argument list") {
-      // def f() = f(,a)
-      ASSERT_SYNTAX_ERROR(BODY(ID("f"), TOK(L_PAREN), TOK(COMMA), ID("a"),
-                               TOK(R_PAREN)));
-    }
-
-    it("rejects an unclosed argument list") {
-      // def f() = f(a
-      ASSERT_SYNTAX_ERROR(BODY(ID("f"), TOK(L_PAREN), ID("a")));
-    }
-
-    it("rejects an argument that is not a value") {
-      // def f() = f(a, :)
-      ASSERT_SYNTAX_ERROR(BODY(ID("f"), TOK(L_PAREN), ID("a"), TOK(COMMA),
-                               TOK(COLON), TOK(R_PAREN)));
-    }
-
-    it("rejects a bad argument list under operators on the stack") {
-      // def f() = -1 + 2 * f(a b), NEG, ADD and MUL are on the stack
-      ASSERT_SYNTAX_ERROR(
-          BODY(TOK(OPERATOR_MINUS), INT(1), TOK(OPERATOR_PLUS), INT(2),
-               TOK(OPERATOR_MULTIPLY), ID("f"), TOK(L_PAREN), ID("a"),
-               ID("b"), TOK(R_PAREN)));
-    }
-
-    it("rejects a bad argument list nested in several frames") {
-      // def f() = g(1 + (h(2, k(a,,b)) * 3))
-      ASSERT_SYNTAX_ERROR(
-          BODY(ID("g"), TOK(L_PAREN), INT(1), TOK(OPERATOR_PLUS), TOK(L_PAREN),
-               ID("h"), TOK(L_PAREN), INT(2), TOK(COMMA), ID("k"), TOK(L_PAREN),
-               ID("a"), TOK(COMMA), TOK(COMMA), ID("b"), TOK(R_PAREN),
-               TOK(R_PAREN), TOK(OPERATOR_MULTIPLY), INT(3), TOK(R_PAREN),
-               TOK(R_PAREN)));
-    }
-
-    it("frees the stack when the lexer fails inside an argument list") {
-      // def f() = -1 + g(a, 2 * <lexical error>
-      assertThrow(E_LEXER_ERROR, {
-        PARSE(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-              TOK(OPERATOR_MINUS), INT(1), TOK(OPERATOR_PLUS), ID("g"),
-              TOK(L_PAREN), ID("a"), TOK(COMMA), INT(2),
-              TOK(OPERATOR_MULTIPLY), LEX_ERROR);
-      });
-    }
-  }
-
-  subdesc(expression_errors) {
-    it("rejects two binary operators in a row") {
-      // def f() = 1 + * 2
-      ASSERT_SYNTAX_ERROR(BODY(INT(1), TOK(OPERATOR_PLUS),
-                               TOK(OPERATOR_MULTIPLY), INT(2)));
-    }
-
-    it("rejects an unclosed parenthesis") {
-      // def f() = (a + b
-      ASSERT_SYNTAX_ERROR(BODY(TOK(L_PAREN), ID("a"), TOK(OPERATOR_PLUS),
-                               ID("b")));
-    }
-
-    it("rejects an operator at the end of the line after a reduced one") {
-      // def f() = -a * b +, NEG and MUL are already built on the stack
-      ASSERT_SYNTAX_ERROR(BODY(TOK(OPERATOR_MINUS), ID("a"),
-                               TOK(OPERATOR_MULTIPLY), ID("b"),
-                               TOK(OPERATOR_PLUS)));
-    }
-
-    it("rejects a binary operator at the end of the line") {
-      // def f() = a +
-      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(OPERATOR_PLUS)));
-    }
-
-    it("rejects chained comparisons the precedence table leaves empty") {
-      // def f() = a < b < c
-      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(COMPARISON_L), ID("b"),
-                               TOK(COMPARISON_L), ID("c")));
-    }
-
-    it("rejects chained equalities the precedence table leaves empty") {
-      // def f() = a == b != c
-      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(COMPARISON_EQ), ID("b"),
-                               TOK(COMPARISON_NEQ), ID("c")));
-    }
-
-    it("rejects empty parentheses inside an expression") {
-      // def f() = 1 + ( )
-      ASSERT_SYNTAX_ERROR(BODY(INT(1), TOK(OPERATOR_PLUS), TOK(L_PAREN),
-                               TOK(R_PAREN)));
-    }
-
-    it("rejects a . not followed by a member name") {
-      // def f() = a.1
-      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(PERIOD), INT(1)));
-    }
-
-    it("rejects member access with no receiver") {
-      // def f() = .m
-      ASSERT_SYNTAX_ERROR(BODY(TOK(PERIOD), ID("m")));
-    }
-
-    it("leaves a ) closing no ( of the expression to the caller") {
-      // def f() = a), the function body then expects the end of the line
-      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(R_PAREN)));
-    }
-
-    it("ends the expression at ! after an operand") {
-      // def f() = a !b
-      ASSERT_SYNTAX_ERROR(BODY(ID("a"), TOK(BOOL_NEG), ID("b")));
-    }
-
-    it("ends the expression at ( after a )") {
-      // def f() = (a) (b)
-      ASSERT_SYNTAX_ERROR(BODY(TOK(L_PAREN), ID("a"), TOK(R_PAREN),
-                               TOK(L_PAREN), ID("b"), TOK(R_PAREN)));
-    }
-  }
-
-  // Interpolated strings (parts, ${...} values, operand use)
-  subdesc(interpolated_strings) {
-    it("parses the single-line interpolated string of the program") {
-      // def f() = print(s"$course$year: ${count + 1} examples cost $$0.")
-      ASSERT_AST(
-          BODY_AST("(CALL (IDENT print) (INTERP_STRING (IDENT course) "
-                   "(IDENT year) (STRING_LIT \": \") "
-                   "(ADD (IDENT count) (INT_LIT 1)) "
-                   "(STRING_LIT \" examples cost \") (STRING_LIT \"$\") "
-                   "(STRING_LIT \"0.\")))"),
-          BODY(ID("print"), TOK(L_PAREN), S_OPEN, ID("course"), ID("year"),
-               STR(": "), DOLLAR_OPEN, ID("count"), TOK(OPERATOR_PLUS), INT(1),
-               DOLLAR_CLOSE, STR(" examples cost "), STR("$"), STR("0."),
-               S_CLOSE, TOK(R_PAREN)));
-    }
-
-    it("parses the triple-quoted interpolated string of the program") {
-      // def f() = s"""He said "hello", $course.
-      // Next year: ${year + 1}."""
-      ASSERT_AST(
-          BODY_AST("(INTERP_STRING (STRING_LIT \"He said \\\"hello\\\", \") "
-                   "(IDENT course) (STRING_LIT \".\\nNext year: \") "
-                   "(ADD (IDENT year) (INT_LIT 1)) (STRING_LIT \".\"))"),
-          BODY(TS_OPEN, STR("He said \"hello\", "), ID("course"),
-               STR(".\nNext year: "), DOLLAR_OPEN, ID("year"),
-               TOK(OPERATOR_PLUS), INT(1), DOLLAR_CLOSE, STR("."), TS_CLOSE));
-    }
-
-    it("parses text around a $name part") {
-      // def f() = s"|$packed\n"
-      ASSERT_AST(BODY_AST("(INTERP_STRING (STRING_LIT \"|\") (IDENT packed) "
-                          "(STRING_LIT \"\\n\"))"),
-                 BODY(S_OPEN, STR("|"), ID("packed"), STR("\n"), S_CLOSE));
-    }
-
-    it("parses a call in ${...}") {
-      // def f() = s"${returnedCall(n)}"
-      ASSERT_AST(
-          BODY_AST("(INTERP_STRING (CALL (IDENT returnedCall) (IDENT n)))"),
-          BODY(S_OPEN, DOLLAR_OPEN, ID("returnedCall"), TOK(L_PAREN), ID("n"),
-               TOK(R_PAREN), DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("parses operators and parentheses in ${...}") {
-      // def f() = s"${a * (b + 1)}"
-      ASSERT_AST(
-          BODY_AST("(INTERP_STRING (MUL (IDENT a) (ADD (IDENT b) "
-                   "(INT_LIT 1))))"),
-          BODY(S_OPEN, DOLLAR_OPEN, ID("a"), TOK(OPERATOR_MULTIPLY),
-               TOK(L_PAREN), ID("b"), TOK(OPERATOR_PLUS), INT(1), TOK(R_PAREN),
-               DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("parses $$ followed by ${...}") {
-      // def f() = s"$$${count + 1}"
-      ASSERT_AST(
-          BODY_AST("(INTERP_STRING (STRING_LIT \"$\") "
-                   "(ADD (IDENT count) (INT_LIT 1)))"),
-          BODY(S_OPEN, STR("$"), DOLLAR_OPEN, ID("count"), TOK(OPERATOR_PLUS),
-               INT(1), DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("parses adjacent ${...} parts in source order") {
-      // def f() = s"${1}${x}"
-      ASSERT_AST(BODY_AST("(INTERP_STRING (INT_LIT 1) (IDENT x))"),
-                 BODY(S_OPEN, DOLLAR_OPEN, INT(1), DOLLAR_CLOSE, DOLLAR_OPEN,
-                      ID("x"), DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("parses an empty interpolated string with no children") {
-      // def f() = s""
-      ASSERT_AST(BODY_AST("(INTERP_STRING)"), BODY(S_OPEN, S_CLOSE));
-    }
-
-    it("parses an empty triple-quoted interpolated string") {
-      // def f() = s""""""
-      ASSERT_AST(BODY_AST("(INTERP_STRING)"), BODY(TS_OPEN, TS_CLOSE));
-    }
-
-    it("parses an interpolated string inside ${...}") {
-      // def f() = s"${s"${1}"}"
-      ASSERT_AST(BODY_AST("(INTERP_STRING (INTERP_STRING (INT_LIT 1)))"),
-                 BODY(S_OPEN, DOLLAR_OPEN, S_OPEN, DOLLAR_OPEN, INT(1),
-                      DOLLAR_CLOSE, S_CLOSE, DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("uses an interpolated string as the right operand of an operator") {
-      // def f() = "a" + s"$b"
-      ASSERT_AST(
-          BODY_AST("(ADD (STRING_LIT \"a\") (INTERP_STRING (IDENT b)))"),
-          BODY(STR("a"), TOK(OPERATOR_PLUS), S_OPEN, ID("b"), S_CLOSE));
-    }
-
-    it("uses an interpolated string as the left operand of an operator") {
-      // def f() = s"$b" + "a" * 2
-      ASSERT_AST(
-          BODY_AST("(ADD (INTERP_STRING (IDENT b)) "
-                   "(MUL (STRING_LIT \"a\") (INT_LIT 2)))"),
-          BODY(S_OPEN, ID("b"), S_CLOSE, TOK(OPERATOR_PLUS), STR("a"),
-               TOK(OPERATOR_MULTIPLY), INT(2)));
-    }
-
-    it("takes a member of an interpolated string") {
-      // def f() = s"x".m
-      ASSERT_AST(BODY_AST("(MEMBER m (INTERP_STRING (STRING_LIT \"x\")))"),
-                 BODY(S_OPEN, STR("x"), S_CLOSE, TOK(PERIOD), ID("m")));
-    }
-
-    it("parses interpolated strings as several call arguments") {
-      // def f() = g(s"$a", s"""$b""")
-      ASSERT_AST(BODY_AST("(CALL (IDENT g) (INTERP_STRING (IDENT a)) "
-                          "(INTERP_STRING (IDENT b)))"),
-                 BODY(ID("g"), TOK(L_PAREN), S_OPEN, ID("a"), S_CLOSE,
-                      TOK(COMMA), TS_OPEN, ID("b"), TS_CLOSE, TOK(R_PAREN)));
-    }
-  }
-
-  // Syntax errors and cleanup of interpolated strings
-  subdesc(interpolated_string_errors) {
-    it("rejects an operand right after an interpolated string") {
-      // def f() = s"a" b
-      ASSERT_SYNTAX_ERROR(BODY(S_OPEN, STR("a"), S_CLOSE, ID("b")));
-    }
-
-    it("rejects an interpolated string right after an operand") {
-      // def f() = a s"b"
-      ASSERT_SYNTAX_ERROR(BODY(ID("a"), S_OPEN, STR("b"), S_CLOSE));
-    }
-
-    it("rejects an empty ${}") {
-      // def f() = s"${}"
-      ASSERT_SYNTAX_ERROR(BODY(S_OPEN, DOLLAR_OPEN, DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("rejects a missing operand inside ${...}") {
-      // def f() = s"${1 +}"
-      ASSERT_SYNTAX_ERROR(BODY(S_OPEN, DOLLAR_OPEN, INT(1),
-                               TOK(OPERATOR_PLUS), DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("rejects an operator with no operands inside ${...}") {
-      // def f() = s"${*}"
-      ASSERT_SYNTAX_ERROR(BODY(S_OPEN, DOLLAR_OPEN, TOK(OPERATOR_MULTIPLY),
-                               DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("rejects two values inside one ${...}") {
-      // def f() = s"${a b}"
-      ASSERT_SYNTAX_ERROR(
-          BODY(S_OPEN, DOLLAR_OPEN, ID("a"), ID("b"), DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("rejects a ${ never closed") {
-      // def f() = s"${a"
-      ASSERT_SYNTAX_ERROR(BODY(S_OPEN, DOLLAR_OPEN, ID("a"), S_CLOSE));
-    }
-
-    it("rejects a closing } outside ${...}") {
-      // def f() = s"a}"
-      ASSERT_SYNTAX_ERROR(BODY(S_OPEN, STR("a"), DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("rejects an interpolated string never closed") {
-      // def f() = s"a
-      ASSERT_SYNTAX_ERROR(BODY(S_OPEN, STR("a")));
-    }
-
-    it("rejects a part that is not text, a name or ${...}") {
-      // def f() = s"a1"
-      ASSERT_SYNTAX_ERROR(BODY(S_OPEN, STR("a"), INT(1), S_CLOSE));
-    }
-
-    it("rejects a closing token of the other string kind") {
-      // def f() = s"a""""
-      ASSERT_SYNTAX_ERROR(BODY(S_OPEN, STR("a"), TS_CLOSE));
-    }
-
-    it("rejects a ${ outside an interpolated string") {
-      // def f() = ${a}
-      ASSERT_SYNTAX_ERROR(BODY(DOLLAR_OPEN, ID("a"), DOLLAR_CLOSE));
-    }
-
-    it("rejects a syntax error in ${...} under operators on the stack") {
-      // def f() = -1 + 2 * s"a${b c}", NEG, ADD, MUL and the string are on
-      // the stack
-      ASSERT_SYNTAX_ERROR(
-          BODY(TOK(OPERATOR_MINUS), INT(1), TOK(OPERATOR_PLUS), INT(2),
-               TOK(OPERATOR_MULTIPLY), S_OPEN, STR("a"), DOLLAR_OPEN, ID("b"),
-               ID("c"), DOLLAR_CLOSE, S_CLOSE));
-    }
-
-    it("rejects a syntax error in ${...} nested in several frames") {
-      // def f() = g(1 + s"${h(s"${a,,b}")}")
-      ASSERT_SYNTAX_ERROR(
-          BODY(ID("g"), TOK(L_PAREN), INT(1), TOK(OPERATOR_PLUS), S_OPEN,
-               DOLLAR_OPEN, ID("h"), TOK(L_PAREN), S_OPEN, DOLLAR_OPEN, ID("a"),
-               TOK(COMMA), TOK(COMMA), ID("b"), DOLLAR_CLOSE, S_CLOSE,
-               TOK(R_PAREN), DOLLAR_CLOSE, S_CLOSE, TOK(R_PAREN)));
-    }
-
-    it("frees the stack when the lexer fails inside ${...}") {
-      // def f() = -1 + s"a$x${2 * <lexical error>
-      assertThrow(E_LEXER_ERROR, {
-        PARSE(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-              TOK(OPERATOR_MINUS), INT(1), TOK(OPERATOR_PLUS), S_OPEN,
-              STR("a"), ID("x"), DOLLAR_OPEN, INT(2), TOK(OPERATOR_MULTIPLY),
-              LEX_ERROR);
-      });
-    }
-
-    it("frees the parts of a string when the lexer fails between them") {
-      // def f() = s"a$b<lexical error>
-      assertThrow(E_LEXER_ERROR, {
-        PARSE(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-              S_OPEN, STR("a"), ID("b"), LEX_ERROR);
-      });
-    }
-  }
-
-  // clang-format on
-
-  // Multi-line function bodies, blocks and statements
-  // clang-format off
   subdesc(blocks_and_statements) {
-    it("parses an expression statement on its own line as the expression") {
+    it("parses statements starting with an identifier, a literal, ( or ()") {
       // def f() =
       //   x
-      ASSERT_AST(BODY_AST("(IDENT x)"),
-                 PROLOG, DEF_F, LINE(2), ID("x"), EOL);
-    }
-
-    it("parses statements starting with a literal or ( in order") {
-      // def f() =
+      //   a + b * 2
+      //   word.length
       //   1 + 2
       //   (-3.75).toInt
       //   "text"
+      //   ()
       ASSERT_AST(
-          BODY_AST("(ADD (INT_LIT 1) (INT_LIT 2)) "
+          BODY_AST("(IDENT x) (ADD (IDENT a) (MUL (IDENT b) (INT_LIT 2))) "
+                   "(MEMBER length (IDENT word)) (ADD (INT_LIT 1) (INT_LIT 2)) "
                    "(MEMBER toInt (NEG (DOUBLE_LIT 3.75))) "
-                   "(STRING_LIT \"text\")"),
+                   "(STRING_LIT \"text\") (UNIT_LIT)"),
           PROLOG, DEF_F,
+          LINE(2), ID("x"), EOL,
+          LINE(2), ID("a"), TOK(OPERATOR_PLUS), ID("b"), TOK(OPERATOR_MULTIPLY),
+            INT(2), EOL,
+          LINE(2), ID("word"), TOK(PERIOD), ID("length"), EOL,
           LINE(2), INT(1), TOK(OPERATOR_PLUS), INT(2), EOL,
           LINE(2), TOK(L_PAREN), TOK(OPERATOR_MINUS), DBL(3.75), TOK(R_PAREN),
             TOK(PERIOD), ID("toInt"), EOL,
-          LINE(2), STR("text"), EOL);
+          LINE(2), STR("text"), EOL,
+          LINE(2), UNIT_VALUE, EOL);
     }
 
-    it("parses a unit value statement") {
-      ASSERT_AST(BODY_AST("(UNIT_LIT) (IDENT x)"),
-                 PROLOG, DEF_F,
-                 LINE(2), UNIT_VALUE, EOL,
-                 LINE(2), ID("x"), EOL);
-    }
-
-    it("parses a statement starting with an identifier as an expression") {
-      // def f() =
-      //   a + b * 2
-      //   word.length
-      ASSERT_AST(
-          BODY_AST("(ADD (IDENT a) (MUL (IDENT b) (INT_LIT 2))) "
-                   "(MEMBER length (IDENT word))"),
-          PROLOG, DEF_F,
-          LINE(2), ID("a"), TOK(OPERATOR_PLUS), ID("b"), TOK(OPERATOR_MULTIPLY),
-            INT(2), EOL,
-          LINE(2), ID("word"), TOK(PERIOD), ID("length"), EOL);
-    }
-
-    it("parses a function after a multi-line body") {
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK (IDENT x)) (PARAM_LIST)) "
-          "(DEF (IDENT g) NONE (BLOCK (INT_LIT 1)) (PARAM_LIST)))",
-          PROLOG, DEF_F, LINE(2), ID("x"), EOL,
-          TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN), INT(1), EOL);
-    }
-
-    it("parses val and var with and without a type annotation") {
+    it("parses val, var, assignment, call and return statements") {
       // def f() =
       //   val a = 1
       //   val b: Int = 2
       //   var c = 3.5
       //   var d: Double = 4.5
+      //   x = x + 1
+      //   print(x)
+      //   val n = readInt()
+      //   return 1 + 2
+      //   return
+      //   return ()
       ASSERT_AST(
           BODY_AST("(VAL (IDENT a) NONE (INT_LIT 1)) "
                    "(VAL (IDENT b) (TYPE_ANNOTATION Int) (INT_LIT 2)) "
                    "(VAR (IDENT c) NONE (DOUBLE_LIT 3.5)) "
-                   "(VAR (IDENT d) (TYPE_ANNOTATION Double) (DOUBLE_LIT 4.5))"),
+                   "(VAR (IDENT d) (TYPE_ANNOTATION Double) (DOUBLE_LIT 4.5)) "
+                   "(ASSIGN (IDENT x) (ADD (IDENT x) (INT_LIT 1))) "
+                   "(CALL (IDENT print) (IDENT x)) "
+                   "(VAL (IDENT n) NONE (CALL (IDENT readInt))) "
+                   "(RETURN (ADD (INT_LIT 1) (INT_LIT 2))) (RETURN NONE) "
+                   "(RETURN (UNIT_LIT))"),
           PROLOG, DEF_F,
           LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
           LINE(2), TOK(VAL), ID("b"), TOK(COLON), TOK(TYPE_INT), TOK(ASSIGN),
             INT(2), EOL,
           LINE(2), TOK(VAR), ID("c"), TOK(ASSIGN), DBL(3.5), EOL,
           LINE(2), TOK(VAR), ID("d"), TOK(COLON), TOK(TYPE_DOUBLE),
-            TOK(ASSIGN), DBL(4.5), EOL);
-    }
-
-    it("takes a whole expression as the initializer") {
-      // def f() =
-      //   val a = 40 - n * 3
-      ASSERT_AST(
-          BODY_AST("(VAL (IDENT a) NONE "
-                   "(SUB (INT_LIT 40) (MUL (IDENT n) (INT_LIT 3))))"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(40),
-            TOK(OPERATOR_MINUS), ID("n"), TOK(OPERATOR_MULTIPLY), INT(3), EOL);
-    }
-
-    it("parses return with and without a value") {
-      // def f() =
-      //   return 1 + 2
-      //   return
-      ASSERT_AST(
-          BODY_AST("(RETURN (ADD (INT_LIT 1) (INT_LIT 2))) (RETURN NONE)"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(RETURN), INT(1), TOK(OPERATOR_PLUS), INT(2), EOL,
-          LINE(2), TOK(RETURN), EOL);
-    }
-
-    it("parses return of an identifier and of a unit value") {
-      ASSERT_AST(BODY_AST("(RETURN (IDENT x)) (RETURN (UNIT_LIT))"),
-                 PROLOG, DEF_F,
-                 LINE(2), TOK(RETURN), ID("x"), EOL,
-                 LINE(2), TOK(RETURN), UNIT_VALUE, EOL);
-    }
-
-    it("parses an assignment") {
-      // def f() =
-      //   x = x + 1
-      ASSERT_AST(
-          BODY_AST("(ASSIGN (IDENT x) (ADD (IDENT x) (INT_LIT 1)))"),
-          PROLOG, DEF_F,
+            TOK(ASSIGN), DBL(4.5), EOL,
           LINE(2), ID("x"), TOK(ASSIGN), ID("x"), TOK(OPERATOR_PLUS), INT(1),
-            EOL);
-    }
-
-    // Calls that need statements
-    it("parses a call as a statement and as a val initializer") {
-      // def f() =
-      //   print(x)
-      //   val n = readInt()
-      ASSERT_AST(
-          BODY_AST("(CALL (IDENT print) (IDENT x)) "
-                   "(VAL (IDENT n) NONE (CALL (IDENT readInt)))"),
-          PROLOG, DEF_F,
+            EOL,
           LINE(2), ID("print"), TOK(L_PAREN), ID("x"), TOK(R_PAREN), EOL,
           LINE(2), TOK(VAL), ID("n"), TOK(ASSIGN), ID("readInt"), UNIT_VALUE,
-            EOL);
-    }
-
-    it("parses a body like sumTo without the loop") {
-      // def sumTo(n: Int): Int =
-      //   var sum = 0
-      //   var i: Int = 1
-      //   sum = sum + i
-      //   i = i + 1
-      //   sum
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT sumTo) (TYPE_ANNOTATION Int) (BLOCK "
-          "(VAR (IDENT sum) NONE (INT_LIT 0)) "
-          "(VAR (IDENT i) (TYPE_ANNOTATION Int) (INT_LIT 1)) "
-          "(ASSIGN (IDENT sum) (ADD (IDENT sum) (IDENT i))) "
-          "(ASSIGN (IDENT i) (ADD (IDENT i) (INT_LIT 1))) "
-          "(IDENT sum)) "
-          "(PARAM_LIST (PARAM (IDENT n) (TYPE_ANNOTATION Int)))))",
-          PROLOG,
-          TOK(DEF), ID("sumTo"), TOK(L_PAREN), ID("n"), TOK(COLON),
-            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
-            TOK(ASSIGN), EOL,
-          LINE(2), TOK(VAR), ID("sum"), TOK(ASSIGN), INT(0), EOL,
-          LINE(2), TOK(VAR), ID("i"), TOK(COLON), TOK(TYPE_INT), TOK(ASSIGN),
-            INT(1), EOL,
-          LINE(2), ID("sum"), TOK(ASSIGN), ID("sum"), TOK(OPERATOR_PLUS),
-            ID("i"), EOL,
-          LINE(2), ID("i"), TOK(ASSIGN), ID("i"), TOK(OPERATOR_PLUS), INT(1),
             EOL,
-          LINE(2), ID("sum"), EOL);
-    }
-
-    it("peeks a block close like any other token") {
-      // def f() =
-      //   x (the line break is missing, the next line is back at column 0)
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("x"), TOK(DEF),
-                          ID("g"), UNIT_VALUE, TOK(ASSIGN), INT(1), EOL);
-    }
-
-    it("parses a; b on one line as two statements in the block") {
-      // def f() =
-      //   a; b
-      ASSERT_AST(BODY_AST("(IDENT a) (IDENT b)"),
-                 PROLOG, DEF_F,
-                 LINE(2), ID("a"), TOK(SEMICOLON), ID("b"), EOL);
+          LINE(2), TOK(RETURN), INT(1), TOK(OPERATOR_PLUS), INT(2), EOL,
+          LINE(2), TOK(RETURN), EOL,
+          LINE(2), TOK(RETURN), UNIT_VALUE, EOL);
     }
 
     it("appends every statement after ; as the next sibling") {
       // def f() =
       //   val x = 1; x = x + 1; return x
-      //   y
+      //   return; y
+      //   a; 1; ()
       ASSERT_AST(
           BODY_AST("(VAL (IDENT x) NONE (INT_LIT 1)) "
                    "(ASSIGN (IDENT x) (ADD (IDENT x) (INT_LIT 1))) "
-                   "(RETURN (IDENT x)) (IDENT y)"),
+                   "(RETURN (IDENT x)) (RETURN NONE) (IDENT y) "
+                   "(IDENT a) (INT_LIT 1) (UNIT_LIT)"),
           PROLOG, DEF_F,
           LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), INT(1), TOK(SEMICOLON),
             ID("x"), TOK(ASSIGN), ID("x"), TOK(OPERATOR_PLUS), INT(1),
             TOK(SEMICOLON), TOK(RETURN), ID("x"), EOL,
-          LINE(2), ID("y"), EOL);
+          LINE(2), TOK(RETURN), TOK(SEMICOLON), ID("y"), EOL,
+          LINE(2), ID("a"), TOK(SEMICOLON), INT(1), TOK(SEMICOLON),
+            UNIT_VALUE, EOL);
     }
 
-    it("takes ; after return with no value as a statement separator") {
-      // def f() =
-      //   return; x
-      ASSERT_AST(BODY_AST("(RETURN NONE) (IDENT x)"),
-                 PROLOG, DEF_F,
-                 LINE(2), TOK(RETURN), TOK(SEMICOLON), ID("x"), EOL);
-    }
-
-    it("parses statements starting with a literal after ;") {
-      ASSERT_AST(BODY_AST("(IDENT a) (INT_LIT 1) (UNIT_LIT)"),
-                 PROLOG, DEF_F,
-                 LINE(2), ID("a"), TOK(SEMICOLON), INT(1), TOK(SEMICOLON),
-                   UNIT_VALUE, EOL);
-    }
-
-    it("keeps the statements of a block of several lines in order") {
-      // def f() =
-      //   a
-      //   val b = 1
-      //   c; d
-      //   return e
-      ASSERT_AST(
-          BODY_AST("(IDENT a) (VAL (IDENT b) NONE (INT_LIT 1)) (IDENT c) "
-                   "(IDENT d) (RETURN (IDENT e))"),
-          PROLOG, DEF_F,
-          LINE(2), ID("a"), EOL,
-          LINE(2), TOK(VAL), ID("b"), TOK(ASSIGN), INT(1), EOL,
-          LINE(2), ID("c"), TOK(SEMICOLON), ID("d"), EOL,
-          LINE(2), TOK(RETURN), ID("e"), EOL);
-    }
-
-    it("gives statements the position of the token they start at") {
-      // def f() =
-      //   val x = 1; y
-      static const Token program[] = {
-          PROLOG,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), EOL,
-          {.type = INDENT, .value.integer = 2, .line = 3, .column = 1},
-          {.type = VAL, .line = 3, .column = 3},
-          {.type = IDENT, .value.text = "x", .line = 3, .column = 7},
-          {.type = ASSIGN, .line = 3, .column = 9},
-          {.type = NUMBER_INT, .value.integer = 1, .line = 3, .column = 11},
-          {.type = SEMICOLON, .line = 3, .column = 12},
-          {.type = IDENT, .value.text = "y", .line = 3, .column = 14},
-          {.type = EOL_TOKEN, .line = 3, .column = 15},
-      };
-      FakeSource source = {.tokens = program,
-                           .count = sizeof(program) / sizeof(*program)};
-      parser_run(ctx, fake_next, &source);
-
-      // DEF [ident, rettype, BLOCK [VAL [x, NONE, 1], y], PARAM_LIST]
-      AstNode* block;
-      AstNode* node;
-      ast_node_get_child(ctx, ctx->ast, 0, &node);
-      ast_node_get_child(ctx, node, 2, &block);
-      ast_node_get_child(ctx, block, 0, &node);  // VAL
-      asserteq(ast_node_get_line(node), 3);
-      asserteq(ast_node_get_column(node), 3);
-      ast_node_get_child(ctx, node, 0, &node);  // x
-      asserteq(ast_node_get_column(node), 7);
-      ast_node_get_child(ctx, block, 1, &node);  // y
-      asserteq(ast_node_get_column(node), 14);
+    it("rejects malformed bodies and statements") {
+      ASSERT_SYNTAX_ERRORS(
+          // def f() =
+          ROW(PROLOG, DEF_F),
+          // def f() =
+          // def g() = 1
+          MANY(TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN), INT(1), EOL),
+          // val x
+          MANY(LINE(2), TOK(VAL), ID("x"), EOL),
+          // val = 1
+          MANY(LINE(2), TOK(VAL), TOK(ASSIGN), INT(1), EOL),
+          // var x: = 1
+          MANY(LINE(2), TOK(VAR), ID("x"), TOK(COLON), TOK(ASSIGN), INT(1),
+               EOL),
+          // val x: Int 1
+          MANY(LINE(2), TOK(VAL), ID("x"), TOK(COLON), TOK(TYPE_INT), INT(1),
+               EOL),
+          // val x =
+          MANY(LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), EOL),
+          // x =
+          MANY(LINE(2), ID("x"), TOK(ASSIGN), EOL),
+          // a, then a line starting with )
+          MANY(LINE(2), ID("a"), EOL, LINE(2), TOK(R_PAREN), EOL),
+          // * a, the grammar has no statement starting with an operator
+          MANY(LINE(2), TOK(OPERATOR_MULTIPLY), ID("a"), EOL),
+          // return )
+          MANY(LINE(2), TOK(RETURN), TOK(R_PAREN), EOL),
+          // a b
+          MANY(LINE(2), ID("a"), ID("b"), EOL),
+          // a;
+          MANY(LINE(2), ID("a"), TOK(SEMICOLON), EOL),
+          // a;; b
+          MANY(LINE(2), ID("a"), TOK(SEMICOLON), TOK(SEMICOLON), ID("b"),
+               EOL),
+          // val b = -a * (a +, an expression broken in the middle
+          MANY(LINE(2), TOK(VAL), ID("b"), TOK(ASSIGN), TOK(OPERATOR_MINUS),
+               ID("a"), TOK(OPERATOR_MULTIPLY), TOK(L_PAREN), ID("a"),
+               TOK(OPERATOR_PLUS), EOL),
+          // x (the line break is missing, the next line is back at column 0)
+          MANY(LINE(2), ID("x"), TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN),
+               INT(1), EOL),
+          // a, then a deeper line b
+          MANY(LINE(2), ID("a"), EOL, LINE(4), ID("b"), EOL),
+          // a deeper line must not be taken for the end of a block
+          MANY(LINE(2), ID("a"), EOL,
+               LINE(4), TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN), EOL,
+               LINE(2), ID("b"), EOL));
     }
   }
-  // clang-format on
-
-  // Syntax errors in multi-line bodies and their statements
-  // clang-format off
-  subdesc(syntax_errors_in_blocks) {
-    it("rejects a body line break not followed by a block") {
-      // def f() =
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F);
-    }
-
-    it("rejects a body line break followed by a function instead of a block") {
-      // def f() =
-      // def g() = 1
-      ASSERT_SYNTAX_ERROR(
-          PROLOG, DEF_F,
-          TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN), INT(1), EOL);
-    }
-
-    it("rejects val with no = after the name") {
-      // def f() =
-      //   val x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(VAL), ID("x"), EOL);
-    }
-
-    it("rejects val with no name") {
-      // def f() =
-      //   val = 1
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(VAL), TOK(ASSIGN), INT(1),
-                          EOL);
-    }
-
-    it("rejects var whose type annotation is not a type") {
-      // def f() =
-      //   var x: = 1
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(VAR), ID("x"),
-                          TOK(COLON), TOK(ASSIGN), INT(1), EOL);
-    }
-
-    it("rejects val with a type but no =") {
-      // def f() =
-      //   val x: Int 1
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(VAL), ID("x"),
-                          TOK(COLON), TOK(TYPE_INT), INT(1), EOL);
-    }
-
-    it("rejects val with no initializer") {
-      // def f() =
-      //   val x =
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(VAL), ID("x"),
-                          TOK(ASSIGN), EOL);
-    }
-
-    it("rejects an assignment with no value") {
-      // def f() =
-      //   x =
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("x"), TOK(ASSIGN), EOL);
-    }
-
-    it("rejects a stray token starting a statement in a block") {
-      // def f() =
-      //   a
-      //   )
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("a"), EOL, LINE(2),
-                          TOK(R_PAREN), EOL);
-    }
-
-    it("rejects an operator starting a statement, the grammar has none") {
-      // def f() =
-      //   * a
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(OPERATOR_MULTIPLY),
-                          ID("a"), EOL);
-    }
-
-    it("rejects return followed by a token that is no value") {
-      // def f() =
-      //   return )
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(RETURN), TOK(R_PAREN),
-                          EOL);
-    }
-
-    it("rejects two statements on one line with no ;") {
-      // def f() =
-      //   a b
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("a"), ID("b"), EOL);
-    }
-
-    // Changes: accepted: the end of file ends the last line (ADR-0007).
-    it("accepts a last statement without a line break before the end of "
-       "file") {
-      // def f() =
-      //   a (end of file)
-      ASSERT_AST(BODY_AST("(IDENT a)"), PROLOG, DEF_F, LINE(2), ID("a"));
-    }
-
-    it("rejects ; with no statement after it") {
-      // def f() =
-      //   a;
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("a"), TOK(SEMICOLON), EOL);
-    }
-
-    it("rejects two ; in a row") {
-      // def f() =
-      //   a;; b
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("a"), TOK(SEMICOLON),
-                          TOK(SEMICOLON), ID("b"), EOL);
-    }
-
-    it("rejects an expression broken in the middle in a block") {
-      // def f() =
-      //   val a = 1
-      //   val b = -a * (a +
-      ASSERT_SYNTAX_ERROR(
-          PROLOG, DEF_F,
-          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), INT(1), EOL,
-          LINE(2), TOK(VAL), ID("b"), TOK(ASSIGN), TOK(OPERATOR_MINUS), ID("a"),
-            TOK(OPERATOR_MULTIPLY), TOK(L_PAREN), ID("a"), TOK(OPERATOR_PLUS),
-            EOL);
-    }
-
-    it("rejects a deeper indentation inside a block") {
-      // def f() =
-      //   a
-      //     b
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("a"), EOL,
-                          LINE(4), ID("b"), EOL);
-    }
-
-    it("rejects an indentation closing to no enclosing block") {
-      // def f() =
-      //     a
-      //   b
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(4), ID("a"), EOL,
-                          LINE(2), ID("b"), EOL);
-    }
-
-    // A deeper line must not be taken for the block close, and the real close
-    // then for the next block's open.
-    it("never takes a deeper indentation for the end of a block") {
-      // def f() =
-      //   a
-      //     def g() =
-      //   b
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("a"), EOL,
-                          LINE(4), TOK(DEF), ID("g"), UNIT_VALUE,
-                            TOK(ASSIGN), EOL,
-                          LINE(2), ID("b"), EOL);
-    }
-  }
-  // clang-format on
 
   // If statements: single-line and multi-line branches, else if, the ; form,
   // and the absence of the EXPR flag
-  // clang-format off
   subdesc(if_statements) {
-    it("parses an if with single-line branches as a function body") {
-      // def isEven(n: Int): Boolean = if n == 0 then true else isOdd(n - 1)
+    it("parses single-line branches, else if and a return without else") {
+      // def f() =
+      //   if n <= 1 then return 1
+      //   if value < 0 then print("-")
+      //   else if value == 0 then print("0")
+      //   else print("+")
+      //   if a then x
+      //   else y
+      //   z
       ASSERT_AST(
-          "(PROGRAM (DEF (IDENT isEven) (TYPE_ANNOTATION Boolean) (BLOCK "
+          BODY_AST("(IF (LE (IDENT n) (INT_LIT 1)) (BLOCK (RETURN (INT_LIT 1))) "
+                   "NONE) "
+                   "(IF (LT (IDENT value) (INT_LIT 0)) "
+                   "(BLOCK (CALL (IDENT print) (STRING_LIT \"-\"))) "
+                   "(IF (EQ (IDENT value) (INT_LIT 0)) "
+                   "(BLOCK (CALL (IDENT print) (STRING_LIT \"0\"))) "
+                   "(BLOCK (CALL (IDENT print) (STRING_LIT \"+\"))))) "
+                   "(IF (IDENT a) (BLOCK (IDENT x)) (BLOCK (IDENT y))) "
+                   "(IDENT z)"),
+          PROLOG, DEF_F,
+          LINE(2), TOK(IF), ID("n"), TOK(COMPARISON_LE), INT(1), TOK(THEN),
+            TOK(RETURN), INT(1), EOL,
+          LINE(2), TOK(IF), ID("value"), TOK(COMPARISON_L), INT(0),
+            TOK(THEN), ID("print"), TOK(L_PAREN), STR("-"), TOK(R_PAREN), EOL,
+          LINE(2), TOK(ELSE), TOK(IF), ID("value"), TOK(COMPARISON_EQ),
+            INT(0), TOK(THEN), ID("print"), TOK(L_PAREN), STR("0"),
+            TOK(R_PAREN), EOL,
+          LINE(2), TOK(ELSE), ID("print"), TOK(L_PAREN), STR("+"),
+            TOK(R_PAREN), EOL,
+          LINE(2), TOK(IF), ID("a"), TOK(THEN), ID("x"), EOL,
+          LINE(2), TOK(ELSE), ID("y"), EOL,
+          LINE(2), ID("z"), EOL);
+    }
+
+    it("parses a single-line if as a function body") {
+      // def f(n: Int): Boolean = if n == 0 then true else isOdd(n - 1)
+      ASSERT_AST(
+          "(PROGRAM (DEF (IDENT f) (TYPE_ANNOTATION Boolean) (BLOCK "
           "(IF (EQ (IDENT n) (INT_LIT 0)) (BLOCK (BOOL_LIT true)) "
           "(BLOCK (CALL (IDENT isOdd) (SUB (IDENT n) (INT_LIT 1)))))) "
           "(PARAM_LIST (PARAM (IDENT n) (TYPE_ANNOTATION Int)))))",
           PROLOG,
-          TOK(DEF), ID("isEven"), TOK(L_PAREN), ID("n"), TOK(COLON),
+          TOK(DEF), ID("f"), TOK(L_PAREN), ID("n"), TOK(COLON),
             TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_BOOL),
             TOK(ASSIGN), TOK(IF), ID("n"), TOK(COMPARISON_EQ), INT(0),
             TOK(THEN), TOK(BOOL_TRUE), TOK(ELSE), ID("isOdd"), TOK(L_PAREN),
             ID("n"), TOK(OPERATOR_MINUS), INT(1), TOK(R_PAREN), EOL);
     }
 
-    it("parses guardedDivide, an if with operators in its branches") {
-      // def guardedDivide(divisor: Int): Int =
-      //   if divisor == 0 then 7 else 84 / divisor
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT guardedDivide) (TYPE_ANNOTATION Int) (BLOCK "
-          "(IF (EQ (IDENT divisor) (INT_LIT 0)) (BLOCK (INT_LIT 7)) "
-          "(BLOCK (DIV (INT_LIT 84) (IDENT divisor))))) "
-          "(PARAM_LIST (PARAM (IDENT divisor) (TYPE_ANNOTATION Int)))))",
-          PROLOG,
-          TOK(DEF), ID("guardedDivide"), TOK(L_PAREN), ID("divisor"),
-            TOK(COLON), TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON),
-            TOK(TYPE_INT), TOK(ASSIGN), EOL,
-          LINE(2), TOK(IF), ID("divisor"), TOK(COMPARISON_EQ), INT(0),
-            TOK(THEN), INT(7), TOK(ELSE), INT(84), TOK(OPERATOR_DIVIDE),
-            ID("divisor"), EOL);
-    }
-
-    it("parses factorial's single-line return with no else") {
-      // def factorial(n: Int): Int =
-      //   if n <= 1 then return 1
-      //   n * factorial(n - 1)
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT factorial) (TYPE_ANNOTATION Int) (BLOCK "
-          "(IF (LE (IDENT n) (INT_LIT 1)) (BLOCK (RETURN (INT_LIT 1))) NONE) "
-          "(MUL (IDENT n) (CALL (IDENT factorial) "
-          "(SUB (IDENT n) (INT_LIT 1))))) "
-          "(PARAM_LIST (PARAM (IDENT n) (TYPE_ANNOTATION Int)))))",
-          PROLOG,
-          TOK(DEF), ID("factorial"), TOK(L_PAREN), ID("n"),
-            TOK(COLON), TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON),
-            TOK(TYPE_INT), TOK(ASSIGN), EOL,
-          LINE(2), TOK(IF), ID("n"), TOK(COMPARISON_LE), INT(1), TOK(THEN),
-            TOK(RETURN), INT(1), EOL,
-          LINE(2), ID("n"), TOK(OPERATOR_MULTIPLY), ID("factorial"),
-            TOK(L_PAREN), ID("n"), TOK(OPERATOR_MINUS), INT(1), TOK(R_PAREN),
-            EOL);
-    }
-
-    it("parses classify, an else if chain of single-line bodies") {
-      // def classify(value: Int): Unit =
-      //   if value < 0 then print("-")
-      //   else if value == 0 then print("0")
-      //   else print("+")
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT classify) (TYPE_ANNOTATION Unit) (BLOCK "
-          "(IF (LT (IDENT value) (INT_LIT 0)) "
-          "(BLOCK (CALL (IDENT print) (STRING_LIT \"-\"))) "
-          "(IF (EQ (IDENT value) (INT_LIT 0)) "
-          "(BLOCK (CALL (IDENT print) (STRING_LIT \"0\"))) "
-          "(BLOCK (CALL (IDENT print) (STRING_LIT \"+\")))))) "
-          "(PARAM_LIST (PARAM (IDENT value) (TYPE_ANNOTATION Int)))))",
-          PROLOG,
-          TOK(DEF), ID("classify"), TOK(L_PAREN), ID("value"),
-            TOK(COLON), TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON),
-            TOK(TYPE_UNIT), TOK(ASSIGN), EOL,
-          LINE(2), TOK(IF), ID("value"), TOK(COMPARISON_L), INT(0),
-            TOK(THEN), ID("print"), TOK(L_PAREN), STR("-"), TOK(R_PAREN),
-            EOL,
-          LINE(2), TOK(ELSE), TOK(IF), ID("value"), TOK(COMPARISON_EQ),
-            INT(0), TOK(THEN), ID("print"), TOK(L_PAREN), STR("0"),
-            TOK(R_PAREN), EOL,
-          LINE(2), TOK(ELSE), ID("print"), TOK(L_PAREN), STR("+"),
-            TOK(R_PAREN), EOL);
-    }
-
-    it("parses joined, an if with block branches then a statement") {
-      // def joined(flag: Boolean, value: Int): Int =
-      //   var result = value
-      //   if flag then
-      //     val value = 2
-      //     result = result + value
-      //   else
-      //     val value = 3
-      //     result = result * value
-      //   result
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT joined) (TYPE_ANNOTATION Int) (BLOCK "
-          "(VAR (IDENT result) NONE (IDENT value)) "
-          "(IF (IDENT flag) "
-          "(BLOCK (VAL (IDENT value) NONE (INT_LIT 2)) "
-          "(ASSIGN (IDENT result) (ADD (IDENT result) (IDENT value)))) "
-          "(BLOCK (VAL (IDENT value) NONE (INT_LIT 3)) "
-          "(ASSIGN (IDENT result) (MUL (IDENT result) (IDENT value))))) "
-          "(IDENT result)) "
-          "(PARAM_LIST (PARAM (IDENT flag) (TYPE_ANNOTATION Boolean)) "
-          "(PARAM (IDENT value) (TYPE_ANNOTATION Int)))))",
-          PROLOG,
-          TOK(DEF), ID("joined"), TOK(L_PAREN), ID("flag"),
-            TOK(COLON), TOK(TYPE_BOOL), TOK(COMMA), ID("value"), TOK(COLON),
-            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_INT),
-            TOK(ASSIGN), EOL,
-          LINE(2), TOK(VAR), ID("result"), TOK(ASSIGN), ID("value"), EOL,
-          LINE(2), TOK(IF), ID("flag"), TOK(THEN), EOL,
-          LINE(4), TOK(VAL), ID("value"), TOK(ASSIGN), INT(2), EOL,
-          LINE(4), ID("result"), TOK(ASSIGN), ID("result"),
-            TOK(OPERATOR_PLUS), ID("value"), EOL,
-          LINE(2), TOK(ELSE), EOL,
-          LINE(4), TOK(VAL), ID("value"), TOK(ASSIGN), INT(3), EOL,
-          LINE(4), ID("result"), TOK(ASSIGN), ID("result"),
-            TOK(OPERATOR_MULTIPLY), ID("value"), EOL,
-          LINE(2), ID("result"), EOL);
-    }
-
-    it("parses a block if with no else") {
-      // def f() =
-      //   if a then
-      //     x
-      //   y
-      ASSERT_AST(BODY_AST("(IF (IDENT a) (BLOCK (IDENT x)) NONE) (IDENT y)"),
-                 PROLOG, DEF_F,
-                 LINE(2), TOK(IF), ID("a"), TOK(THEN), EOL,
-                 LINE(4), ID("x"), EOL,
-                 LINE(2), ID("y"), EOL);
-    }
-
-    it("parses a block if that ends the function body") {
-      // def f() =
-      //   if a then
-      //     x
-      ASSERT_AST(BODY_AST("(IF (IDENT a) (BLOCK (IDENT x)) NONE)"),
-                 PROLOG, DEF_F,
-                 LINE(2), TOK(IF), ID("a"), TOK(THEN), EOL,
-                 LINE(4), ID("x"), EOL);
-    }
-
-    it("parses an else if chain of block branches") {
+    it("parses block branches, else if chains and mixed branch forms") {
       // def f() =
       //   if a then
       //     x
@@ -1630,57 +411,55 @@ describe(parser) {
       //     y
       //   else
       //     z
+      //   if c then
+      //     x
+      //   y
+      //   if d then w
+      //   else
+      //     y
+      //   if e then
+      //     z
+      //   else w
       ASSERT_AST(
           BODY_AST("(IF (IDENT a) (BLOCK (IDENT x)) "
-                   "(IF (IDENT b) (BLOCK (IDENT y)) (BLOCK (IDENT z))))"),
+                   "(IF (IDENT b) (BLOCK (IDENT y)) (BLOCK (IDENT z)))) "
+                   "(IF (IDENT c) (BLOCK (IDENT x)) NONE) (IDENT y) "
+                   "(IF (IDENT d) (BLOCK (IDENT w)) (BLOCK (IDENT y))) "
+                   "(IF (IDENT e) (BLOCK (IDENT z)) (BLOCK (IDENT w)))"),
           PROLOG, DEF_F,
           LINE(2), TOK(IF), ID("a"), TOK(THEN), EOL,
           LINE(4), ID("x"), EOL,
           LINE(2), TOK(ELSE), TOK(IF), ID("b"), TOK(THEN), EOL,
           LINE(4), ID("y"), EOL,
           LINE(2), TOK(ELSE), EOL,
-          LINE(4), ID("z"), EOL);
-    }
-
-    it("mixes a single-line then with a block else and the reverse") {
-      // def f() =
-      //   if a then x
-      //   else
-      //     y
-      //   if b then
-      //     z
-      //   else w
-      ASSERT_AST(
-          BODY_AST("(IF (IDENT a) (BLOCK (IDENT x)) (BLOCK (IDENT y))) "
-                   "(IF (IDENT b) (BLOCK (IDENT z)) (BLOCK (IDENT w)))"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(IF), ID("a"), TOK(THEN), ID("x"), EOL,
+          LINE(4), ID("z"), EOL,
+          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+          LINE(4), ID("x"), EOL,
+          LINE(2), ID("y"), EOL,
+          LINE(2), TOK(IF), ID("d"), TOK(THEN), ID("w"), EOL,
           LINE(2), TOK(ELSE), EOL,
           LINE(4), ID("y"), EOL,
-          LINE(2), TOK(IF), ID("b"), TOK(THEN), EOL,
+          LINE(2), TOK(IF), ID("e"), TOK(THEN), EOL,
           LINE(4), ID("z"), EOL,
           LINE(2), TOK(ELSE), ID("w"), EOL);
     }
 
-    it("keeps the statements of an if nested in a block in order") {
+    it("parses a block if that ends the function body") {
       // def f() =
       //   if a then
-      //     if b then
-      //       x
-      //     y
-      //   z
+      //     x
+      // def g() = 1
       ASSERT_AST(
-          BODY_AST("(IF (IDENT a) (BLOCK (IF (IDENT b) (BLOCK (IDENT x)) "
-                   "NONE) (IDENT y)) NONE) (IDENT z)"),
+          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
+          "(IF (IDENT a) (BLOCK (IDENT x)) NONE)) (PARAM_LIST)) "
+          "(DEF (IDENT g) NONE (BLOCK (INT_LIT 1)) (PARAM_LIST)))",
           PROLOG, DEF_F,
           LINE(2), TOK(IF), ID("a"), TOK(THEN), EOL,
-          LINE(4), TOK(IF), ID("b"), TOK(THEN), EOL,
-          LINE(6), ID("x"), EOL,
-          LINE(4), ID("y"), EOL,
-          LINE(2), ID("z"), EOL);
+          LINE(4), ID("x"), EOL,
+          TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN), INT(1), EOL);
     }
 
-    it("closes several blocks at once after an else block") {
+    it("closes several nested blocks at once, also after an else block") {
       // def f() =
       //   if a then
       //     if b then
@@ -1700,949 +479,254 @@ describe(parser) {
           LINE(2), ID("z"), EOL);
     }
 
-    it("parses if truth then print(\";if\") with the statement after it") {
-      // def f() =
-      //   if truth then print(";if")
-      //   if skippedAnd then print("unreachable-if")
-      ASSERT_AST(
-          BODY_AST("(IF (IDENT truth) (BLOCK (CALL (IDENT print) "
-                   "(STRING_LIT \";if\"))) NONE) "
-                   "(IF (IDENT skippedAnd) (BLOCK (CALL (IDENT print) "
-                   "(STRING_LIT \"unreachable-if\"))) NONE)"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(IF), ID("truth"), TOK(THEN), ID("print"),
-            TOK(L_PAREN), STR(";if"), TOK(R_PAREN), EOL,
-          LINE(2), TOK(IF), ID("skippedAnd"), TOK(THEN), ID("print"),
-            TOK(L_PAREN), STR("unreachable-if"), TOK(R_PAREN), EOL);
-    }
-
-    it("parses assignments, returns and expressions as single-line bodies") {
+    it("parses assignments, returns, expressions and literals as "
+       "single-line bodies") {
       // def f() =
       //   if a then x = 1 else y = 2
       //   if a then return else return 3
       //   if a then -x else !y
+      //   if a then 1 else (2)
+      //   if a then () else "s"
       ASSERT_AST(
           BODY_AST("(IF (IDENT a) (BLOCK (ASSIGN (IDENT x) (INT_LIT 1))) "
                    "(BLOCK (ASSIGN (IDENT y) (INT_LIT 2)))) "
                    "(IF (IDENT a) (BLOCK (RETURN NONE)) "
                    "(BLOCK (RETURN (INT_LIT 3)))) "
                    "(IF (IDENT a) (BLOCK (NEG (IDENT x))) "
-                   "(BLOCK (NOT (IDENT y))))"),
+                   "(BLOCK (NOT (IDENT y)))) "
+                   "(IF (IDENT a) (BLOCK (INT_LIT 1)) (BLOCK (INT_LIT 2))) "
+                   "(IF (IDENT a) (BLOCK (UNIT_LIT)) "
+                   "(BLOCK (STRING_LIT \"s\")))"),
           PROLOG, DEF_F,
           LINE(2), TOK(IF), ID("a"), TOK(THEN), ID("x"), TOK(ASSIGN), INT(1),
             TOK(ELSE), ID("y"), TOK(ASSIGN), INT(2), EOL,
           LINE(2), TOK(IF), ID("a"), TOK(THEN), TOK(RETURN), TOK(ELSE),
             TOK(RETURN), INT(3), EOL,
           LINE(2), TOK(IF), ID("a"), TOK(THEN), TOK(OPERATOR_MINUS), ID("x"),
-            TOK(ELSE), TOK(BOOL_NEG), ID("y"), EOL);
-    }
-
-    it("parses a literal or ( as the start of a single-line body") {
-      // def f() =
-      //   if a then 1 else (2)
-      //   if a then () else "s"
-      ASSERT_AST(
-          BODY_AST("(IF (IDENT a) (BLOCK (INT_LIT 1)) (BLOCK (INT_LIT 2))) "
-                   "(IF (IDENT a) (BLOCK (UNIT_LIT)) "
-                   "(BLOCK (STRING_LIT \"s\")))"),
-          PROLOG, DEF_F,
+            TOK(ELSE), TOK(BOOL_NEG), ID("y"), EOL,
           LINE(2), TOK(IF), ID("a"), TOK(THEN), INT(1), TOK(ELSE),
             TOK(L_PAREN), INT(2), TOK(R_PAREN), EOL,
           LINE(2), TOK(IF), ID("a"), TOK(THEN), UNIT_VALUE, TOK(ELSE),
             STR("s"), EOL);
     }
 
-    it("puts the statement after if c then x; y after the IF") {
+    it("puts the statement after a single-line branch ; into the enclosing "
+       "block") {
       // def f() =
       //   if c then x; y
-      //   z
+      //   if c then x else y; z
+      //   if a then x else if b then y; w
+      //   if a then
+      //     if b then x; v
+      //   u
       ASSERT_AST(
-          BODY_AST("(IF (IDENT c) (BLOCK (IDENT x)) NONE) (IDENT y) (IDENT z)"),
+          BODY_AST("(IF (IDENT c) (BLOCK (IDENT x)) NONE) (IDENT y) "
+                   "(IF (IDENT c) (BLOCK (IDENT x)) (BLOCK (IDENT y))) "
+                   "(IDENT z) "
+                   "(IF (IDENT a) (BLOCK (IDENT x)) "
+                   "(IF (IDENT b) (BLOCK (IDENT y)) NONE)) (IDENT w) "
+                   "(IF (IDENT a) (BLOCK (IF (IDENT b) (BLOCK (IDENT x)) "
+                   "NONE) (IDENT v)) NONE) (IDENT u)"),
           PROLOG, DEF_F,
           LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(SEMICOLON),
             ID("y"), EOL,
-          LINE(2), ID("z"), EOL);
-    }
-
-    it("puts the statement after else x; y after the IF too") {
-      // def f() =
-      //   if c then x else y; z
-      ASSERT_AST(
-          BODY_AST("(IF (IDENT c) (BLOCK (IDENT x)) (BLOCK (IDENT y))) "
-                   "(IDENT z)"),
-          PROLOG, DEF_F,
           LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(ELSE), ID("y"),
-            TOK(SEMICOLON), ID("z"), EOL);
-    }
-
-    it("puts a ; statement after an else if chain in the enclosing block") {
-      // def f() =
-      //   if a then x else if b then y; z
-      ASSERT_AST(
-          BODY_AST("(IF (IDENT a) (BLOCK (IDENT x)) "
-                   "(IF (IDENT b) (BLOCK (IDENT y)) NONE)) (IDENT z)"),
-          PROLOG, DEF_F,
+            TOK(SEMICOLON), ID("z"), EOL,
           LINE(2), TOK(IF), ID("a"), TOK(THEN), ID("x"), TOK(ELSE),
-            TOK(IF), ID("b"), TOK(THEN), ID("y"), TOK(SEMICOLON), ID("z"),
-            EOL);
-    }
-
-    it("puts a ; statement of a nested if in the nested block") {
-      // def f() =
-      //   if a then
-      //     if b then x; y
-      //   z
-      ASSERT_AST(
-          BODY_AST("(IF (IDENT a) (BLOCK (IF (IDENT b) (BLOCK (IDENT x)) "
-                   "NONE) (IDENT y)) NONE) (IDENT z)"),
-          PROLOG, DEF_F,
+            TOK(IF), ID("b"), TOK(THEN), ID("y"), TOK(SEMICOLON), ID("w"),
+            EOL,
           LINE(2), TOK(IF), ID("a"), TOK(THEN), EOL,
           LINE(4), TOK(IF), ID("b"), TOK(THEN), ID("x"), TOK(SEMICOLON),
-            ID("y"), EOL,
-          LINE(2), ID("z"), EOL);
+            ID("v"), EOL,
+          LINE(2), ID("u"), EOL);
     }
 
     it("puts a ; statement after a function body if in the body BLOCK") {
+      // def g() = if a then x
       // def f() = if c then x; y
       ASSERT_AST(
-          BODY_AST("(IF (IDENT c) (BLOCK (IDENT x)) NONE) (IDENT y)"),
-          PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-          TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(SEMICOLON), ID("y"),
-          EOL);
-    }
-
-    it("takes an else on the line after a single-line then") {
-      // def f() =
-      //   if a then x
-      //   else y
-      //   z
-      ASSERT_AST(
-          BODY_AST("(IF (IDENT a) (BLOCK (IDENT x)) (BLOCK (IDENT y))) "
-                   "(IDENT z)"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(IF), ID("a"), TOK(THEN), ID("x"), EOL,
-          LINE(2), TOK(ELSE), ID("y"), EOL,
-          LINE(2), ID("z"), EOL);
-    }
-
-    it("parses a function after an if body") {
-      // def f() = if a then x
-      // def g() = 1
-      ASSERT_AST(
           "(PROGRAM "
-          "(DEF (IDENT f) NONE (BLOCK (IF (IDENT a) (BLOCK (IDENT x)) NONE)) "
+          "(DEF (IDENT g) NONE (BLOCK (IF (IDENT a) (BLOCK (IDENT x)) NONE)) "
           "(PARAM_LIST)) "
-          "(DEF (IDENT g) NONE (BLOCK (INT_LIT 1)) (PARAM_LIST)))",
+          "(DEF (IDENT f) NONE (BLOCK (IF (IDENT c) (BLOCK (IDENT x)) NONE) "
+          "(IDENT y)) (PARAM_LIST)))",
           PROLOG,
-          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN), TOK(IF),
-            ID("a"), TOK(THEN), ID("x"), EOL,
-          TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN), INT(1), EOL);
+          TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN),
+            TOK(IF), ID("a"), TOK(THEN), ID("x"), EOL,
+          TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
+            TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(SEMICOLON), ID("y"), EOL);
     }
 
-    it("gives the IF the position of the if token") {
-      // def f() =
-      //   if a then x
-      PARSE(PROLOG, DEF_F,
-            ((Token){.type = INDENT, .value.integer = 2}),
-            ((Token){.type = IF, .line = 7, .column = 3}), ID("a"),
-            TOK(THEN), ID("x"), EOL);
-      AstNode* def;
-      AstNode* body;
-      AstNode* node;
-      ast_node_get_child(ctx, ctx->ast, 0, &def);
-      ast_node_get_child(ctx, def, 2, &body);
-      ast_node_get_child(ctx, body, 0, &node);
-      asserteq(ast_node_get_line(node), 7);
-      asserteq(ast_node_get_column(node), 3);
-    }
-  }
-  // clang-format on
-
-  // If expressions: the right-hand side `if` form, call arguments, parentheses,
-  // and the EXPR flag set on those only
-  // clang-format off
-  subdesc(if_expressions) {
-    it("parses chooseDouble, an if on the right side of val") {
-      // def chooseDouble(flag: Boolean, value: Int): Double =
-      //   val result = if flag then
-      //     val local = value + 1
-      //     local
-      //   else 2.5
-      //   result
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT chooseDouble) (TYPE_ANNOTATION Double) (BLOCK "
-          "(VAL (IDENT result) NONE (IF [EXPR] (IDENT flag) "
-          "(BLOCK (VAL (IDENT local) NONE (ADD (IDENT value) (INT_LIT 1))) "
-          "(IDENT local)) "
-          "(BLOCK (DOUBLE_LIT 2.5)))) "
-          "(IDENT result)) "
-          "(PARAM_LIST (PARAM (IDENT flag) (TYPE_ANNOTATION Boolean)) "
-          "(PARAM (IDENT value) (TYPE_ANNOTATION Int)))))",
-          PROLOG,
-          TOK(DEF), ID("chooseDouble"), TOK(L_PAREN), ID("flag"),
-            TOK(COLON), TOK(TYPE_BOOL), TOK(COMMA), ID("value"), TOK(COLON),
-            TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON), TOK(TYPE_DOUBLE),
-            TOK(ASSIGN), EOL,
-          LINE(2), TOK(VAL), ID("result"), TOK(ASSIGN), TOK(IF), ID("flag"),
-            TOK(THEN), EOL,
-          LINE(4), TOK(VAL), ID("local"), TOK(ASSIGN), ID("value"),
-            TOK(OPERATOR_PLUS), INT(1), EOL,
-          LINE(4), ID("local"), EOL,
-          LINE(2), TOK(ELSE), DBL(2.5), EOL,
-          LINE(2), ID("result"), EOL);
-    }
-
-    it("flags an if on the right side of var, = and return") {
-      // def f() =
-      //   var a = if c then 1 else 2
-      //   a = if c then 3 else 4
-      //   return if c then 5 else 6
-      ASSERT_AST(
-          BODY_AST("(VAR (IDENT a) NONE (IF [EXPR] (IDENT c) "
-                   "(BLOCK (INT_LIT 1)) (BLOCK (INT_LIT 2)))) "
-                   "(ASSIGN (IDENT a) (IF [EXPR] (IDENT c) "
-                   "(BLOCK (INT_LIT 3)) (BLOCK (INT_LIT 4)))) "
-                   "(RETURN (IF [EXPR] (IDENT c) "
-                   "(BLOCK (INT_LIT 5)) (BLOCK (INT_LIT 6))))"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(VAR), ID("a"), TOK(ASSIGN), TOK(IF), ID("c"),
-            TOK(THEN), INT(1), TOK(ELSE), INT(2), EOL,
-          LINE(2), ID("a"), TOK(ASSIGN), TOK(IF), ID("c"), TOK(THEN), INT(3),
-            TOK(ELSE), INT(4), EOL,
-          LINE(2), TOK(RETURN), TOK(IF), ID("c"), TOK(THEN), INT(5),
-            TOK(ELSE), INT(6), EOL);
+    it("rejects malformed if statements") {
+      ASSERT_SYNTAX_ERRORS(
+          // if c print(x)
+          MANY(LINE(2), TOK(IF), ID("c"), ID("print"), TOK(L_PAREN), ID("x"),
+               TOK(R_PAREN), EOL),
+          // if c
+          MANY(LINE(2), TOK(IF), ID("c"), EOL),
+          // if then x
+          MANY(LINE(2), TOK(IF), TOK(THEN), ID("x"), EOL),
+          // if c then
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL),
+          // if c then, then a line that is no block
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL, LINE(2), ID("x"),
+               EOL),
+          // if c then )
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), TOK(R_PAREN), EOL),
+          // if c then x y
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), ID("y"), EOL),
+          // if c then x else
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(ELSE), EOL),
+          // else followed by a line that is no block
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
+               LINE(4), ID("x"), EOL,
+               LINE(2), TOK(ELSE), EOL,
+               LINE(2), ID("y"), EOL),
+          // if c then x else )
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(ELSE),
+               TOK(R_PAREN), EOL),
+          // if c then x, then a line indented deeper
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), EOL,
+               LINE(4), ID("y"), EOL),
+          // an if block, then a line starting with )
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL, LINE(4), ID("x"),
+               EOL, LINE(2), TOK(R_PAREN), EOL),
+          // if c then x else y z
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(ELSE),
+               ID("y"), ID("z"), EOL),
+          // if c then x; y else z
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(SEMICOLON),
+               ID("y"), TOK(ELSE), ID("z"), EOL),
+          // if c then x;
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(SEMICOLON),
+               EOL),
+          // if c then return )
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), TOK(RETURN),
+               TOK(R_PAREN), EOL),
+          // if c then x = else y
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(ASSIGN),
+               TOK(ELSE), ID("y"), EOL),
+          // if c then x = if a then 1 else 2, no if expression in a body
+          MANY(LINE(2), TOK(IF), ID("c"), TOK(THEN), ID("x"), TOK(ASSIGN),
+               TOK(IF), ID("a"), TOK(THEN), INT(1), TOK(ELSE), INT(2), EOL));
     }
 
-    it("does not report a missing else of an if expression") {
-      // def f() =
-      //   val a = if c then 1
-      //   a
-      ASSERT_AST(
-          BODY_AST("(VAL (IDENT a) NONE (IF [EXPR] (IDENT c) "
-                   "(BLOCK (INT_LIT 1)) NONE)) (IDENT a)"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), TOK(IF), ID("c"),
-            TOK(THEN), INT(1), EOL,
-          LINE(2), ID("a"), EOL);
-    }
-
-    it("parses an if with a block else on the right side of val") {
-      // def f() =
-      //   val a = if c then 1
-      //   else
-      //     2
-      //   a
-      ASSERT_AST(
-          BODY_AST("(VAL (IDENT a) NONE (IF [EXPR] (IDENT c) "
-                   "(BLOCK (INT_LIT 1)) (BLOCK (INT_LIT 2)))) (IDENT a)"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), TOK(IF), ID("c"),
-            TOK(THEN), INT(1), EOL,
-          LINE(2), TOK(ELSE), EOL,
-          LINE(4), INT(2), EOL,
-          LINE(2), ID("a"), EOL);
-    }
-
-    it("flags only the if of the right side, not its else if") {
-      // def f() =
-      //   val a = if c then 1 else if d then 2 else 3
-      ASSERT_AST(
-          BODY_AST("(VAL (IDENT a) NONE (IF [EXPR] (IDENT c) "
-                   "(BLOCK (INT_LIT 1)) (IF (IDENT d) (BLOCK (INT_LIT 2)) "
-                   "(BLOCK (INT_LIT 3)))))"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), TOK(IF), ID("c"),
-            TOK(THEN), INT(1), TOK(ELSE), TOK(IF), ID("d"), TOK(THEN),
-            INT(2), TOK(ELSE), INT(3), EOL);
-    }
-
-    it("puts the statement after val a = if c then x; y after the VAL") {
-      // def f() =
-      //   val a = if c then 1; y
-      ASSERT_AST(
-          BODY_AST("(VAL (IDENT a) NONE (IF [EXPR] (IDENT c) "
-                   "(BLOCK (INT_LIT 1)) NONE)) (IDENT y)"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), TOK(IF), ID("c"),
-            TOK(THEN), INT(1), TOK(SEMICOLON), ID("y"), EOL);
-    }
-
-    it("keeps a statement after the if of a return in the block") {
-      // def f() =
-      //   return if c then 1 else 2; y
-      ASSERT_AST(
-          BODY_AST("(RETURN (IF [EXPR] (IDENT c) (BLOCK (INT_LIT 1)) "
-                   "(BLOCK (INT_LIT 2)))) (IDENT y)"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(RETURN), TOK(IF), ID("c"), TOK(THEN), INT(1),
-            TOK(ELSE), INT(2), TOK(SEMICOLON), ID("y"), EOL);
-    }
-
-    it("parses an if expression as a call argument") {
-      // def f() =
-      //   print(if a then 1 else 2)
-      ASSERT_AST(
-          BODY_AST("(CALL (IDENT print) (IF [EXPR] (IDENT a) "
-                   "(BLOCK (INT_LIT 1)) (BLOCK (INT_LIT 2))))"),
-          PROLOG, DEF_F,
-          LINE(2), ID("print"), TOK(L_PAREN), TOK(IF), ID("a"), TOK(THEN),
-            INT(1), TOK(ELSE), INT(2), TOK(R_PAREN), EOL);
-    }
-
-    // Changes: the trailing comma is followed by a line break (PDF 1.2).
-    it("parses if expressions among other call arguments") {
-      // def f() =
-      //   g(0, if a then 1 else 2, if b then x + 1 else y, 3,
-      //   )
-      ASSERT_AST(
-          BODY_AST("(CALL (IDENT g) (INT_LIT 0) "
-                   "(IF [EXPR] (IDENT a) (BLOCK (INT_LIT 1)) "
-                   "(BLOCK (INT_LIT 2))) "
-                   "(IF [EXPR] (IDENT b) (BLOCK (ADD (IDENT x) (INT_LIT 1))) "
-                   "(BLOCK (IDENT y))) (INT_LIT 3))"),
-          PROLOG, DEF_F,
-          LINE(2), ID("g"), TOK(L_PAREN), INT(0), TOK(COMMA), TOK(IF),
-            ID("a"), TOK(THEN), INT(1), TOK(ELSE), INT(2), TOK(COMMA),
-            TOK(IF), ID("b"), TOK(THEN), ID("x"), TOK(OPERATOR_PLUS), INT(1),
-            TOK(ELSE), ID("y"), TOK(COMMA), INT(3), TOK(COMMA), BREAK,
-            TOK(R_PAREN), EOL);
-    }
-
-    it("parses an if expression whose else is an if expression") {
-      // def f() =
-      //   g(if a then 1 else if b then 2 else 3)
-      ASSERT_AST(
-          BODY_AST("(CALL (IDENT g) (IF [EXPR] (IDENT a) (BLOCK (INT_LIT 1)) "
-                   "(IF [EXPR] (IDENT b) (BLOCK (INT_LIT 2)) "
-                   "(BLOCK (INT_LIT 3)))))"),
-          PROLOG, DEF_F,
-          LINE(2), ID("g"), TOK(L_PAREN), TOK(IF), ID("a"), TOK(THEN),
-            INT(1), TOK(ELSE), TOK(IF), ID("b"), TOK(THEN), INT(2),
-            TOK(ELSE), INT(3), TOK(R_PAREN), EOL);
-    }
-
-    it("parses an if expression whose then is an if expression") {
-      // def f() =
-      //   g(if a then if b then 1 else 2 else 3)
-      ASSERT_AST(
-          BODY_AST("(CALL (IDENT g) (IF [EXPR] (IDENT a) "
-                   "(BLOCK (IF [EXPR] (IDENT b) (BLOCK (INT_LIT 1)) "
-                   "(BLOCK (INT_LIT 2)))) (BLOCK (INT_LIT 3))))"),
-          PROLOG, DEF_F,
-          LINE(2), ID("g"), TOK(L_PAREN), TOK(IF), ID("a"), TOK(THEN),
-            TOK(IF), ID("b"), TOK(THEN), INT(1), TOK(ELSE), INT(2),
-            TOK(ELSE), INT(3), TOK(R_PAREN), EOL);
-    }
-
-    it("parses (if a then 1 else 2) + 3") {
-      // def f() = (if a then 1 else 2) + 3
-      ASSERT_AST(
-          BODY_AST("(ADD (IF [EXPR] (IDENT a) (BLOCK (INT_LIT 1)) "
-                   "(BLOCK (INT_LIT 2))) (INT_LIT 3))"),
-          PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-          TOK(L_PAREN), TOK(IF), ID("a"), TOK(THEN), INT(1), TOK(ELSE),
-          INT(2), TOK(R_PAREN), TOK(OPERATOR_PLUS), INT(3), EOL);
-    }
-
-    it("takes an if expression in parentheses as an operand of any operator") {
-      // def f() =
-      //   1 + (if a < b then a * 2 else b - 1) * 4
-      ASSERT_AST(
-          BODY_AST("(ADD (INT_LIT 1) (MUL (IF [EXPR] (LT (IDENT a) (IDENT b)) "
-                   "(BLOCK (MUL (IDENT a) (INT_LIT 2))) "
-                   "(BLOCK (SUB (IDENT b) (INT_LIT 1)))) (INT_LIT 4)))"),
-          PROLOG, DEF_F,
-          LINE(2), INT(1), TOK(OPERATOR_PLUS), TOK(L_PAREN), TOK(IF),
-            ID("a"), TOK(COMPARISON_L), ID("b"), TOK(THEN), ID("a"),
-            TOK(OPERATOR_MULTIPLY), INT(2), TOK(ELSE), ID("b"),
-            TOK(OPERATOR_MINUS), INT(1), TOK(R_PAREN),
-            TOK(OPERATOR_MULTIPLY), INT(4), EOL);
-    }
-
-    it("parses a member of a parenthesised if expression") {
-      // def f() =
-      //   (if a then 1 else 2).toString
-      ASSERT_AST(
-          BODY_AST("(MEMBER toString (IF [EXPR] (IDENT a) "
-                   "(BLOCK (INT_LIT 1)) (BLOCK (INT_LIT 2))))"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(L_PAREN), TOK(IF), ID("a"), TOK(THEN), INT(1),
-            TOK(ELSE), INT(2), TOK(R_PAREN), TOK(PERIOD), ID("toString"),
-            EOL);
-    }
-
-    it("parses a parenthesised if expression in a call argument") {
-      // def f() =
-      //   print((if a then 1 else 2) + 3, x)
-      ASSERT_AST(
-          BODY_AST("(CALL (IDENT print) (ADD (IF [EXPR] (IDENT a) "
-                   "(BLOCK (INT_LIT 1)) (BLOCK (INT_LIT 2))) (INT_LIT 3)) "
-                   "(IDENT x))"),
-          PROLOG, DEF_F,
-          LINE(2), ID("print"), TOK(L_PAREN), TOK(L_PAREN), TOK(IF), ID("a"),
-            TOK(THEN), INT(1), TOK(ELSE), INT(2), TOK(R_PAREN),
-            TOK(OPERATOR_PLUS), INT(3), TOK(COMMA), ID("x"), TOK(R_PAREN),
-            EOL);
-    }
-
-    it("parses parenthesised if expressions nested in each other") {
-      // def f() =
-      //   (if (if a then b else c) then 1 else (if d then 2 else 3)) + 4
-      ASSERT_AST(
-          BODY_AST("(ADD (IF [EXPR] (IF [EXPR] (IDENT a) (BLOCK (IDENT b)) "
-                   "(BLOCK (IDENT c))) (BLOCK (INT_LIT 1)) "
-                   "(BLOCK (IF [EXPR] (IDENT d) (BLOCK (INT_LIT 2)) "
-                   "(BLOCK (INT_LIT 3))))) (INT_LIT 4))"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(L_PAREN), TOK(IF), TOK(L_PAREN), TOK(IF), ID("a"),
-            TOK(THEN), ID("b"), TOK(ELSE), ID("c"), TOK(R_PAREN), TOK(THEN),
-            INT(1), TOK(ELSE), TOK(L_PAREN), TOK(IF), ID("d"), TOK(THEN),
-            INT(2), TOK(ELSE), INT(3), TOK(R_PAREN), TOK(R_PAREN),
-            TOK(OPERATOR_PLUS), INT(4), EOL);
-    }
-
-    it("parses an if expression as the value of a val in parentheses") {
-      // def f() =
-      //   val a = (if c then 1 else 2)
-      ASSERT_AST(
-          BODY_AST("(VAL (IDENT a) NONE (IF [EXPR] (IDENT c) "
-                   "(BLOCK (INT_LIT 1)) (BLOCK (INT_LIT 2))))"),
-          PROLOG, DEF_F,
-          LINE(2), TOK(VAL), ID("a"), TOK(ASSIGN), TOK(L_PAREN), TOK(IF),
-            ID("c"), TOK(THEN), INT(1), TOK(ELSE), INT(2), TOK(R_PAREN),
-            EOL);
-    }
-
-    it("still parses a ( not followed by if as a group") {
-      // def f() = (1 + 2) * 3
-      ASSERT_AST(
-          BODY_AST("(MUL (ADD (INT_LIT 1) (INT_LIT 2)) (INT_LIT 3))"),
-          PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-          TOK(L_PAREN), INT(1), TOK(OPERATOR_PLUS), INT(2), TOK(R_PAREN),
-          TOK(OPERATOR_MULTIPLY), INT(3), EOL);
-    }
-
-    it("leaves no holder behind the if of a parenthesised operand") {
-      // def f() =
-      //   (if a then 1 else 2)
-      PARSE(PROLOG, DEF_F,
-            LINE(2), TOK(L_PAREN), TOK(IF), ID("a"), TOK(THEN), INT(1),
-              TOK(ELSE), INT(2), TOK(R_PAREN), EOL);
-      AstNode* def;
-      AstNode* body;
-      AstNode* node;
-      ast_node_get_child(ctx, ctx->ast, 0, &def);
-      ast_node_get_child(ctx, def, 2, &body);
-      asserteq(ast_node_get_child_count(body), 1);
-      ast_node_get_child(ctx, body, 0, &node);
-      asserteq(ast_node_get_type(node), AST_NODE_IF);
-      asserteq_ptr(ast_node_get_parent(node), body);
-    }
-  }
-  // clang-format on
-
-  // Syntax errors of the if nonterminal functions, including errors inside an
-  // if expression nested in an operand
-  // clang-format off
-  subdesc(syntax_errors_in_if) {
-    it("rejects an if with no then") {
-      // def f() =
-      //   if c print(x)
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(IF), ID("c"), ID("print"),
-                            TOK(L_PAREN), ID("x"), TOK(R_PAREN), EOL);
-    }
-
-    it("rejects an if whose condition ends the line") {
-      // def f() =
-      //   if c
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"), EOL);
-    }
-
-    it("rejects an if with no condition") {
-      // def f() =
-      //   if then x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(IF), TOK(THEN), ID("x"), EOL);
-    }
-
-    it("rejects an if with no body") {
-      // def f() =
-      //   if c then
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"),
-                          TOK(THEN), EOL);
-    }
-
-    it("rejects a then line break followed by a line that is no block") {
-      // def f() =
-      //   if c then
-      //   x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
-                          LINE(2), ID("x"), EOL);
-    }
-
-    it("rejects a single-line body that is no body") {
-      // def f() =
-      //   if c then )
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"),
-                          TOK(THEN), TOK(R_PAREN), EOL);
-    }
-
-    it("rejects a single-line body followed by a token ending no body") {
-      // def f() =
-      //   if c then x y
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"),
-                          TOK(THEN), ID("x"), ID("y"), EOL);
-    }
-
-    it("rejects an else with nothing after it") {
-      // def f() =
-      //   if c then x else
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"),
-                          TOK(THEN), ID("x"), TOK(ELSE), EOL);
-    }
-
-    it("rejects an else line break followed by no block") {
-      // def f() =
-      //   if c then
-      //     x
-      //   else
-      //   y
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
-                          LINE(4), ID("x"), EOL,
-                          LINE(2), TOK(ELSE), EOL,
-                          LINE(2), ID("y"), EOL);
-    }
-
-    it("rejects a single-line else not ended by a line break") {
-      // def f() =
-      //   if c then x else y z
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"),
-                          TOK(THEN), ID("x"), TOK(ELSE), ID("y"), ID("z"),
-                          EOL);
-    }
-
-    it("rejects an else after the ; form") {
-      // def f() =
-      //   if c then x; y else z
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"),
-                          TOK(THEN), ID("x"), TOK(SEMICOLON), ID("y"),
-                          TOK(ELSE), ID("z"), EOL);
-    }
-
-    it("rejects ; with no statement after it in an if") {
-      // def f() =
-      //   if c then x;
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"),
-                          TOK(THEN), ID("x"), TOK(SEMICOLON), EOL);
-    }
-
-    it("rejects a return value that is no expression in a single-line body") {
-      // def f() =
-      //   if c then return )
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"),
-                          TOK(THEN), TOK(RETURN), TOK(R_PAREN), EOL);
-    }
-
-    it("rejects an assignment with no value in a single-line body") {
-      // def f() =
-      //   if c then x = else y
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"),
-                          TOK(THEN), ID("x"), TOK(ASSIGN), TOK(ELSE),
-                          ID("y"), EOL);
-    }
-
-    it("rejects an if as the value of an assignment in a single-line body") {
-      // def f() =
-      //   if c then x = if a then 1 else 2
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(IF), ID("c"),
-                          TOK(THEN), ID("x"), TOK(ASSIGN), TOK(IF), ID("a"),
-                          TOK(THEN), INT(1), TOK(ELSE), INT(2), EOL);
-    }
-
-    it("rejects an if on the right side of val with no then") {
-      // def f() =
-      //   val a = if c 1
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(VAL), ID("a"),
-                          TOK(ASSIGN), TOK(IF), ID("c"), INT(1), EOL);
-    }
-
-    it("rejects an if expression with no else") {
-      // def f() =
-      //   g(if a then 1)
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("g"), TOK(L_PAREN),
-                          TOK(IF), ID("a"), TOK(THEN), INT(1), TOK(R_PAREN),
-                          EOL);
-    }
-
-    it("rejects a parenthesised if expression with no else") {
-      // def f() = (if a then 1) + 2
-      ASSERT_SYNTAX_ERROR(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE,
-                          TOK(ASSIGN), TOK(L_PAREN), TOK(IF), ID("a"),
-                          TOK(THEN), INT(1), TOK(R_PAREN),
-                          TOK(OPERATOR_PLUS), INT(2), EOL);
-    }
-
-    it("rejects an if expression with no value after else") {
-      // def f() =
-      //   g(if a then 1 else)
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("g"), TOK(L_PAREN),
-                          TOK(IF), ID("a"), TOK(THEN), INT(1), TOK(ELSE),
-                          TOK(R_PAREN), EOL);
-    }
-
-    it("rejects a return as the value of an if expression") {
-      // def f() =
-      //   g(if a then return 1 else 2)
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), ID("g"), TOK(L_PAREN),
-                          TOK(IF), ID("a"), TOK(THEN), TOK(RETURN), INT(1),
-                          TOK(ELSE), INT(2), TOK(R_PAREN), EOL);
-    }
-
-    it("rejects an unclosed parenthesised if expression") {
-      // def f() = (if a then 1 else 2
-      ASSERT_SYNTAX_ERROR(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE,
-                          TOK(ASSIGN), TOK(L_PAREN), TOK(IF), ID("a"),
-                          TOK(THEN), INT(1), TOK(ELSE), INT(2), EOL);
-    }
-
-    it("rejects two values in a parenthesised if expression branch") {
-      // def f() = (if a then 1 2 else 3)
-      ASSERT_SYNTAX_ERROR(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE,
-                          TOK(ASSIGN), TOK(L_PAREN), TOK(IF), ID("a"),
-                          TOK(THEN), INT(1), INT(2), TOK(ELSE), INT(3),
-                          TOK(R_PAREN), EOL);
-    }
-
-    it("frees an if expression on the stack under operators on an error") {
-      // def f() = 1 + 2 * (if a then b else *)
-      ASSERT_SYNTAX_ERROR(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE,
-                          TOK(ASSIGN), INT(1), TOK(OPERATOR_PLUS), INT(2),
-                          TOK(OPERATOR_MULTIPLY), TOK(L_PAREN), TOK(IF),
-                          ID("a"), TOK(THEN), ID("b"), TOK(ELSE),
-                          TOK(OPERATOR_MULTIPLY), TOK(R_PAREN), EOL);
-    }
-
-    it("frees nested if expressions in an argument on a syntax error") {
-      // def f() = g(1, (if a then h(if b then 1 else 2, ) else ))
-      ASSERT_SYNTAX_ERROR(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE,
-                          TOK(ASSIGN), ID("g"), TOK(L_PAREN), INT(1),
-                          TOK(COMMA), TOK(L_PAREN), TOK(IF), ID("a"),
-                          TOK(THEN), ID("h"), TOK(L_PAREN), TOK(IF), ID("b"),
-                          TOK(THEN), INT(1), TOK(ELSE), INT(2), TOK(COMMA),
-                          TOK(R_PAREN), TOK(ELSE), TOK(R_PAREN), TOK(R_PAREN),
-                          EOL);
-    }
-
-    it("frees an if expression when the lexer fails inside it") {
-      // def f() = 1 + (if a then 1 else <lexical error>
-      assertThrow(E_LEXER_ERROR, {
-        PARSE(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-              INT(1), TOK(OPERATOR_PLUS), TOK(L_PAREN), TOK(IF), ID("a"),
-              TOK(THEN), INT(1), TOK(ELSE), LEX_ERROR);
-      });
-    }
-
-    it("frees a partly built if statement when the lexer fails") {
+    it("frees a partly built if when the lexer fails") {
       // def f() =
       //   if a then x else <lexical error>
-      assertThrow(E_LEXER_ERROR, {
-        PARSE(PROLOG, DEF_F,
-              LINE(2), TOK(IF), ID("a"), TOK(THEN), ID("x"), TOK(ELSE),
-              LEX_ERROR);
-      });
+      ASSERT_ERRORS(
+          E_LEXER_ERROR,
+          MANY(LINE(2), TOK(IF), ID("a"), TOK(THEN), ID("x"), TOK(ELSE),
+               LEX_ERROR));
     }
   }
-  // clang-format on
 
-  // While statements (block and single-line bodies)
-  // clang-format off
-  subdesc(while_statements) {
-    it("parses sumTo, a while loop with a block body") {
-      // def sumTo(limit: Int): Int =
-      //   var n = limit
-      //   var total = 0
+  // While and for statements: ranges with to, until and by, inline and
+  // multi-line guards, single-line and block bodies
+  #define PRINT_I ID("print"), TOK(L_PAREN), ID("i"), TOK(R_PAREN)
+  subdesc(loops) {
+    it("parses a while loop with a block body and nested loops") {
+      // def f() =
+      //   a
       //   while n > 0 do
       //     total = total + n
-      //     n = n - 1
-      //   return total
+      //   while c do
+      //     for i <- 1 to 2 do x
+      //   for j <- 1 to 2 do
+      //     while b do y
+      //     z
+      //   b
       ASSERT_AST(
-          "(PROGRAM (DEF (IDENT sumTo) (TYPE_ANNOTATION Int) (BLOCK "
-          "(VAR (IDENT n) NONE (IDENT limit)) "
-          "(VAR (IDENT total) NONE (INT_LIT 0)) "
-          "(WHILE (GT (IDENT n) (INT_LIT 0)) "
-          "(BLOCK (ASSIGN (IDENT total) (ADD (IDENT total) (IDENT n))) "
-          "(ASSIGN (IDENT n) (SUB (IDENT n) (INT_LIT 1))))) "
-          "(RETURN (IDENT total))) "
-          "(PARAM_LIST (PARAM (IDENT limit) (TYPE_ANNOTATION Int)))))",
-          PROLOG,
-          TOK(DEF), ID("sumTo"), TOK(L_PAREN), ID("limit"),
-            TOK(COLON), TOK(TYPE_INT), TOK(R_PAREN), TOK(COLON),
-            TOK(TYPE_INT), TOK(ASSIGN), EOL,
-          LINE(2), TOK(VAR), ID("n"), TOK(ASSIGN), ID("limit"), EOL,
-          LINE(2), TOK(VAR), ID("total"), TOK(ASSIGN), INT(0), EOL,
+          BODY_AST("(IDENT a) "
+                   "(WHILE (GT (IDENT n) (INT_LIT 0)) "
+                   "(BLOCK (ASSIGN (IDENT total) "
+                   "(ADD (IDENT total) (IDENT n))))) "
+                   "(WHILE (IDENT c) (BLOCK "
+                   "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 2) NONE) "
+                   "(BLOCK (IDENT x))))) "
+                   "(FOR (IDENT j) (RANGE_TO (INT_LIT 1) (INT_LIT 2) NONE) "
+                   "(BLOCK (WHILE (IDENT b) (BLOCK (IDENT y))) (IDENT z))) "
+                   "(IDENT b)"),
+          PROLOG, DEF_F,
+          LINE(2), ID("a"), EOL,
           LINE(2), TOK(WHILE), ID("n"), TOK(COMPARISON_G), INT(0), TOK(DO),
             EOL,
           LINE(4), ID("total"), TOK(ASSIGN), ID("total"),
             TOK(OPERATOR_PLUS), ID("n"), EOL,
-          LINE(4), ID("n"), TOK(ASSIGN), ID("n"), TOK(OPERATOR_MINUS), INT(1),
-            EOL,
-          LINE(2), TOK(RETURN), ID("total"), EOL);
-    }
-
-    it("wraps a single-line while body with return in a BLOCK") {
-      // def f() =
-      //   while c do return
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(WHILE (IDENT c) (BLOCK (RETURN NONE)))) (PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(WHILE), ID("c"), TOK(DO), TOK(RETURN), EOL);
-    }
-
-    it("parses a single-line while body that returns a value") {
-      // def f() =
-      //   while c do return 1
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(WHILE (IDENT c) (BLOCK (RETURN (INT_LIT 1))))) (PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(WHILE), ID("c"), TOK(DO), TOK(RETURN), INT(1), EOL);
-    }
-
-    it("parses a single-line while body that is an assignment or a call") {
-      // def f() =
-      //   while c do n = n - 1
-      //   while c do print(n)
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(WHILE (IDENT c) (BLOCK "
-          "(ASSIGN (IDENT n) (SUB (IDENT n) (INT_LIT 1))))) "
-          "(WHILE (IDENT c) (BLOCK (CALL (IDENT print) (IDENT n))))) "
-          "(PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(WHILE), ID("c"), TOK(DO), ID("n"), TOK(ASSIGN),
-            ID("n"), TOK(OPERATOR_MINUS), INT(1), EOL,
-          LINE(2), TOK(WHILE), ID("c"), TOK(DO), ID("print"), TOK(L_PAREN),
-            ID("n"), TOK(R_PAREN), EOL);
-    }
-
-    it("puts the statement after while c do x; y after the WHILE") {
-      // def f() =
-      //   while c do x; y
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(WHILE (IDENT c) (BLOCK (IDENT x))) (IDENT y)) (PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(WHILE), ID("c"), TOK(DO), ID("x"), TOK(SEMICOLON),
-            ID("y"), EOL);
-    }
-
-    it("keeps the statements around a nested while in order") {
-      // def f() =
-      //   a
-      //   while c do
-      //     while d do x
-      //     y
-      //   b
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK (IDENT a) "
-          "(WHILE (IDENT c) (BLOCK "
-          "(WHILE (IDENT d) (BLOCK (IDENT x))) (IDENT y))) "
-          "(IDENT b)) (PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), ID("a"), EOL,
           LINE(2), TOK(WHILE), ID("c"), TOK(DO), EOL,
-          LINE(4), TOK(WHILE), ID("d"), TOK(DO), ID("x"), EOL,
-          LINE(4), ID("y"), EOL,
+          LINE(4), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            INT(2), TOK(DO), ID("x"), EOL,
+          LINE(2), TOK(FOR), ID("j"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            INT(2), TOK(DO), EOL,
+          LINE(4), TOK(WHILE), ID("b"), TOK(DO), ID("y"), EOL,
+          LINE(4), ID("z"), EOL,
           LINE(2), ID("b"), EOL);
     }
 
-    it("takes a while as the last statement of a function body") {
+    it("parses single-line loop bodies and ; after a loop") {
       // def f() =
-      //   while c do
-      //     x
+      //   while c do return
+      //   while c do return 1
+      //   while c do n = n - 1
+      //   while c do print(n)
+      //   while c do x; y
+      //   for i <- 1 to 3 do return i
+      //   for i <- 1 to 3 if a do x; z
       ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(WHILE (IDENT c) (BLOCK (IDENT x)))) (PARAM_LIST)))",
+          BODY_AST("(WHILE (IDENT c) (BLOCK (RETURN NONE))) "
+                   "(WHILE (IDENT c) (BLOCK (RETURN (INT_LIT 1)))) "
+                   "(WHILE (IDENT c) (BLOCK "
+                   "(ASSIGN (IDENT n) (SUB (IDENT n) (INT_LIT 1))))) "
+                   "(WHILE (IDENT c) (BLOCK (CALL (IDENT print) (IDENT n)))) "
+                   "(WHILE (IDENT c) (BLOCK (IDENT x))) (IDENT y) "
+                   "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 3) NONE) "
+                   "(BLOCK (RETURN (IDENT i)))) "
+                   "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 3) NONE) "
+                   "(BLOCK (IDENT x)) (IDENT a)) (IDENT z)"),
           PROLOG, DEF_F,
-          LINE(2), TOK(WHILE), ID("c"), TOK(DO), EOL,
-          LINE(4), ID("x"), EOL);
-    }
-
-    it("gives the WHILE the position of the while token") {
-      // def f() =
-      //   while c do x
-      PARSE(PROLOG, DEF_F,
-            LINE(2), ((Token){.type = WHILE, .line = 7, .column = 3}),
-            ID("c"), TOK(DO), ID("x"), EOL);
-      AstNode* def;
-      AstNode* block;
-      AstNode* loop;
-      ast_node_get_child(ctx, ctx->ast, 0, &def);
-      ast_node_get_child(ctx, def, 2, &block);
-      ast_node_get_child(ctx, block, 0, &loop);
-      asserteq(ast_node_get_type(loop), AST_NODE_WHILE);
-      asserteq(ast_node_get_line(loop), 7);
-      asserteq(ast_node_get_column(loop), 3);
-    }
-  }
-  // clang-format on
-
-  // For statements: ranges with to, until and by, inline and multi-line guards,
-  // single-line and block bodies
-  // clang-format off
-  // `print(i)` as tokens
-  #define PRINT_I ID("print"), TOK(L_PAREN), ID("i"), TOK(R_PAREN)
-  subdesc(for_statements) {
-    it("parses ranges(), every loop of the everything program") {
-      // def ranges(): Unit =
-      //   print("range:")
-      //   var sum = 0
-      //   for
-      //     i <- trace("S", 1) to trace("E", 6) by trace("T", 2)
-      //     if tracedFlag(toStr(i), i != 3)
-      //     if tracedFlag("g", i < 5)
-      //   do
-      //     sum = sum + i
-      //   print(s"|$sum|")
-      //   for i <- 6 to 2 by -2 do print(i)
-      //   print("|")
-      //   for i <- 2 until 5 do print(i)
-      //   print("|")
-      //   for i <- 4 to 4 do print(i)
-      //   for i <- 4 until 4 do print("unreachable-exclusive")
-      //   for i <- 3 to 1 by 1 do print("unreachable-ascending")
-      //   for i <- 1 to 3 by -1 do print("unreachable-descending")
-      //   print("\n")
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT ranges) (TYPE_ANNOTATION Unit) (BLOCK "
-          "(CALL (IDENT print) (STRING_LIT \"range:\")) "
-          "(VAR (IDENT sum) NONE (INT_LIT 0)) "
-          "(FOR (IDENT i) "
-          "(RANGE_TO (CALL (IDENT trace) (STRING_LIT \"S\") (INT_LIT 1)) "
-          "(CALL (IDENT trace) (STRING_LIT \"E\") (INT_LIT 6)) "
-          "(CALL (IDENT trace) (STRING_LIT \"T\") (INT_LIT 2))) "
-          "(BLOCK (ASSIGN (IDENT sum) (ADD (IDENT sum) (IDENT i)))) "
-          "(CALL (IDENT tracedFlag) (CALL (IDENT toStr) (IDENT i)) "
-          "(NEQ (IDENT i) (INT_LIT 3))) "
-          "(CALL (IDENT tracedFlag) (STRING_LIT \"g\") "
-          "(LT (IDENT i) (INT_LIT 5)))) "
-          "(CALL (IDENT print) (INTERP_STRING (STRING_LIT \"|\") (IDENT sum) "
-          "(STRING_LIT \"|\"))) "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 6) (INT_LIT 2) "
-          "(NEG (INT_LIT 2))) (BLOCK (CALL (IDENT print) (IDENT i)))) "
-          "(CALL (IDENT print) (STRING_LIT \"|\")) "
-          "(FOR (IDENT i) (RANGE_UNTIL (INT_LIT 2) (INT_LIT 5) NONE) "
-          "(BLOCK (CALL (IDENT print) (IDENT i)))) "
-          "(CALL (IDENT print) (STRING_LIT \"|\")) "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 4) (INT_LIT 4) NONE) "
-          "(BLOCK (CALL (IDENT print) (IDENT i)))) "
-          "(FOR (IDENT i) (RANGE_UNTIL (INT_LIT 4) (INT_LIT 4) NONE) "
-          "(BLOCK (CALL (IDENT print) "
-          "(STRING_LIT \"unreachable-exclusive\")))) "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 3) (INT_LIT 1) (INT_LIT 1)) "
-          "(BLOCK (CALL (IDENT print) "
-          "(STRING_LIT \"unreachable-ascending\")))) "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 3) "
-          "(NEG (INT_LIT 1))) "
-          "(BLOCK (CALL (IDENT print) "
-          "(STRING_LIT \"unreachable-descending\")))) "
-          "(CALL (IDENT print) (STRING_LIT \"\\n\"))) (PARAM_LIST)))",
-          PROLOG,
-          TOK(DEF), ID("ranges"), UNIT_VALUE, TOK(COLON),
-            TOK(TYPE_UNIT), TOK(ASSIGN), EOL,
-          LINE(2), ID("print"), TOK(L_PAREN), STR("range:"), TOK(R_PAREN), EOL,
-          LINE(2), TOK(VAR), ID("sum"), TOK(ASSIGN), INT(0), EOL,
-          LINE(2), TOK(FOR), EOL,
-          LINE(4), ID("i"), TOK(CONTROL_ARROW), ID("trace"), TOK(L_PAREN),
-            STR("S"), TOK(COMMA), INT(1), TOK(R_PAREN), ID("to"),
-            ID("trace"), TOK(L_PAREN), STR("E"), TOK(COMMA), INT(6),
-            TOK(R_PAREN), ID("by"), ID("trace"), TOK(L_PAREN), STR("T"),
-            TOK(COMMA), INT(2), TOK(R_PAREN), EOL,
-          LINE(4), TOK(IF), ID("tracedFlag"), TOK(L_PAREN), ID("toStr"),
-            TOK(L_PAREN), ID("i"), TOK(R_PAREN), TOK(COMMA), ID("i"),
-            TOK(COMPARISON_NEQ), INT(3), TOK(R_PAREN), EOL,
-          LINE(4), TOK(IF), ID("tracedFlag"), TOK(L_PAREN), STR("g"),
-            TOK(COMMA), ID("i"), TOK(COMPARISON_L), INT(5), TOK(R_PAREN), EOL,
-          LINE(2), TOK(DO), EOL,
-          LINE(4), ID("sum"), TOK(ASSIGN), ID("sum"), TOK(OPERATOR_PLUS),
-            ID("i"), EOL,
-          LINE(2), ID("print"), TOK(L_PAREN), S_OPEN, STR("|"), ID("sum"),
-            STR("|"), S_CLOSE, TOK(R_PAREN), EOL,
-          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(6), ID("to"),
-            INT(2), ID("by"), TOK(OPERATOR_MINUS), INT(2), TOK(DO),
-            PRINT_I, EOL,
-          LINE(2), ID("print"), TOK(L_PAREN), STR("|"), TOK(R_PAREN), EOL,
-          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(2), ID("until"),
-            INT(5), TOK(DO), PRINT_I, EOL,
-          LINE(2), ID("print"), TOK(L_PAREN), STR("|"), TOK(R_PAREN), EOL,
-          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(4), ID("to"),
-            INT(4), TOK(DO), PRINT_I, EOL,
-          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(4), ID("until"),
-            INT(4), TOK(DO), ID("print"), TOK(L_PAREN),
-            STR("unreachable-exclusive"), TOK(R_PAREN), EOL,
-          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(3), ID("to"),
-            INT(1), ID("by"), INT(1), TOK(DO), ID("print"), TOK(L_PAREN),
-            STR("unreachable-ascending"), TOK(R_PAREN), EOL,
+          LINE(2), TOK(WHILE), ID("c"), TOK(DO), TOK(RETURN), EOL,
+          LINE(2), TOK(WHILE), ID("c"), TOK(DO), TOK(RETURN), INT(1), EOL,
+          LINE(2), TOK(WHILE), ID("c"), TOK(DO), ID("n"), TOK(ASSIGN),
+            ID("n"), TOK(OPERATOR_MINUS), INT(1), EOL,
+          LINE(2), TOK(WHILE), ID("c"), TOK(DO), ID("print"), TOK(L_PAREN),
+            ID("n"), TOK(R_PAREN), EOL,
+          LINE(2), TOK(WHILE), ID("c"), TOK(DO), ID("x"), TOK(SEMICOLON),
+            ID("y"), EOL,
           LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
-            INT(3), ID("by"), TOK(OPERATOR_MINUS), INT(1), TOK(DO),
-            ID("print"), TOK(L_PAREN), STR("unreachable-descending"),
-            TOK(R_PAREN), EOL,
-          LINE(2), ID("print"), TOK(L_PAREN), STR("\n"), TOK(R_PAREN), EOL);
+            INT(3), TOK(DO), TOK(RETURN), ID("i"), EOL,
+          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+            INT(3), TOK(IF), ID("a"), TOK(DO), ID("x"), TOK(SEMICOLON),
+            ID("z"), EOL);
     }
 
-    it("parses an until range with a step") {
+    it("parses until, steps and ends range expressions at to, until, by and "
+       "if") {
       // def f() =
       //   for i <- 0 until 10 by 3 do print(i)
+      //   for i <- a + 1 to b * 2 by c - 1 do x
+      //   for i <- 1 to 5 if i > 2 do x
+      //   for i <- 6 to 2 by -2 if i != 4 do x
       ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_UNTIL (INT_LIT 0) (INT_LIT 10) (INT_LIT 3)) "
-          "(BLOCK (CALL (IDENT print) (IDENT i))))) (PARAM_LIST)))",
+          BODY_AST("(FOR (IDENT i) (RANGE_UNTIL (INT_LIT 0) (INT_LIT 10) "
+                   "(INT_LIT 3)) (BLOCK (CALL (IDENT print) (IDENT i)))) "
+                   "(FOR (IDENT i) (RANGE_TO (ADD (IDENT a) (INT_LIT 1)) "
+                   "(MUL (IDENT b) (INT_LIT 2)) (SUB (IDENT c) (INT_LIT 1))) "
+                   "(BLOCK (IDENT x))) "
+                   "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 5) NONE) "
+                   "(BLOCK (IDENT x)) (GT (IDENT i) (INT_LIT 2))) "
+                   "(FOR (IDENT i) (RANGE_TO (INT_LIT 6) (INT_LIT 2) "
+                   "(NEG (INT_LIT 2))) (BLOCK (IDENT x)) "
+                   "(NEQ (IDENT i) (INT_LIT 4)))"),
           PROLOG, DEF_F,
           LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(0),
-            ID("until"), INT(10), ID("by"), INT(3), TOK(DO), PRINT_I, EOL);
-    }
-
-    it("ends a range expression at to, until and by") {
-      // def f() =
-      //   for i <- a + 1 to b * 2 by c - 1 do x
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_TO (ADD (IDENT a) (INT_LIT 1)) "
-          "(MUL (IDENT b) (INT_LIT 2)) (SUB (IDENT c) (INT_LIT 1))) "
-          "(BLOCK (IDENT x)))) (PARAM_LIST)))",
-          PROLOG, DEF_F,
+            ID("until"), INT(10), ID("by"), INT(3), TOK(DO), PRINT_I, EOL,
           LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), ID("a"),
             TOK(OPERATOR_PLUS), INT(1), ID("to"), ID("b"),
             TOK(OPERATOR_MULTIPLY), INT(2), ID("by"), ID("c"),
-            TOK(OPERATOR_MINUS), INT(1), TOK(DO), ID("x"), EOL);
-    }
-
-    it("ends a range expression at an if guard") {
-      // def f() =
-      //   for i <- 1 to 5 if i > 2 do x
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 5) NONE) "
-          "(BLOCK (IDENT x)) (GT (IDENT i) (INT_LIT 2)))) (PARAM_LIST)))",
-          PROLOG, DEF_F,
+            TOK(OPERATOR_MINUS), INT(1), TOK(DO), ID("x"), EOL,
           LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
             INT(5), TOK(IF), ID("i"), TOK(COMPARISON_G), INT(2), TOK(DO),
-            ID("x"), EOL);
-    }
-
-    it("ends a step expression at an if guard") {
-      // def f() =
-      //   for i <- 6 to 2 by -2 if i != 4 do x
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 6) (INT_LIT 2) "
-          "(NEG (INT_LIT 2))) (BLOCK (IDENT x)) "
-          "(NEQ (IDENT i) (INT_LIT 4)))) (PARAM_LIST)))",
-          PROLOG, DEF_F,
+            ID("x"), EOL,
           LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(6), ID("to"),
             INT(2), ID("by"), TOK(OPERATOR_MINUS), INT(2), TOK(IF), ID("i"),
             TOK(COMPARISON_NEQ), INT(4), TOK(DO), ID("x"), EOL);
@@ -2653,9 +737,8 @@ describe(parser) {
       //   for i <- 1 to 9 if a if b if c do
       //     x
       ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 9) NONE) "
-          "(BLOCK (IDENT x)) (IDENT a) (IDENT b) (IDENT c))) (PARAM_LIST)))",
+          BODY_AST("(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 9) NONE) "
+                   "(BLOCK (IDENT x)) (IDENT a) (IDENT b) (IDENT c))"),
           PROLOG, DEF_F,
           LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
             INT(9), TOK(IF), ID("a"), TOK(IF), ID("b"), TOK(IF), ID("c"),
@@ -2663,44 +746,16 @@ describe(parser) {
           LINE(4), ID("x"), EOL);
     }
 
-    it("parses a multi-line header with no guards") {
+    it("parses a multi-line for header with and without guards") {
       // def f() =
       //   for
       //     i <- 1 to 3
       //   do
       //     x
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 3) NONE) "
-          "(BLOCK (IDENT x)))) (PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(FOR), EOL,
-          LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"), INT(3), EOL,
-          LINE(2), TOK(DO), EOL,
-          LINE(4), ID("x"), EOL);
-    }
-
-    it("parses a multi-line header with a single-line body") {
-      // def f() =
       //   for
       //     i <- 1 until 3
       //     if a
       //   do print(i)
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_UNTIL (INT_LIT 1) (INT_LIT 3) NONE) "
-          "(BLOCK (CALL (IDENT print) (IDENT i))) (IDENT a))) "
-          "(PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(FOR), EOL,
-          LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("until"), INT(3),
-            EOL,
-          LINE(4), TOK(IF), ID("a"), EOL,
-          LINE(2), TOK(DO), PRINT_I, EOL);
-    }
-
-    it("parses a multi-line header followed by statements") {
-      // def f() =
       //   for
       //     i <- 1 to 3
       //     if a
@@ -2708,10 +763,22 @@ describe(parser) {
       //     x
       //   y
       ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 3) NONE) "
-          "(BLOCK (IDENT x)) (IDENT a)) (IDENT y)) (PARAM_LIST)))",
+          BODY_AST("(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 3) NONE) "
+                   "(BLOCK (IDENT x))) "
+                   "(FOR (IDENT i) (RANGE_UNTIL (INT_LIT 1) (INT_LIT 3) NONE) "
+                   "(BLOCK (CALL (IDENT print) (IDENT i))) (IDENT a)) "
+                   "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 3) NONE) "
+                   "(BLOCK (IDENT x)) (IDENT a)) (IDENT y)"),
           PROLOG, DEF_F,
+          LINE(2), TOK(FOR), EOL,
+          LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"), INT(3), EOL,
+          LINE(2), TOK(DO), EOL,
+          LINE(4), ID("x"), EOL,
+          LINE(2), TOK(FOR), EOL,
+          LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("until"), INT(3),
+            EOL,
+          LINE(4), TOK(IF), ID("a"), EOL,
+          LINE(2), TOK(DO), PRINT_I, EOL,
           LINE(2), TOK(FOR), EOL,
           LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"), INT(3), EOL,
           LINE(4), TOK(IF), ID("a"), EOL,
@@ -2720,454 +787,143 @@ describe(parser) {
           LINE(2), ID("y"), EOL);
     }
 
-    it("puts the statement after for i <- 1 to 3 do x; y after the FOR") {
-      // def f() =
-      //   for i <- 1 to 3 do x; y
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 3) NONE) "
-          "(BLOCK (IDENT x))) (IDENT y)) (PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
-            INT(3), TOK(DO), ID("x"), TOK(SEMICOLON), ID("y"), EOL);
-    }
-
-    it("puts the statement after a guarded for with ; after the FOR") {
-      // def f() =
-      //   for i <- 1 to 3 if a do x; y
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 3) NONE) "
-          "(BLOCK (IDENT x)) (IDENT a)) (IDENT y)) (PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
-            INT(3), TOK(IF), ID("a"), TOK(DO), ID("x"), TOK(SEMICOLON),
-            ID("y"), EOL);
-    }
-
-    it("parses a single-line for body that returns") {
-      // def f() =
-      //   for i <- 1 to 3 do return i
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 3) NONE) "
-          "(BLOCK (RETURN (IDENT i))))) (PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
-            INT(3), TOK(DO), TOK(RETURN), ID("i"), EOL);
-    }
-
-    it("nests a for in a while and a while in a for") {
-      // def f() =
-      //   while a do
-      //     for i <- 1 to 2 do x
-      //   for j <- 1 to 2 do
-      //     while b do y
-      //     z
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(WHILE (IDENT a) (BLOCK "
-          "(FOR (IDENT i) (RANGE_TO (INT_LIT 1) (INT_LIT 2) NONE) "
-          "(BLOCK (IDENT x))))) "
-          "(FOR (IDENT j) (RANGE_TO (INT_LIT 1) (INT_LIT 2) NONE) "
-          "(BLOCK (WHILE (IDENT b) (BLOCK (IDENT y))) (IDENT z)))) "
-          "(PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(WHILE), ID("a"), TOK(DO), EOL,
-          LINE(4), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
-            INT(2), TOK(DO), ID("x"), EOL,
-          LINE(2), TOK(FOR), ID("j"), TOK(CONTROL_ARROW), INT(1), ID("to"),
-            INT(2), TOK(DO), EOL,
-          LINE(4), TOK(WHILE), ID("b"), TOK(DO), ID("y"), EOL,
-          LINE(4), ID("z"), EOL);
-    }
-
     it("takes to, until and by as ordinary identifiers elsewhere") {
       // def f() =
       //   val to = by
-      ASSERT_AST(
-          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
-          "(VAL (IDENT to) NONE (IDENT by))) (PARAM_LIST)))",
-          PROLOG, DEF_F,
-          LINE(2), TOK(VAL), ID("to"), TOK(ASSIGN), ID("by"), EOL);
+      ASSERT_AST(BODY_AST("(VAL (IDENT to) NONE (IDENT by))"),
+                 PROLOG, DEF_F,
+                 LINE(2), TOK(VAL), ID("to"), TOK(ASSIGN), ID("by"), EOL);
     }
 
-    it("gives the FOR the position of the for token") {
-      // def f() =
-      //   for i <- 1 to 2 do x
-      PARSE(PROLOG, DEF_F,
-            LINE(2), ((Token){.type = FOR, .line = 7, .column = 3}),
-            ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"), INT(2), TOK(DO),
-            ID("x"), EOL);
-      AstNode* def;
-      AstNode* block;
-      AstNode* loop;
-      ast_node_get_child(ctx, ctx->ast, 0, &def);
-      ast_node_get_child(ctx, def, 2, &block);
-      ast_node_get_child(ctx, block, 0, &loop);
-      asserteq(ast_node_get_type(loop), AST_NODE_FOR);
-      asserteq(ast_node_get_line(loop), 7);
-      asserteq(ast_node_get_column(loop), 3);
+    it("rejects malformed while and for statements") {
+      ASSERT_SYNTAX_ERRORS(
+          // for i <- 1 tu 5 do x
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("tu"), INT(5), TOK(DO), ID("x"), EOL),
+          // for i <- a + b tu 5 do x, the range operands are on the stack
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), ID("a"),
+               TOK(OPERATOR_PLUS), ID("b"), ID("tu"), INT(5), TOK(DO),
+               ID("x"), EOL),
+          // for i <- 1 to 5 bye 2 do x
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), INT(5), ID("bye"), INT(2), TOK(DO), ID("x"), EOL),
+          // for i <- 1 do x
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               TOK(DO), ID("x"), EOL),
+          // for i <- 1 to do x
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), TOK(DO), ID("x"), EOL),
+          // for i <- 1 to 5 by do x
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), INT(5), ID("by"), TOK(DO), ID("x"), EOL),
+          // for i <- 1 to 5 )
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), INT(5), TOK(R_PAREN), EOL),
+          // for i <- 1 to 5 x
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), INT(5), ID("x"), EOL),
+          // for i <- 1 to 5, the header ends the line with no do
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), INT(5), EOL),
+          // for do x
+          MANY(LINE(2), TOK(FOR), TOK(DO), ID("x"), EOL),
+          // for i 1 to 5 do x
+          MANY(LINE(2), TOK(FOR), ID("i"), INT(1), ID("to"), INT(5), TOK(DO),
+               ID("x"), EOL),
+          // for 1 <- 1 to 5 do x
+          MANY(LINE(2), TOK(FOR), INT(1), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), INT(5), TOK(DO), ID("x"), EOL),
+          // for i <- do x
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), TOK(DO),
+               ID("x"), EOL),
+          // for i <- 1 to 5 if do x
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), INT(5), TOK(IF), TOK(DO), ID("x"), EOL),
+          // for i <- 1 to 5 if a then do x
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), INT(5), TOK(IF), ID("a"), TOK(THEN), TOK(DO),
+               ID("x"), EOL),
+          // for i <- 1 to 5 do
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), INT(5), TOK(DO), EOL),
+          // for, a multi-line header with no generator
+          MANY(LINE(2), TOK(FOR), EOL, LINE(4), TOK(IF), ID("a"), EOL,
+               LINE(2), TOK(DO), ID("x"), EOL),
+          // for, a multi-line header whose first line is not indented
+          MANY(LINE(2), TOK(FOR), EOL,
+               LINE(2), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+               INT(5), EOL,
+               LINE(2), TOK(DO), ID("x"), EOL),
+          // for, a multi-line generator that does not end the line
+          MANY(LINE(2), TOK(FOR), EOL,
+               LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+               INT(5), TOK(IF), ID("a"), EOL,
+               LINE(2), TOK(DO), ID("x"), EOL),
+          // for, a guard line that does not end the line
+          MANY(LINE(2), TOK(FOR), EOL,
+               LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+               INT(5), EOL,
+               LINE(4), TOK(IF), ID("a"), TOK(DO), ID("x"), EOL),
+          // for, a header line that is no guard
+          MANY(LINE(2), TOK(FOR), EOL,
+               LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+               INT(5), EOL,
+               LINE(4), ID("x"), EOL,
+               LINE(2), TOK(DO), ID("y"), EOL),
+          // for, a deeper indentation in the guard lines
+          MANY(LINE(2), TOK(FOR), EOL,
+               LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+               INT(5), EOL,
+               LINE(6), TOK(IF), ID("a"), EOL,
+               LINE(2), TOK(DO), ID("x"), EOL),
+          // for, a multi-line header with no do after it
+          MANY(LINE(2), TOK(FOR), EOL,
+               LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("to"),
+               INT(5), EOL,
+               LINE(2), ID("x"), EOL),
+          // while do x
+          MANY(LINE(2), TOK(WHILE), TOK(DO), ID("x"), EOL),
+          // while c x
+          MANY(LINE(2), TOK(WHILE), ID("c"), ID("x"), EOL),
+          // while c
+          MANY(LINE(2), TOK(WHILE), ID("c"), EOL),
+          // while c do
+          MANY(LINE(2), TOK(WHILE), ID("c"), TOK(DO), EOL),
+          // while c do, then a line that is no block
+          MANY(LINE(2), TOK(WHILE), ID("c"), TOK(DO), EOL, LINE(2), ID("x"),
+               EOL),
+          // while c do then
+          MANY(LINE(2), TOK(WHILE), ID("c"), TOK(DO), TOK(THEN), EOL),
+          // while c do x else
+          MANY(LINE(2), TOK(WHILE), ID("c"), TOK(DO), ID("x"), TOK(ELSE),
+               EOL),
+          // while c do x;
+          MANY(LINE(2), TOK(WHILE), ID("c"), TOK(DO), ID("x"), TOK(SEMICOLON),
+               EOL));
+    }
+
+    it("frees partly built loops when the lexer fails") {
+      ASSERT_ERRORS(
+          E_LEXER_ERROR,
+          // for i <- 1 to 5 by 2 if a if <error>
+          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
+               ID("to"), INT(5), ID("by"), INT(2), TOK(IF), ID("a"),
+               TOK(IF), LEX_ERROR),
+          // a multi-line header cut after its guard line
+          MANY(LINE(2), TOK(FOR), EOL,
+               LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("until"),
+               INT(5), EOL,
+               LINE(4), TOK(IF), ID("a"), EOL,
+               LINE(4), LEX_ERROR),
+          // while c do <error>
+          MANY(LINE(2), TOK(WHILE), ID("c"), TOK(DO), LEX_ERROR));
     }
   }
   #undef PRINT_I
-  // clang-format on
-
-  // Syntax errors in while and for statements, including that a partly built
-  // loop is freed
-  // clang-format off
-  subdesc(syntax_errors_in_loops) {
-    it("rejects a misspelled to") {
-      // def f() =
-      //   for i <- 1 tu 5 do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), ID("tu"), INT(5), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a misspelled by") {
-      // def f() =
-      //   for i <- 1 to 5 bye 2 do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), ID("to"), INT(5), ID("bye"), INT(2),
-                            TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a range with no to or until") {
-      // def f() =
-      //   for i <- 1 do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects an identifier chosen as a range keyword by its prefix") {
-      // def f() =
-      //   for i <- 1 until2 5 do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), ID("until2"), INT(5), TOK(DO), ID("x"),
-                            EOL);
-    }
-
-    it("rejects a range with no end value") {
-      // def f() =
-      //   for i <- 1 to do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), ID("to"), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a by with no step") {
-      // def f() =
-      //   for i <- 1 to 5 by do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), ID("to"), INT(5), ID("by"), TOK(DO),
-                            ID("x"), EOL);
-    }
-
-    it("rejects a for with no do") {
-      // def f() =
-      //   for i <- 1 to 5 x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), ID("to"), INT(5), ID("x"), EOL);
-    }
-
-    it("rejects a for whose header ends the line with no do") {
-      // def f() =
-      //   for i <- 1 to 5
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), ID("to"), INT(5), EOL);
-    }
-
-    it("rejects a for with no generator") {
-      // def f() =
-      //   for do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a generator with no arrow") {
-      // def f() =
-      //   for i 1 to 5 do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), INT(1), ID("to"),
-                            INT(5), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a generator whose variable is no identifier") {
-      // def f() =
-      //   for 1 <- 1 to 5 do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), INT(1), TOK(CONTROL_ARROW),
-                            INT(1), ID("to"), INT(5), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects an arrow with no range") {
-      // def f() =
-      //   for i <- do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a guard with no condition") {
-      // def f() =
-      //   for i <- 1 to 5 if do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), ID("to"), INT(5), TOK(IF), TOK(DO),
-                            ID("x"), EOL);
-    }
-
-    it("rejects a guard followed by a token that is no guard or do") {
-      // def f() =
-      //   for i <- 1 to 5 if a then do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), ID("to"), INT(5), TOK(IF), ID("a"),
-                            TOK(THEN), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a for with no body") {
-      // def f() =
-      //   for i <- 1 to 5 do
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW),
-                            INT(1), ID("to"), INT(5), TOK(DO), EOL);
-    }
-
-    it("rejects a multi-line header with no generator") {
-      // def f() =
-      //   for
-      //     if a
-      //   do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), EOL,
-                          LINE(4), TOK(IF), ID("a"), EOL,
-                          LINE(2), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a multi-line header whose first line is not indented") {
-      // def f() =
-      //   for
-      //   i <- 1 to 5
-      //   do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), EOL,
-                          LINE(2), ID("i"), TOK(CONTROL_ARROW), INT(1),
-                            ID("to"), INT(5), EOL,
-                          LINE(2), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a multi-line generator that does not end the line") {
-      // def f() =
-      //   for
-      //     i <- 1 to 5 if a
-      //   do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), EOL,
-                          LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1),
-                            ID("to"), INT(5), TOK(IF), ID("a"), EOL,
-                          LINE(2), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a guard line that does not end the line") {
-      // def f() =
-      //   for
-      //     i <- 1 to 5
-      //     if a do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), EOL,
-                          LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1),
-                            ID("to"), INT(5), EOL,
-                          LINE(4), TOK(IF), ID("a"), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a line in the header that is no guard") {
-      // def f() =
-      //   for
-      //     i <- 1 to 5
-      //     x
-      //   do y
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), EOL,
-                          LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1),
-                            ID("to"), INT(5), EOL,
-                          LINE(4), ID("x"), EOL,
-                          LINE(2), TOK(DO), ID("y"), EOL);
-    }
-
-    it("rejects a deeper indentation in the guard lines") {
-      // def f() =
-      //   for
-      //     i <- 1 to 5
-      //       if a
-      //   do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), EOL,
-                          LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1),
-                            ID("to"), INT(5), EOL,
-                          LINE(6), TOK(IF), ID("a"), EOL,
-                          LINE(2), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a multi-line header with no do after it") {
-      // def f() =
-      //   for
-      //     i <- 1 to 5
-      //   x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(FOR), EOL,
-                          LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1),
-                            ID("to"), INT(5), EOL,
-                          LINE(2), ID("x"), EOL);
-    }
-
-    it("rejects a while with no condition") {
-      // def f() =
-      //   while do x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(WHILE), TOK(DO), ID("x"), EOL);
-    }
-
-    it("rejects a while with no do") {
-      // def f() =
-      //   while c x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(WHILE), ID("c"), ID("x"), EOL);
-    }
-
-    it("rejects a while whose condition ends the line") {
-      // def f() =
-      //   while c
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F, LINE(2), TOK(WHILE), ID("c"), EOL);
-    }
-
-    it("rejects a while with no body") {
-      // def f() =
-      //   while c do
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(WHILE), ID("c"), TOK(DO), EOL);
-    }
-
-    it("rejects a loop line break followed by a line that is no block") {
-      // def f() =
-      //   while c do
-      //   x
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(WHILE), ID("c"), TOK(DO), EOL,
-                          LINE(2), ID("x"), EOL);
-    }
-
-    it("rejects a single-line loop body that is no body") {
-      // def f() =
-      //   while c do then
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(WHILE), ID("c"), TOK(DO), TOK(THEN),
-                            EOL);
-    }
-
-    it("rejects a single-line loop body not ended by a line break") {
-      // def f() =
-      //   while c do x else
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(WHILE), ID("c"), TOK(DO), ID("x"),
-                            TOK(ELSE), EOL);
-    }
-
-    it("rejects ; with no statement after it in a loop") {
-      // def f() =
-      //   while c do x;
-      ASSERT_SYNTAX_ERROR(PROLOG, DEF_F,
-                          LINE(2), TOK(WHILE), ID("c"), TOK(DO), ID("x"),
-                            TOK(SEMICOLON), EOL);
-    }
-
-    it("frees a for whose range keyword is misspelled") {
-      // def f() =
-      //   for i <- a + b tu 5 do x
-      assertThrow(E_SYNTAX_ERROR, {
-        PARSE(PROLOG, DEF_F,
-              LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), ID("a"),
-              TOK(OPERATOR_PLUS), ID("b"), ID("tu"), INT(5), TOK(DO),
-              ID("x"), EOL);
-      });
-    }
-
-    it("frees a partly built for with guards when the lexer fails") {
-      // def f() =
-      //   for i <- 1 to 5 by 2 if a if <lexical error>
-      assertThrow(E_LEXER_ERROR, {
-        PARSE(PROLOG, DEF_F,
-              LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
-              ID("to"), INT(5), ID("by"), INT(2), TOK(IF), ID("a"),
-              TOK(IF), LEX_ERROR);
-      });
-    }
-
-    it("frees a partly built multi-line header when the lexer fails") {
-      // def f() =
-      //   for
-      //     i <- 1 until 5
-      //     if a
-      //     <lexical error>
-      assertThrow(E_LEXER_ERROR, {
-        PARSE(PROLOG, DEF_F,
-              LINE(2), TOK(FOR), EOL,
-              LINE(4), ID("i"), TOK(CONTROL_ARROW), INT(1), ID("until"),
-              INT(5), EOL,
-              LINE(4), TOK(IF), ID("a"), EOL,
-              LINE(4), LEX_ERROR);
-      });
-    }
-
-    it("frees a partly built while when the lexer fails") {
-      // def f() =
-      //   while c do <lexical error>
-      assertThrow(E_LEXER_ERROR, {
-        PARSE(PROLOG, DEF_F,
-              LINE(2), TOK(WHILE), ID("c"), TOK(DO), LEX_ERROR);
-      });
-    }
-  }
-  // clang-format on
-
-  subdesc(cleanup) {
-    it("frees an operand left on the precedence stack by an error") {
-      // def f() = a, the lexer fails on the token after `a` while `a` is
-      // still on the precedence stack (ADR-0004)
-      assertThrow(E_LEXER_ERROR, {
-        PARSE(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(ASSIGN),
-              STR("still on the stack"), LEX_ERROR);
-      });
-    }
-
-    it("frees owned tokens when an error is thrown mid-parse") {
-      FakeSource source;
-      START(source, IDENT_TOK("a"), IDENT_TOK("b"));
-      // Current token "a" owns text, the leak check in make test-unit fails
-      // if ctx_free does not release it
-      assertThrow(E_SYNTAX_ERROR, { parser_expect(ctx, ctx->parser, DEF); });
-    }
-
-    it("removes the parser state from ctx") {
-      FakeSource source;
-      START(source, IDENT_TOK("a"));
-      parser_cleanup(ctx);
-      asserteq_ptr(ctx->parser, NULL);
-    }
-  }
 
   // Allocation failure sweep: every malloc of a parse fails in turn; a node
   // left without an owner shows up in a leak checker (valgrind in make
   // test-unit, or leaks --atExit where valgrind is missing).
-  // The token rows are kept one source line per row
-  // clang-format off
   subdesc(allocation_failure) {
     it("frees every node when any allocation fails") {
       // def f() =
@@ -3219,7 +975,7 @@ describe(parser) {
       }
     }
   }
-  // clang-format on
 }
+// clang-format on
 
 snow_main();
