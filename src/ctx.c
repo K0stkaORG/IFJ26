@@ -12,8 +12,9 @@
  */
 
 #include "ctx.h"
-#include "ast.h"  // ast_node_destroy
-#include "ir.h"   // ir_init, ir_free
+#include "ast.h"      // ast_node_destroy
+#include "codegen.h"  // cg_state_init
+#include "ir.h"       // ir_init, ir_free
 #include "optimizer.h"
 #include "symtable.h"           // symtable_init, symtable_destroy
 #include "symtable_builtins.h"  // symtable_builtins_populate
@@ -47,6 +48,9 @@ void ctx_init(Ctx* ctx, Flags flags) {
 
   // Initialize optimizer context
   optimizer_init(&ctx->optimizer);
+
+  // Initialize codegen state
+  cg_state_init(&ctx->cg_state);
 }
 
 void ctx_allocate(Ctx* ctx) {

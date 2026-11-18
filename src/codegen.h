@@ -12,12 +12,23 @@
 #define CODEGEN_H
 
 #include <stdio.h>
-#include "ctx.h"
+
+typedef struct Ctx Ctx;
+
+typedef struct CodegenState {
+  size_t builtin_label_id;
+} CodegenState;
+
+/**
+ * @brief Codegen state init
+ * @param ctx Compiler context
+ */
+void cg_state_init(CodegenState* state);
 
 /**
  * @brief IFJcode26 generator
  * @param out File to output to
- * @param ctx Compiler context
+ * @param state Codegen state in context
  */
 void cg_generate(FILE* out, Ctx* ctx);
 
