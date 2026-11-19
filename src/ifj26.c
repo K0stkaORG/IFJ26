@@ -17,6 +17,8 @@
 #include <stdio.h>  // fprintf, stderr
 
 #include "ctx.h"  // Shared memory and error context
+#include "parser.h"     // parser_parse
+#include "semantics.h"  // semantics_analyze
 
 /**
  * @brief Entrypoint of the IFJ26 compiler
@@ -40,6 +42,8 @@ int main(int argc, char** argv) {
     ctx_allocate(ctx);
 
     // Run the compiler
+    parser_parse(ctx);
+    semantics_analyze(ctx);
   }
   CATCH {
     // No need to do anything special in case of error, ctx_free will handle it

@@ -25,6 +25,7 @@
 #include "symtable.h"   // Symtable
 
 typedef struct AstNode AstNode;  // Forward declaration (ast.h includes ctx.h)
+typedef struct Parser Parser;    // Forward declaration (parser state)
 
 /**
  * @brief Exit codes for the IFJ26 compiler
@@ -127,6 +128,8 @@ typedef struct Ctx {
 
   // Abstract syntax tree of the program
   AstNode* ast;
+
+  Parser* parser;
 
   // Global symbol table
   Symtable global_symtable;
