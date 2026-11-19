@@ -467,21 +467,21 @@ AstDataType ast_node_get_data_type(const AstNode* node);
  * @param line line number from the token
  * @param column column number from the token
  */
-void ast_node_set_position(AstNode* node, int line, int column);
+void ast_node_set_position(AstNode* node, size_t line, size_t column);
 
 /**
  * @brief Returns source line of given node (0 if unset)
  *
  * @pre Node pointer is not NULL!
  */
-int ast_node_get_line(const AstNode* node);
+size_t ast_node_get_line(const AstNode* node);
 
 /**
  * @brief Returns source column of given node (0 if unset)
  *
  * @pre Node pointer is not NULL!
  */
-int ast_node_get_column(const AstNode* node);
+size_t ast_node_get_column(const AstNode* node);
 
 /**
  * @brief Sets the identifier name of given node (IDENT, MEMBER, TYPE_NAME)

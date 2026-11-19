@@ -29,10 +29,10 @@
 
 // Changes: new, the flag bits are pairwise distinct (the sum equals the union
 // only when no two flags share a bit).
-_Static_assert((AST_FLAG_MAIN | AST_FLAG_EXPR | AST_FLAG_BUILTIN |
-                AST_FLAG_DEF_CHECKING | AST_FLAG_DEF_CHECKED) ==
-                   (AST_FLAG_MAIN + AST_FLAG_EXPR + AST_FLAG_BUILTIN +
-                    AST_FLAG_DEF_CHECKING + AST_FLAG_DEF_CHECKED),
+_Static_assert(((unsigned)AST_FLAG_MAIN | (unsigned)AST_FLAG_EXPR | (unsigned)AST_FLAG_BUILTIN |
+                (unsigned)AST_FLAG_DEF_CHECKING | (unsigned)AST_FLAG_DEF_CHECKED) ==
+                   ((unsigned)AST_FLAG_MAIN + (unsigned)AST_FLAG_EXPR + (unsigned)AST_FLAG_BUILTIN +
+                    (unsigned)AST_FLAG_DEF_CHECKING + (unsigned)AST_FLAG_DEF_CHECKED),
                "AST flags share a bit");
 
 static AstNode* ast_test_nodes[AST_TEST_NODE_CAPACITY];
@@ -859,7 +859,8 @@ describe(AST_TEST_STRING) {
     defer({ ast_node_destroy(ctx, def); });
     ast_node_set_type(def, AST_NODE_DEF);
     ast_node_set_flags(
-        def, AST_FLAG_MAIN | AST_FLAG_DEF_CHECKING | AST_FLAG_DEF_CHECKED);
+        def, (unsigned)AST_FLAG_MAIN | (unsigned)AST_FLAG_DEF_CHECKING |
+            (unsigned)AST_FLAG_DEF_CHECKED);
 
     char* text = ast_to_test_string(def);
     defer(free(text));

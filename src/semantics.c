@@ -81,9 +81,10 @@ static IrType data_type_to_ir(Ctx* ctx, AstDataType type) {
 
 // Changes: new, the data type of a type annotation node; one without a type is
 // an internal error.
+// Also: positions print as size_t (%zu).
 static AstDataType annotation_type(Ctx* ctx, const AstNode* annotation) {
   if (ast_node_get_type(annotation) != AST_NODE_TYPE_ANNOTATION)
-    THROW(E_INTERNAL_ERROR, "expected a type annotation at %d:%d",
+    THROW(E_INTERNAL_ERROR, "expected a type annotation at %zu:%zu",
           ast_node_get_line(annotation), ast_node_get_column(annotation));
   AstDataType type = ast_node_get_data_type(annotation);
   if (type == AST_DATA_TYPE_UNKNOWN)
@@ -124,11 +125,12 @@ static const char* data_type_name(AstDataType type) {
 
 // Changes: new, the type of an already checked expression; an untyped one is an
 // internal error.
+// Also: positions print as size_t (%zu).
 static AstDataType expr_type(Ctx* ctx, const AstNode* node) {
   AstDataType type = ast_node_get_data_type(node);
   if (type == AST_DATA_TYPE_UNKNOWN)
     THROW(E_INTERNAL_ERROR,
-          "semantic analysis met an untyped expression at %d:%d",
+          "semantic analysis met an untyped expression at %zu:%zu",
           ast_node_get_line(node), ast_node_get_column(node));
   return type;
 }
@@ -147,9 +149,10 @@ static bool is_number(AstDataType type) {
 
 // Changes: new, wraps the Int expression in an INT_TO_DOUBLE in its parent's
 // slot (ast_node_wrap). The node stays valid, its slot now holds the wrapper.
+// Also: positions print as size_t (%zu).
 static void widen_node(Ctx* ctx, AstNode* node) {
   if (ast_node_get_data_type(node) != AST_DATA_TYPE_INT)
-    THROW(E_INTERNAL_ERROR, "only an Int can be widened, at %d:%d",
+    THROW(E_INTERNAL_ERROR, "only an Int can be widened, at %zu:%zu",
           ast_node_get_line(node), ast_node_get_column(node));
   AstNode* wrapper = ast_node_wrap(ctx, node, AST_NODE_INT_TO_DOUBLE);
   ast_node_set_data_type(wrapper, AST_DATA_TYPE_DOUBLE);
@@ -158,6 +161,7 @@ static void widen_node(Ctx* ctx, AstNode* node) {
 // Changes: new, the checked expression must fit target: same type passes, Int
 // is widened to Double in place, anything else stops with code (6 values, 5
 // arguments); what names the construct in the message.
+// Also: positions print as size_t (%zu).
 static void require_compatible(Ctx* ctx,
                                AstNode* node,
                                AstDataType target,
@@ -165,7 +169,7 @@ static void require_compatible(Ctx* ctx,
                                const char* what) {
   AstDataType actual = expr_type(ctx, node);
   if (!is_compatible(actual, target))
-    THROW(code, "%s at %d:%d needs %s but the value is %s", what,
+    THROW(code, "%s at %zu:%zu needs %s but the value is %s", what,
           ast_node_get_line(node), ast_node_get_column(node),
           data_type_name(target), data_type_name(actual));
   if (actual == AST_DATA_TYPE_INT && target == AST_DATA_TYPE_DOUBLE)
@@ -173,10 +177,11 @@ static void require_compatible(Ctx* ctx,
 }
 
 // Changes: new, the expression must be a Boolean (exit 6), nothing is widened.
+// Also: positions print as size_t (%zu).
 static void require_boolean(Ctx* ctx, AstNode* node, const char* what) {
   AstDataType actual = expr_type(ctx, node);
   if (actual != AST_DATA_TYPE_BOOLEAN)
-    THROW(E_SEMANTIC_TYPE_ERROR, "%s at %d:%d must be Boolean but is %s", what,
+    THROW(E_SEMANTIC_TYPE_ERROR, "%s at %zu:%zu must be Boolean but is %s", what,
           ast_node_get_line(node), ast_node_get_column(node),
           data_type_name(actual));
 }
@@ -232,13 +237,14 @@ static void insert_members(Ctx* ctx, Sema* sema) {
 // Changes: new, declares one DEF as a global function symbol. A name already
 // global is exit 4, an omitted return type is a Unit placeholder until
 // inferred, a @main with a parameter is exit 5.
+// Also: positions print as size_t (%zu).
 static void collect_function(Ctx* ctx, Sema* sema, AstNode* def, size_t id) {
   AstNode* ident = ast_node_child(ctx, def, AST_DEF_IDENT);
   const char* name = ast_node_get_name(ident);
 
   if (symtable_lookup(sema->scope, (char*)name, false) != NULL)
     THROW(E_SEMANTIC_REDEFINITION_ERROR,
-          "redefinition of function '%s' at %d:%d", name,
+          "redefinition of function '%s' at %zu:%zu", name,
           ast_node_get_line(ident), ast_node_get_column(ident));
 
   AstNode* rettype = ast_node_child(ctx, def, AST_DEF_RETTYPE);
@@ -251,7 +257,7 @@ static void collect_function(Ctx* ctx, Sema* sema, AstNode* def, size_t id) {
 
   if ((ast_node_get_flags(def) & (unsigned)AST_FLAG_MAIN) && param_count > 0)
     THROW(E_SEMANTIC_ARGUMENT_ERROR,
-          "@main function '%s' at %d:%d must not have parameters", name,
+          "@main function '%s' at %zu:%zu must not have parameters", name,
           ast_node_get_line(ident), ast_node_get_column(ident));
 
   // Check every parameter type before allocating the array, so a THROW here
@@ -269,13 +275,14 @@ static void collect_function(Ctx* ctx, Sema* sema, AstNode* def, size_t id) {
 // Changes: new, declares one DEF as a global function symbol. A name already
 // global is exit 4, an omitted return type is a Unit placeholder until
 // inferred, a @main with a parameter is exit 5.
+// Also: positions print as size_t (%zu).
 static void collect_functions(Ctx* ctx, Sema* sema) {
   size_t mains = 0;
   size_t count = ast_node_get_child_count(sema->program);
   for (size_t id = 0; id < count; id++) {
     AstNode* def = ast_node_child(ctx, sema->program, id);
     if (ast_node_get_type(def) != AST_NODE_DEF)
-      THROW(E_INTERNAL_ERROR, "unexpected top-level node at %d:%d",
+      THROW(E_INTERNAL_ERROR, "unexpected top-level node at %zu:%zu",
             ast_node_get_line(def), ast_node_get_column(def));
 
     if (ast_node_get_flags(def) & (unsigned)AST_FLAG_MAIN) {
@@ -283,7 +290,7 @@ static void collect_functions(Ctx* ctx, Sema* sema) {
       if (mains > 1) {
         AstNode* ident = ast_node_child(ctx, def, AST_DEF_IDENT);
         THROW(E_SEMANTIC_REDEFINITION_ERROR,
-              "more than one @main function, second one '%s' at %d:%d",
+              "more than one @main function, second one '%s' at %zu:%zu",
               ast_node_get_name(ident), ast_node_get_line(ident),
               ast_node_get_column(ident));
       }
@@ -298,6 +305,7 @@ static void collect_functions(Ctx* ctx, Sema* sema) {
 // Changes: new, declares a parameter, val, var or for variable in the current
 // scope. A name already in that scope is exit 4, checked before the insert so
 // no symbol an AST node points at is replaced.
+// Also: positions print as size_t (%zu).
 static void declare_variable(Ctx* ctx,
                              Sema* sema,
                              AstNode* ident,
@@ -306,7 +314,7 @@ static void declare_variable(Ctx* ctx,
                              size_t slot) {
   const char* name = ast_node_get_name(ident);
   if (symtable_lookup(sema->scope, (char*)name, false) != NULL)
-    THROW(E_SEMANTIC_REDEFINITION_ERROR, "redefinition of '%s' at %d:%d", name,
+    THROW(E_SEMANTIC_REDEFINITION_ERROR, "redefinition of '%s' at %zu:%zu", name,
           ast_node_get_line(ident), ast_node_get_column(ident));
 
   SymtableData data = {
@@ -323,11 +331,12 @@ static void declare_variable(Ctx* ctx,
 
 // Changes: new, resolves an identifier to a visible variable, from the current
 // scope outward; none is exit 3.
+// Also: positions print as size_t (%zu).
 static SymtableData* resolve_variable(Ctx* ctx, Sema* sema, AstNode* ident) {
   const char* name = ast_node_get_name(ident);
   SymtableData* symbol = symtable_lookup(sema->scope, (char*)name, true);
   if (symbol == NULL || symbol->symbol_type != SYMBOL_VARIABLE)
-    THROW(E_SEMANTIC_UNDEFINED_ERROR, "undefined variable '%s' at %d:%d", name,
+    THROW(E_SEMANTIC_UNDEFINED_ERROR, "undefined variable '%s' at %zu:%zu", name,
           ast_node_get_line(ident), ast_node_get_column(ident));
   ast_node_set_symbol(ident, symbol);
   return symbol;
@@ -335,12 +344,13 @@ static SymtableData* resolve_variable(Ctx* ctx, Sema* sema, AstNode* ident) {
 
 // Changes: new, resolves a callee among the global functions only, so a
 // variable never hides a function; none is exit 3.
+// Also: positions print as size_t (%zu).
 static SymtableData* resolve_function(Ctx* ctx, AstNode* ident) {
   const char* name = ast_node_get_name(ident);
   SymtableData* symbol =
       symtable_lookup(&ctx->global_symtable, (char*)name, false);
   if (symbol == NULL || symbol->symbol_type != SYMBOL_FUNCTION)
-    THROW(E_SEMANTIC_UNDEFINED_ERROR, "undefined function '%s' at %d:%d", name,
+    THROW(E_SEMANTIC_UNDEFINED_ERROR, "undefined function '%s' at %zu:%zu", name,
           ast_node_get_line(ident), ast_node_get_column(ident));
   ast_node_set_symbol(ident, symbol);
   return symbol;
@@ -399,17 +409,18 @@ static void check_val_var(Ctx* ctx, Sema* sema, AstNode* node) {
 // Changes: new, the ASSIGN target must be a visible writable variable: a val,
 // parameter or for variable, and any name that is no visible variable, is exit
 // 7 (PDF 2.2).
+// Also: positions print as size_t (%zu).
 static void check_assign_target(Ctx* ctx, Sema* sema, AstNode* target) {
   const char* name = ast_node_get_name(target);
   SymtableData* symbol = symtable_lookup(sema->scope, (char*)name, true);
   if (symbol == NULL || symbol->symbol_type != SYMBOL_VARIABLE)
     THROW(E_SEMANTIC_REWRITE_ERROR,
-          "assignment to '%s' at %d:%d, which is no defined variable", name,
+          "assignment to '%s' at %zu:%zu, which is no defined variable", name,
           ast_node_get_line(target), ast_node_get_column(target));
   ast_node_set_symbol(target, symbol);
   if (symbol->is_val)
     THROW(E_SEMANTIC_REWRITE_ERROR,
-          "assignment to the read-only variable '%s' at %d:%d",
+          "assignment to the read-only variable '%s' at %zu:%zu",
           ast_node_get_name(target), ast_node_get_line(target),
           ast_node_get_column(target));
 }
@@ -469,6 +480,7 @@ static ResultRule body_rule(Ctx* ctx, AstNode* def) {
 // Changes: new, a RETURN. Its value is checked first (exit 3 wins); without a
 // declared return type any return is exit 6, a declared Unit discards the
 // value, any other type needs a compatible value.
+// Also: positions print as size_t (%zu).
 static void check_return(Ctx* ctx, Sema* sema, AstNode* node) {
   AstNode* value = ast_node_child(ctx, node, AST_RETURN_VALUE);
   bool has_value = ast_node_get_type(value) != AST_NODE_NONE;
@@ -478,13 +490,13 @@ static void check_return(Ctx* ctx, Sema* sema, AstNode* node) {
   ResultRule rule = body_rule(ctx, sema->def);
   if (!rule.declared)
     THROW(E_SEMANTIC_TYPE_ERROR,
-          "return at %d:%d in a function without a declared return type",
+          "return at %zu:%zu in a function without a declared return type",
           ast_node_get_line(node), ast_node_get_column(node));
   if (rule.type == AST_DATA_TYPE_UNIT)
     return;
   if (!has_value)
     THROW(E_SEMANTIC_TYPE_ERROR,
-          "bare return at %d:%d in a function returning %s",
+          "bare return at %zu:%zu in a function returning %s",
           ast_node_get_line(node), ast_node_get_column(node),
           data_type_name(rule.type));
   require_compatible(ctx, value, rule.type, E_SEMANTIC_TYPE_ERROR,
@@ -538,6 +550,7 @@ static void widen_branch(Ctx* ctx, AstNode* node) {
 // value on both sides is UNKNOWN, a declared type wins, a valueless branch
 // takes the other's type, Int with Double gives Double; anything else is exit
 // 6.
+// Also: positions print as size_t (%zu).
 static AstDataType unify_branches(Ctx* ctx,
                                   AstNode* node,
                                   const ResultRule* rule,
@@ -553,7 +566,7 @@ static AstDataType unify_branches(Ctx* ctx,
     return then_type;
   if (!is_number(then_type) || !is_number(else_type))
     THROW(E_SEMANTIC_TYPE_ERROR,
-          "branches of the if at %d:%d have different types %s and %s",
+          "branches of the if at %zu:%zu have different types %s and %s",
           ast_node_get_line(node), ast_node_get_column(node),
           data_type_name(then_type), data_type_name(else_type));
   size_t int_side = then_type == AST_DATA_TYPE_INT ? AST_IF_THEN : AST_IF_ELSE;
@@ -587,6 +600,7 @@ static AstDataType check_branch(Ctx* ctx,
 // recursion), the missing else rule and unify_branches. Returns UNKNOWN when
 // every branch returns.
 // NOLINTNEXTLINE(misc-no-recursion)
+// Also: positions print as size_t (%zu).
 static AstDataType check_if_node(Ctx* ctx,
                                  Sema* sema,
                                  AstNode* node,
@@ -602,7 +616,7 @@ static AstDataType check_if_node(Ctx* ctx,
   switch (ast_node_get_type(else_branch)) {
     case AST_NODE_NONE:
       if (rule != NULL && needs_else(rule))
-        THROW(E_SEMANTIC_TYPE_ERROR, "if at %d:%d has no else but needs a %s",
+        THROW(E_SEMANTIC_TYPE_ERROR, "if at %zu:%zu has no else but needs a %s",
               ast_node_get_line(node), ast_node_get_column(node),
               rule->declared ? data_type_name(rule->type) : "value");
       break;
@@ -634,6 +648,7 @@ static void check_if(Ctx* ctx, Sema* sema, AstNode* node) {
 // wherever it stands), return UNKNOWN, val/var/assign/while/for Unit, an
 // expression its type, widened in place to a declared type.
 // NOLINTNEXTLINE(misc-no-recursion)
+// Also: positions print as size_t (%zu).
 static AstDataType check_result_stmt(Ctx* ctx,
                                      Sema* sema,
                                      AstNode* stmt,
@@ -663,7 +678,7 @@ static AstDataType check_result_stmt(Ctx* ctx,
     check_stmt(ctx, sema, stmt);
     if (must_yield_value(rule))
       THROW(E_SEMANTIC_TYPE_ERROR,
-            "statement at %d:%d ends a function that must return %s",
+            "statement at %zu:%zu ends a function that must return %s",
             ast_node_get_line(stmt), ast_node_get_column(stmt),
             data_type_name(rule->type));
     return AST_DATA_TYPE_UNIT;
@@ -681,6 +696,7 @@ static AstDataType check_result_stmt(Ctx* ctx,
 // rule its last statement goes through check_result_stmt and the block yields
 // its type; an empty block yields Unit.
 // NOLINTNEXTLINE(misc-no-recursion)
+// Also: positions print as size_t (%zu).
 static AstDataType check_block(Ctx* ctx,
                                Sema* sema,
                                AstNode* block,
@@ -690,7 +706,7 @@ static AstDataType check_block(Ctx* ctx,
   size_t count = ast_node_get_child_count(block);
   if (rule != NULL && count == 0 && must_yield_value(rule))
     THROW(E_SEMANTIC_TYPE_ERROR,
-          "empty block at %d:%d in a function that must return %s",
+          "empty block at %zu:%zu in a function that must return %s",
           ast_node_get_line(block), ast_node_get_column(block),
           data_type_name(rule->type));
   AstDataType result = AST_DATA_TYPE_UNIT;
@@ -731,6 +747,7 @@ static bool is_zero_literal(Ctx* ctx, AstNode* node) {
 
 // Changes: new, a RANGE_TO or RANGE_UNTIL: Int bounds and step (exit 6); a
 // literal 0 or -0 step is exit 10.
+// Also: positions print as size_t (%zu).
 static void check_range(Ctx* ctx, Sema* sema, AstNode* node) {
   size_t count = ast_node_get_child_count(node);
   for (size_t i = 0; i < count; i++) {
@@ -741,11 +758,11 @@ static void check_range(Ctx* ctx, Sema* sema, AstNode* node) {
     AstDataType actual = expr_type(ctx, child);
     if (actual != AST_DATA_TYPE_INT)
       THROW(E_SEMANTIC_TYPE_ERROR,
-            "%s of a range at %d:%d must be Int but is %s",
+            "%s of a range at %zu:%zu must be Int but is %s",
             i == AST_RANGE_STEP ? "step" : "bound", ast_node_get_line(child),
             ast_node_get_column(child), data_type_name(actual));
     if (i == AST_RANGE_STEP && is_zero_literal(ctx, child))
-      THROW(E_SEMANTIC_OTHER_ERROR, "step of a range at %d:%d is zero",
+      THROW(E_SEMANTIC_OTHER_ERROR, "step of a range at %zu:%zu is zero",
             ast_node_get_line(child), ast_node_get_column(child));
   }
 }
@@ -781,6 +798,7 @@ static void check_ident(Ctx* ctx, Sema* sema, AstNode* node) {
 }
 
 // Changes: new, a literal has the type of its kind.
+// Also: positions print as size_t (%zu).
 static void check_literal(Ctx* ctx, Sema* sema, AstNode* node) {
   (void)sema;
   switch (ast_node_get_type(node)) {
@@ -800,7 +818,7 @@ static void check_literal(Ctx* ctx, Sema* sema, AstNode* node) {
       ast_node_set_data_type(node, AST_DATA_TYPE_UNIT);
       break;
     default:
-      THROW(E_INTERNAL_ERROR, "expected a literal at %d:%d",
+      THROW(E_INTERNAL_ERROR, "expected a literal at %zu:%zu",
             ast_node_get_line(node), ast_node_get_column(node));
   }
 }
@@ -843,17 +861,18 @@ static const char* operator_name(AstNodeType type) {
 
 // Changes: new, exit 6 for operands an operator does not accept, naming the
 // operator and the operand types.
+// Also: positions print as size_t (%zu).
 static void operand_error(Ctx* ctx,
                           const AstNode* node,
                           AstDataType left,
                           AstDataType right) {
   if (ast_node_get_child_count(node) == 1)
     THROW(E_SEMANTIC_TYPE_ERROR,
-          "operator '%s' at %d:%d cannot be applied to %s",
+          "operator '%s' at %zu:%zu cannot be applied to %s",
           operator_name(ast_node_get_type(node)), ast_node_get_line(node),
           ast_node_get_column(node), data_type_name(left));
   THROW(E_SEMANTIC_TYPE_ERROR,
-        "operator '%s' at %d:%d cannot be applied to %s and %s",
+        "operator '%s' at %zu:%zu cannot be applied to %s and %s",
         operator_name(ast_node_get_type(node)), ast_node_get_line(node),
         ast_node_get_column(node), data_type_name(left), data_type_name(right));
 }
@@ -877,6 +896,7 @@ static AstDataType unify_numbers(Ctx* ctx,
 // Changes: new, a binary operator: + - * / on numbers, + on Strings, relations
 // on numbers or Strings, == != on the same type or numbers, && || on Booleans;
 // anything else is exit 6.
+// Also: positions print as size_t (%zu).
 static void check_binary(Ctx* ctx, Sema* sema, AstNode* node) {
   check_expr_children(ctx, sema, node, 0);
   AstNode* left = ast_node_child(ctx, node, AST_BINARY_LEFT);
@@ -919,7 +939,7 @@ static void check_binary(Ctx* ctx, Sema* sema, AstNode* node) {
       result = AST_DATA_TYPE_BOOLEAN;
       break;
     default:
-      THROW(E_INTERNAL_ERROR, "unexpected binary operator at %d:%d",
+      THROW(E_INTERNAL_ERROR, "unexpected binary operator at %zu:%zu",
             ast_node_get_line(node), ast_node_get_column(node));
   }
   ast_node_set_data_type(node, result);
@@ -950,6 +970,7 @@ static void check_interp_string(Ctx* ctx, Sema* sema, AstNode* node) {
 // Changes: new, the type of a call, read off the callee. An unchecked user
 // function without a declared return type is checked on demand (pass state
 // saved and restored); one already being checked is recursion, exit 6.
+// Also: positions print as size_t (%zu).
 static AstDataType call_result_type(Ctx* ctx,
                                     Sema* sema,
                                     const SymtableData* symbol) {
@@ -960,7 +981,7 @@ static AstDataType call_result_type(Ctx* ctx,
       if (flags & (unsigned)AST_FLAG_DEF_CHECKING) {
         AstNode* ident = ast_node_child(ctx, def, AST_DEF_IDENT);
         THROW(E_SEMANTIC_TYPE_ERROR,
-              "function '%s' at %d:%d is used while its return type is being "
+              "function '%s' at %zu:%zu is used while its return type is being "
               "inferred, give it a declared return type",
               ast_node_get_name(ident), ast_node_get_line(ident),
               ast_node_get_column(ident));
@@ -978,6 +999,7 @@ static AstDataType call_result_type(Ctx* ctx,
 // Changes: new, compares the checked arguments of a CALL with the callee
 // signature: wrong count or type is exit 5, Int widens to Double. A built-in's
 // Unit parameter (print, toStr) takes any argument.
+// Also: positions print as size_t (%zu).
 static void check_call_arguments(Ctx* ctx,
                                  const Sema* sema,
                                  AstNode* node,
@@ -985,7 +1007,7 @@ static void check_call_arguments(Ctx* ctx,
   size_t argc = ast_node_get_child_count(node) - AST_CALL_FIRST_ARG;
   if (argc != symbol->param_count)
     THROW(E_SEMANTIC_ARGUMENT_ERROR,
-          "call at %d:%d passes %zu argument(s) but the function takes %zu",
+          "call at %zu:%zu passes %zu argument(s) but the function takes %zu",
           ast_node_get_line(node), ast_node_get_column(node), argc,
           symbol->param_count);
 
@@ -1003,10 +1025,11 @@ static void check_call_arguments(Ctx* ctx,
 // Changes: new, a CALL: callee resolved among functions (exit 3), BUILTIN flag
 // for built-ins, arguments checked left to right and against the signature,
 // type from call_result_type.
+// Also: positions print as size_t (%zu).
 static void check_call(Ctx* ctx, Sema* sema, AstNode* node) {
   AstNode* callee = ast_node_child(ctx, node, AST_CALL_CALLEE);
   if (ast_node_get_type(callee) != AST_NODE_IDENT)
-    THROW(E_INTERNAL_ERROR, "callee at %d:%d is not a function name",
+    THROW(E_INTERNAL_ERROR, "callee at %zu:%zu is not a function name",
           ast_node_get_line(callee), ast_node_get_column(callee));
 
   SymtableData* symbol = resolve_function(ctx, callee);
@@ -1046,6 +1069,7 @@ static bool member_exists_elsewhere(Ctx* ctx,
 // Changes: new, a MEMBER: resolved by its receiver's type, gets BUILTIN and the
 // member's result type. A member of another receiver type is exit 6, an unknown
 // name exit 3.
+// Also: positions print as size_t (%zu).
 static void check_member(Ctx* ctx, Sema* sema, AstNode* node) {
   check_expr_children(ctx, sema, node, 0);
   AstNode* receiver = ast_node_child(ctx, node, AST_MEMBER_RECEIVER);
@@ -1055,10 +1079,10 @@ static void check_member(Ctx* ctx, Sema* sema, AstNode* node) {
   const SymtableData* symbol = resolve_member(ctx, receiver_type, member);
   if (symbol == NULL) {
     if (member_exists_elsewhere(ctx, receiver_type, member))
-      THROW(E_SEMANTIC_TYPE_ERROR, "no member '%s' on %s at %d:%d", member,
+      THROW(E_SEMANTIC_TYPE_ERROR, "no member '%s' on %s at %zu:%zu", member,
             data_type_name(receiver_type), ast_node_get_line(node),
             ast_node_get_column(node));
-    THROW(E_SEMANTIC_UNDEFINED_ERROR, "undefined member '%s' at %d:%d", member,
+    THROW(E_SEMANTIC_UNDEFINED_ERROR, "undefined member '%s' at %zu:%zu", member,
           ast_node_get_line(node), ast_node_get_column(node));
   }
   ast_node_set_symbol(node, symbol);
@@ -1069,6 +1093,7 @@ static void check_member(Ctx* ctx, Sema* sema, AstNode* node) {
 
 // Changes: new, expression dispatch, one case per node kind that can be an
 // expression.
+// Also: positions print as size_t (%zu).
 static void check_expr(Ctx* ctx, Sema* sema, AstNode* node) {
   switch (ast_node_get_type(node)) {
     case AST_NODE_IDENT:
@@ -1116,7 +1141,7 @@ static void check_expr(Ctx* ctx, Sema* sema, AstNode* node) {
       check_range(ctx, sema, node);
       break;
     default:
-      THROW(E_INTERNAL_ERROR, "unexpected expression node at %d:%d",
+      THROW(E_INTERNAL_ERROR, "unexpected expression node at %zu:%zu",
             ast_node_get_line(node), ast_node_get_column(node));
   }
 }
@@ -1171,6 +1196,7 @@ static void check_body(Ctx* ctx, Sema* sema) {
 // demand), declares the read-only parameters (slots 0..n-1), checks the body
 // while the DEF is marked as being checked; then a @main not returning Unit is
 // exit 6.
+// Also: positions print as size_t (%zu).
 static void check_def(Ctx* ctx, Sema* sema, AstNode* def) {
   AstNode* params = NULL;
   size_t param_count = def_param_list(ctx, def, &params);
@@ -1199,7 +1225,7 @@ static void check_def(Ctx* ctx, Sema* sema, AstNode* def) {
   if ((ast_node_get_flags(def) & (unsigned)AST_FLAG_MAIN) &&
       ast_node_get_symbol(ident)->ir_type != IR_UNIT)
     THROW(E_SEMANTIC_TYPE_ERROR,
-          "@main function '%s' at %d:%d must return Unit",
+          "@main function '%s' at %zu:%zu must return Unit",
           ast_node_get_name(ident), ast_node_get_line(ident),
           ast_node_get_column(ident));
 }
@@ -1249,6 +1275,7 @@ static bool calls_reach(Ctx* ctx,
 
 // Changes: new, phase 3: a function in direct or indirect recursion must
 // declare its return type (PDF 2.3), exit 6.
+// Also: positions print as size_t (%zu).
 static void check_recursion(Ctx* ctx, const Sema* sema) {
   size_t count = ast_node_get_child_count(sema->program);
   for (size_t i = 0; i < count; i++) {
@@ -1265,7 +1292,7 @@ static void check_recursion(Ctx* ctx, const Sema* sema) {
     if (recursive) {
       AstNode* ident = ast_node_child(ctx, def, AST_DEF_IDENT);
       THROW(E_SEMANTIC_TYPE_ERROR,
-            "recursive function '%s' at %d:%d needs a declared return type",
+            "recursive function '%s' at %zu:%zu needs a declared return type",
             ast_node_get_name(ident), ast_node_get_line(ident),
             ast_node_get_column(ident));
     }

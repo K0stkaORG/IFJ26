@@ -50,7 +50,8 @@ ExitCode fake_parse_exit(FakeRow row) {
 }
 
 // Changes: tokens without a line get the current line; FAKE_LINE_BREAK is an
-// EOL_TOKEN that starts a new line; heap text is marked TEXT.
+// EOL_TOKEN that starts a new line; heap text is marked TEXT; the out-of-range
+// fake token types are NOLINTed (clang-tidy).
 Token fake_next(Ctx* ctx, void* state) {
   (void)ctx;
   FakeSource* source = state;
@@ -58,12 +59,16 @@ Token fake_next(Ctx* ctx, void* state) {
     return (Token){.type = EOF_TOKEN, .line = source->breaks + 1};
 
   Token token = source->tokens[source->position++];
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): the fake
+  // token types are deliberately outside the TokenType enum
   if (token.type == FAKE_LINE_BREAK)
     token.type = EOL_TOKEN;
   if (token.line == 0)
     token.line = source->breaks + 1;
   if (token.type == EOL_TOKEN)
     source->breaks++;
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): the fake
+  // token types are deliberately outside the TokenType enum
   if (token.type == FAKE_LEXICAL_ERROR)
     THROW(E_LEXER_ERROR, "fake lexical error");
   if (fake_has_text(token.type)) {

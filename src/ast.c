@@ -19,8 +19,8 @@ struct AstNode {
   const SymtableData* symbol;
   Symtable* scope;
   unsigned flags;
-  int line;
-  int column;
+  size_t line;
+  size_t column;
 
   AstNode* parent;
   AstNode** child_nodes;
@@ -308,16 +308,19 @@ AstDataType ast_node_get_data_type(const AstNode* node) {
   return node->data_type;
 }
 
-void ast_node_set_position(AstNode* node, int line, int column) {
+// Changes: line and column are size_t, as in the lexer tokens.
+void ast_node_set_position(AstNode* node, size_t line, size_t column) {
   node->line = line;
   node->column = column;
 }
 
-int ast_node_get_line(const AstNode* node) {
+// Changes: returns size_t, as in the lexer tokens.
+size_t ast_node_get_line(const AstNode* node) {
   return node->line;
 }
 
-int ast_node_get_column(const AstNode* node) {
+// Changes: returns size_t, as in the lexer tokens.
+size_t ast_node_get_column(const AstNode* node) {
   return node->column;
 }
 
