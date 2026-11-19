@@ -108,8 +108,10 @@ size_t optimizer_remove_unreachable_functions(Ctx* ctx) {
       }
     }
 
-    // And move the function to the next available slot in the array
-    ir->functions.data[next_id++] = *function;
+    // Move the function only if an earlier removal freed a slot.
+    if (next_id != fid)
+      ir->functions.data[next_id] = *function;
+    next_id++;
   }
 
   // Update the count of functions in the program
@@ -220,8 +222,10 @@ bool optimizer_remove_unreachable_blocks(Ctx* ctx, IrFunctionId function_id) {
         break;
     }
 
-    // And (shallow) move the block to the next free id
-    function->blocks.data[next_id++] = *block;
+    // Move the block only if an earlier removal freed a slot.
+    if (next_id != old_id)
+      function->blocks.data[next_id] = *block;
+    next_id++;
   }
 
   // Update the block count
