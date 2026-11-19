@@ -93,9 +93,10 @@ static void track_nesting(TokenLayer* layer, TokenType type) {
 
 // Changes: moved from parser.c, adapts the lexer's stream (ADR-0007): reads
 // through the put-back slot, maps `()` to TYPE_UNIT and remembers it was `()`
-// (ADR-0009), hides line breaks inside parentheses, skips blank and comment-only lines, ends a last line without a
-// line break, treats a line without a raw indent as column 0 (closes every
-// block) and holds back the token that closed blocks.
+// (ADR-0009), hides line breaks inside parentheses, skips blank and
+// comment-only lines, ends a last line without a line break, treats a line
+// without a raw indent as column 0 (closes every block) and holds back the
+// token that closed blocks.
 /**
  * @brief Reads the next token the grammar should see from the token source
  */

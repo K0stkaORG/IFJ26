@@ -163,8 +163,8 @@ static void build_call(Ctx* ctx, Parser* parser, size_t operand) {
   stack->count--;
 
   // CALL_ARGS -> TYPE_UNIT | L_PAREN ARG_LIST R_PAREN (rules 85, 86); the
-  // callback is ARG_LIST with the CALL as parent. TYPE_UNIT here is always `()`,
-  // shift_operand only calls this for it.
+  // callback is ARG_LIST with the CALL as parent. TYPE_UNIT here is always
+  // `()`, shift_operand only calls this for it.
   if (parser_current(parser)->type == TYPE_UNIT) {
     parser_advance(ctx, parser);
     return;
