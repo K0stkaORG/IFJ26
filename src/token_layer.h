@@ -19,7 +19,8 @@
  * Everything that adapts the stream lives here (guidance/parser-structure/adr/
  * 0007 and 0008): the put-back slot, the held-back token, the nesting depths,
  * hidden line breaks, blank and comment-only lines, column 0 lines and the end
- * of file ending a last line. The interface hands out only delivered tokens: current, advance, peek and after_line_break.
+ * of file ending a last line. The interface hands out only delivered tokens:
+ * current, advance, peek and after_line_break.
  *
  * Vocabulary follows guidance/parser-structure/GLOSSARY.md.
  */

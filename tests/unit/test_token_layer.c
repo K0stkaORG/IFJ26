@@ -172,6 +172,14 @@ describe(token_layer) {
       EXPECT(TYPE_UNIT);
     }
 
+    it("peeks `()` and `Unit` as different tokens") {
+      FakeSource source;
+      START_LAYER(source, IDENT_TOK("f"), UNIT_VALUE, UNIT_TYPE);
+      asserteq(token_layer_peek(ctx, &layer)->type, UNIT);
+      token_layer_advance(ctx, &layer);
+      asserteq(token_layer_peek(ctx, &layer)->type, TYPE_UNIT);
+    }
+
     it("delivers a `()` held back behind block closes as UNIT") {
       FakeSource source;
       // def f() =, an indented line, then `()` in column 0

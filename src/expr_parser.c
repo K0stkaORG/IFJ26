@@ -3,8 +3,9 @@
 // "implementation done using skill: mattpocock-skills:implement-spec, tickets
 // 04, 05, 07 and review fixes; mattpocock-skills:implement, review judgement
 // calls; give the parser's Token layer its own module (architecture-review
-// candidate 1)"; "implementation done using skill: mattpocock-skills:implement, split the Unit
-// type name (TYPE_UNIT) from the () unit value (UNIT) in the grammar"
+// candidate 1)"; "implementation done using skill:
+// mattpocock-skills:implement, split the Unit type name (TYPE_UNIT) from the ()
+// unit value (UNIT) in the grammar"
 // Changes: new module, precedence parser (the precedence table and algorithm
 // are the parser author's); `()` is the terminal UNIT (ADR-0009). Each function
 // notes what changed.
