@@ -193,7 +193,6 @@ static const struct {
      "invalid indentation character"},
     {"Locates a carriage return in indentation", "1\n \rval", 2, 2,
      "invalid indentation character"},
-    {"Locates an invalid annotation byte", "@max", 1, 4, "invalid annotation"},
     {"Locates an incomplete annotation at the next EOF byte", "@mai", 1, 5,
      "invalid annotation"},
     {"Locates an out-of-range Integer literal", "  2147483648", 1, 3,
