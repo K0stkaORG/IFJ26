@@ -15,10 +15,15 @@
 #   make test-unit              - run unit tests                               #
 #   make test-e2e               - run end-to-end tests                         #
 #   make test-memory            - run memory tests                             #
+#   make pack                   - run tests and pack the submission archive    #
+#   make pack-force             - pack the submission archive without tests    #
+#   make docs                   - generate documentation                       #
 #   make clean                  - remove build artifacts                       #
 ################################################################################
 
 
+# Set default recepie
+.DEFAULT_GOAL := release
 
 ################################################################################
 # Compiler configuration.                                                      #
@@ -77,6 +82,9 @@ TEST_BUILD_DIR := $(BUILD_DIR)/tests
 
 # Unit tests directory
 UNIT_TESTS_DIR := tests/unit
+
+# Script directory (scripts normally, tests/scripts in submitted .zip)
+SCRIPT_DIR := $(if $(wildcard scripts/run_unit.py),scripts,tests/scripts)
 
 ################################################################################
 # Project source and build files                                               #
@@ -189,18 +197,33 @@ $(TEST_BUILD_DIR)/%$(EXE): tests/unit/%.c $(UNIT_OBJS) $(UNIT_HELPER_OBJS) | $(T
 
 # Run unit tests
 test-unit: $(UNIT_BINS)
-	@$(PY) scripts/run_unit.py $(VALGRIND_FLAG)
+	@$(PY) $(SCRIPT_DIR)/run_unit.py $(VALGRIND_FLAG)
 
 # Run end-to-end tests
 test-e2e: debug
-	@$(PY) scripts/run_e2e.py $(VALGRIND_FLAG) --compiler "$(DEBUG_BIN)" --build-dir "$(TEST_BUILD_DIR)"
+	@$(PY) $(SCRIPT_DIR)/run_e2e.py $(VALGRIND_FLAG) --compiler "$(abspath $(DEBUG_BIN))" --build-dir "$(TEST_BUILD_DIR)"
 
 # Run memory tests (Linux only, requires Valgrind)
 test-memory: debug
-	@$(PY) scripts/run_e2e.py --compiler "$(DEBUG_BIN)" --build-dir "$(TEST_BUILD_DIR)" --memory $(if $(filter linux,$(HOST_OS)),--memory-driver "$(DEBUG_BUILD_DIR)/memory_driver")
+	@$(PY) $(SCRIPT_DIR)/run_e2e.py --compiler "$(abspath $(DEBUG_BIN))" --build-dir "$(TEST_BUILD_DIR)" --memory $(if $(filter linux,$(HOST_OS)),--memory-driver "$(DEBUG_BUILD_DIR)/memory_driver")
 
 # Run all tests
 test: test-unit test-e2e test-memory
+
+# Run tests and pack the submission archive
+pack:
+	+@$(MAKE) clean
+	+@$(MAKE) -k test
+	@$(PY) $(SCRIPT_DIR)/pack.py "$(MAKE)"
+
+# Pack the submission archive without running tests
+pack-force:
+	+@$(MAKE) clean
+	@$(PY) $(SCRIPT_DIR)/pack.py "$(MAKE)"
+
+# Generate documentation
+docs: $(BUILD_ROOT)
+	@$(PY) -c "from pathlib import Path; Path('$(BUILD_ROOT)/dokumentace.pdf').touch()"
 
 ################################################################################
 # Folder/file utilities                                                        #
@@ -234,7 +257,7 @@ endif
 ################################################################################
 
 # Non-filename recipes
-.PHONY: release debug test test-unit test-e2e test-memory benchmark clean
+.PHONY: release debug test test-unit test-e2e test-memory pack pack-force docs clean
 
 # Correctly rebuild dependency changes
 -include $(RELEASE_DEPS) $(DEBUG_DEPS) $(UNIT_DEPS)
