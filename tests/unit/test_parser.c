@@ -1023,12 +1023,16 @@ describe(parser) {
         Flags flags = DEFAULT_TEST_FLAGS;
         flags.verbose = false;
         flags.forceNthMallocFail = nth;
-        ctx_init(&failing, flags);
+        Ctx* ctx = &failing;  // TRY/CATCH use it
+        ctx_init(ctx, flags);
 
         bool failed = true;
-        if (setjmp(failing.error_target) == 0) {
-          parser_run(&failing, fake_next, &source);
+        TRY {
+          parser_run(ctx, fake_next, &source);
           failed = false;
+        }
+        CATCH {
+          // failed stays true
         }
 
         // ctx_free releases whatever the parser still owns

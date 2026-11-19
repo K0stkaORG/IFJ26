@@ -66,19 +66,24 @@ typedef struct {
 
 // Runs a program through the parser and the pass in a fresh context whose nth
 // allocation fails (0: none fails), returns the exit code ctx_free reports
+// Changes: catches errors with TRY/CATCH after the merge of main
 static ExitCode run_program(const Token* tokens, size_t count, int fail_nth) {
   FakeSource source = {.tokens = tokens, .count = count};
   Ctx failing;
   Flags flags = DEFAULT_TEST_FLAGS;
   flags.verbose = false;
   flags.forceNthMallocFail = fail_nth;
-  ctx_init(&failing, flags);
-  if (setjmp(failing.error_target) == 0) {
-    ctx_allocate(&failing);
-    parser_run(&failing, fake_next, &source);
-    semantics_analyze(&failing);
+  Ctx* ctx = &failing;
+  ctx_init(ctx, flags);
+  TRY {
+    ctx_allocate(ctx);
+    parser_run(ctx, fake_next, &source);
+    semantics_analyze(ctx);
   }
-  return ctx_free(&failing);
+  CATCH {
+    // ctx_free reports the exit code
+  }
+  return ctx_free(ctx);
 }
 
 static void assert_error_cases(const ErrorCase* cases, size_t count) {

@@ -37,16 +37,22 @@ static bool fake_has_text(TokenType type) {
   }
 }
 
-// Changes: new, parses a row in a fresh context and returns its exit code.
+// Changes: new, parses a row in a fresh context and returns its exit code;
+// catches errors with TRY/CATCH after the merge of main.
 ExitCode fake_parse_exit(FakeRow row) {
   FakeSource source = {.tokens = row.tokens, .count = row.count};
   Ctx local;
   Flags flags = DEFAULT_TEST_FLAGS;
   flags.verbose = false;
-  ctx_init(&local, flags);
-  if (setjmp(local.error_target) == 0)
-    parser_run(&local, fake_next, &source);
-  return ctx_free(&local);
+  Ctx* ctx = &local;
+  ctx_init(ctx, flags);
+  TRY {
+    parser_run(ctx, fake_next, &source);
+  }
+  CATCH {
+    // ctx_free reports the exit code
+  }
+  return ctx_free(ctx);
 }
 
 // Changes: tokens without a line get the current line; FAKE_LINE_BREAK is an
