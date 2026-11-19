@@ -1,0 +1,13 @@
+OUT arg1\n
+OUT arg2\n
+OUT arg3\n
+OUT 60\n
+OUT op_left\n
+OUT op_mid\n
+OUT op_right\n
+OUT 7\n
+OUT out1\n
+OUT out2\n
+OUT out3\n
+OUT 6\n
+EXIT 0

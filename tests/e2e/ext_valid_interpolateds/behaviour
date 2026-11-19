@@ -1,0 +1,8 @@
+OUT Hello, world!\n
+OUT Count is 42.\n
+OUT Sum: 35, Prod: 20\n
+OUT Cost is $100 or $100.\n
+OUT Escaped: $ and value: 35!\n
+OUT He said "world".\n
+OUT Items: 10, 25, -15, $5\n
+EXIT 0

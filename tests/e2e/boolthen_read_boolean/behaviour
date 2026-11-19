@@ -1,0 +1,5 @@
+IN true
+IN false
+OUT true\n
+OUT false\n
+EXIT 0

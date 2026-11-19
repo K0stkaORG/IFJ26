@@ -1,0 +1,5 @@
+OUT true\n
+OUT false\n
+OUT bool1=true\n
+OUT bool2=false\n
+EXIT 0
