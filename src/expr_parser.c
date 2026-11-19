@@ -3,11 +3,10 @@
 // "implementation done using skill: mattpocock-skills:implement-spec, tickets
 // 04, 05, 07 and review fixes; mattpocock-skills:implement, review judgement
 // calls; give the parser's Token layer its own module (architecture-review
-// candidate 1)"; "implementation done using skill:
-// mattpocock-skills:implement, fix Unit (type name) vs () (unit value)
-// interchangeability in the token layer"
+// candidate 1)"; "implementation done using skill: mattpocock-skills:implement, split the Unit
+// type name (TYPE_UNIT) from the () unit value (UNIT) in the grammar"
 // Changes: new module, precedence parser (the precedence table and algorithm
-// are the parser author's); the type name `Unit` is no operand. Each function
+// are the parser author's); `()` is the terminal UNIT (ADR-0009). Each function
 // notes what changed.
 /**
  * @file expr_parser.c
@@ -162,10 +161,9 @@ static void build_call(Ctx* ctx, Parser* parser, size_t operand) {
   stack->data[operand].node = call;
   stack->count--;
 
-  // CALL_ARGS -> TYPE_UNIT | L_PAREN ARG_LIST R_PAREN (rules 85, 86); the
-  // callback is ARG_LIST with the CALL as parent. TYPE_UNIT here is always
-  // `()`, shift_operand only calls this for it.
-  if (parser_current(parser)->type == TYPE_UNIT) {
+  // CALL_ARGS -> UNIT | L_PAREN ARG_LIST R_PAREN (rules 85, 86); the callback
+  // is ARG_LIST with the CALL as parent
+  if (parser_current(parser)->type == UNIT) {
     parser_advance(ctx, parser);
     return;
   }
@@ -224,8 +222,7 @@ static void build_interp_string(Ctx* ctx,
 }
 
 // Changes: builds an INTERP_STRING or a CALL operand; the literal kind comes
-// from the token info table; reads the current token through parser_current; a
-// call needs `(` or `()`, not the type name `Unit`.
+// from the token info table; reads the current token through parser_current.
 /**
  * @brief Shifts the operand starting at the current token as one `i`
  *
@@ -283,10 +280,9 @@ static void shift_operand(Ctx* ctx, Parser* parser) {
   bool is_ident = token->type == IDENT;
   parser_advance(ctx, parser);
 
-  // `(` or `()` directly after an identifier is a call; the type name `Unit`
-  // is not (ADR-0009)
+  // `(` or `()` directly after an identifier is a call
   if (is_ident && (parser_current(parser)->type == L_PAREN ||
-                   parser_current_is_unit_value(parser)))
+                   parser_current(parser)->type == UNIT))
     build_call(ctx, parser, index);
 }
 
@@ -398,8 +394,7 @@ static size_t open_parens(const PrecStack* stack, size_t base) {
 
 // Changes: a `(` directly followed by `if` is an operand (peeks, so the parser
 // is not const); the binary class comes from the token info table; reads the
-// current token through parser_current; the type name `Unit` ends the
-// expression.
+// current token through parser_current.
 /**
  * @brief Maps the current token to the precedence terminal it stands for, or
  * PREC_END at the expression end (GLOSSARY.md, Expression end)
@@ -408,11 +403,6 @@ static PrecTerminal classify(Ctx* ctx, Parser* parser, size_t base) {
   const PrecStack* stack = &parser->prec_stack;
   TokenType type = parser_current(parser)->type;
   bool after_operand = stack_ends_with_operand(stack, base);
-
-  // The type name `Unit` is no operand, only `()` is: it ends the expression
-  // (ADR-0009)
-  if (type == TYPE_UNIT && !parser_current_is_unit_value(parser))
-    return PREC_END;
 
   // A token that could start an operand ends the expression right after a
   // complete operand or `)`

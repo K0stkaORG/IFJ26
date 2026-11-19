@@ -4,11 +4,13 @@
 // "implementation done using skill: mattpocock-skills:implement, trimming
 // parser tests by necessity rank and filling coverage gaps"; "implementation
 // done using skill: mattpocock-skills:implement, fix Unit (type name) vs ()
-// (unit value) interchangeability in the token layer"
+// (unit value) interchangeability in the token layer"; "implementation done
+// using skill: mattpocock-skills:implement, split the Unit type name
+// (TYPE_UNIT) from the () unit value (UNIT) in the grammar"
 // Changes: new test suite, the token layer tests moved out of test_parser.c and
 // rewritten over the TokenLayer interface; peek and after_line_break are new;
 // the peek pointer-identity and a repeated after_line_break test dropped;
-// current_is_unit_value tests added.
+// unit_tokens tests added.
 /**
  * @file test_token_layer.c
  * Project: IFJ26
@@ -20,8 +22,7 @@
  *
  * Raw tokens go in through the fake token source (helpers/fake_tokens.h), the
  * delivered tokens come out through token_layer_current, token_layer_advance,
- * token_layer_peek, token_layer_after_line_break and
- * token_layer_current_is_unit_value. No parser is involved.
+ * token_layer_peek and token_layer_after_line_break. No parser is involved.
  */
 
 #define SNOW_ENABLED 1
@@ -70,14 +71,6 @@ describe(token_layer) {
       asserteq_str(token_layer_current(&layer)->value.text, "f");
     }
 
-    // The lexer's `()` token is the grammar's TYPE_UNIT.
-    it("reads the lexer's unit token as the grammar's TYPE_UNIT") {
-      FakeSource source;
-      START_LAYER(source, IDENT_TOK("f"), TOK(UNIT));
-      token_layer_advance(ctx, &layer);
-      asserteq(token_layer_current(&layer)->type, TYPE_UNIT);
-    }
-
     // The lexer marks heap text with value_type TEXT and leaves the
     // interpolated string delimiters without text.
     it("frees only the text the lexer marks as TEXT") {
@@ -114,8 +107,9 @@ describe(token_layer) {
 
     it("peeks the token the layer would deliver, not the raw one") {
       FakeSource source;
-      START_LAYER(source, IDENT_TOK("f"), TOK(UNIT));
-      asserteq(token_layer_peek(ctx, &layer)->type, TYPE_UNIT);
+      START_LAYER(source, TOK(L_PAREN), BREAK, IDENT_TOK("a"));
+      // The hidden line break is skipped
+      asserteq(token_layer_peek(ctx, &layer)->type, IDENT);
     }
 
     // A peek reads through a block close the same way an advance does.
@@ -168,32 +162,17 @@ describe(token_layer) {
     }
   }
 
-  // Changes: new, `()` is delivered as TYPE_UNIT and remembered as the unit
-  // value; the type name `Unit` is the same token type without the flag.
-  subdesc(unit_value) {
-    it("tells `()` from the type name `Unit` and keeps it to one token") {
+  // Changes: new, `()` (UNIT) and the type name `Unit` (TYPE_UNIT) reach the
+  // grammar as two different tokens (ADR-0009).
+  subdesc(unit_tokens) {
+    it("delivers `()` and `Unit` as different tokens") {
       FakeSource source;
-      START_LAYER(source, UNIT_VALUE, UNIT_TYPE, UNIT_VALUE);
-      asserteq(token_layer_current(&layer)->type, TYPE_UNIT);
-      asserteq(token_layer_current_is_unit_value(&layer), true);
-      token_layer_advance(ctx, &layer);
-      asserteq(token_layer_current(&layer)->type, TYPE_UNIT);
-      asserteq(token_layer_current_is_unit_value(&layer), false);
-      token_layer_advance(ctx, &layer);
-      asserteq(token_layer_current_is_unit_value(&layer), true);
+      START_LAYER(source, UNIT_VALUE, UNIT_TYPE);
+      EXPECT(UNIT);
+      EXPECT(TYPE_UNIT);
     }
 
-    it("keeps the flag with a peeked token") {
-      FakeSource source;
-      START_LAYER(source, UNIT_TYPE, UNIT_VALUE);
-      asserteq(token_layer_peek(ctx, &layer)->type, TYPE_UNIT);
-      // The peek must not touch the current token's flag
-      asserteq(token_layer_current_is_unit_value(&layer), false);
-      token_layer_advance(ctx, &layer);
-      asserteq(token_layer_current_is_unit_value(&layer), true);
-    }
-
-    it("keeps the flag with a `()` held back behind block closes") {
+    it("delivers a `()` held back behind block closes as UNIT") {
       FakeSource source;
       // def f() =, an indented line, then `()` in column 0
       START_LAYER(source, TOK(DEF), TOK(ASSIGN), EOL, INDENT_TOK(2),
@@ -204,11 +183,8 @@ describe(token_layer) {
       EXPECT(INDENT);  // block open
       EXPECT(IDENT);
       EXPECT(EOL_TOKEN);
-      asserteq(token_layer_current(&layer)->type, INDENT);  // block close
-      asserteq(token_layer_current_is_unit_value(&layer), false);
-      token_layer_advance(ctx, &layer);
-      asserteq(token_layer_current(&layer)->type, TYPE_UNIT);
-      asserteq(token_layer_current_is_unit_value(&layer), true);
+      EXPECT(INDENT);  // block close
+      EXPECT(UNIT);
     }
   }
 
