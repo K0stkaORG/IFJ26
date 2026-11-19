@@ -1,0 +1,25 @@
+OUT systems>\x20
+IN 3
+OUT system 1 coefficients>\x20
+IN 2
+IN 1
+IN 1
+IN -1
+IN 3.5
+IN 2.5
+OUT x=2.00 y=-0.50 residuals=0.00,0.00\nsystem 2 coefficients>\x20
+IN 1
+IN 2
+IN 2
+IN 4
+IN 3
+IN 6
+OUT dependent\nsystem 3 coefficients>\x20
+IN 1
+IN 2
+IN 2
+IN 4
+IN 3
+IN 7
+OUT inconsistent\n
+EXIT 0

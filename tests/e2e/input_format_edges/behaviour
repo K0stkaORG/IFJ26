@@ -1,0 +1,16 @@
+OUT int>
+IN 42\x20
+OUT 0|
+IN 1_000
+OUT 0|
+IN 99999999999999999999999
+OUT 0|
+IN -37
+OUT -37|
+IN 1.5junk
+OUT 0.00|
+IN 2e-1
+OUT 0.20|
+IN \x20text\x20
+OUT \x20text\x20\ndone
+EXIT 0

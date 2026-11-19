@@ -1,0 +1,16 @@
+OUT opening stock>\x20
+IN 10
+OUT movements>\x20
+IN 5
+OUT movement 1>\x20
+IN -4
+OUT posted, stock=6\nmovement 2>\x20
+IN -7
+OUT refused, stock=6\nmovement 3>\x20
+IN 9
+OUT posted, stock=15\nmovement 4>\x20
+IN -15
+OUT posted, stock=0\nmovement 5>\x20
+IN 3
+OUT posted, stock=3\nclosing=3 peak=15 accepted=4 refused=1\n
+EXIT 0
