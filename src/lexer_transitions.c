@@ -273,7 +273,7 @@ static bool literal_right_brace(int character) {
   return character == '}';
 }
 
-// Outgoing transitions, in the q0..q81 order of lexer.txt.
+// Outgoing transitions, in the q0..q83 order of lexer.txt.
 static const Transition start_transitions[] = {
     KEEP(a1_letter_not_s, CODE_TOPS, IDENTIFIER),
     KEEP(a3_digits_not_0, CODE_TOPS, INTEGER_STATE),
@@ -413,6 +413,7 @@ static const Transition double_transitions[] = {
     KEEP(a8_exponent, ALL_STACK_TOPS, NUMBER_DOT_NUMBER_E),
     KEEP(literal_underscore, ALL_STACK_TOPS, UNDERSCORE_2),
     KEEP(a13_suffix, ALL_STACK_TOPS, DOUBLE_WITH_D_SUFFIX_1),
+    KEEP(literal_period, ALL_STACK_TOPS, TRAP_INVALID_DOUBLE),
 };  // q33
 
 static const Transition number_dot_number_e_transitions[] = {
@@ -424,6 +425,7 @@ static const Transition double_with_exponent_transitions[] = {
     KEEP(a4_digits, ALL_STACK_TOPS, DOUBLE_WITH_EXPONENT),
     KEEP(literal_underscore, ALL_STACK_TOPS, UNDERSCORE_3),
     KEEP(a13_suffix, ALL_STACK_TOPS, DOUBLE_WITH_D_SUFFIX_2),
+    KEEP(literal_period, ALL_STACK_TOPS, TRAP_INVALID_DOUBLE),
 };  // q35
 
 static const Transition underscore_1_transitions[] = {
@@ -439,10 +441,12 @@ static const Transition underscore_2_transitions[] = {
 static const Transition underscore_3_transitions[] = {
     KEEP(a4_digits, ALL_STACK_TOPS, DOUBLE_WITH_EXPONENT),
     KEEP(literal_underscore, ALL_STACK_TOPS, UNDERSCORE_3),
+    KEEP(literal_period, ALL_STACK_TOPS, TRAP_INVALID_DOUBLE),
 };  // q38
 
 static const Transition double_with_signed_exponent_transitions[] = {
     KEEP(a4_digits, ALL_STACK_TOPS, DOUBLE_WITH_EXPONENT),
+    KEEP(literal_period, ALL_STACK_TOPS, TRAP_INVALID_DOUBLE),
 };  // q39
 
 static const Transition period_state_transitions[] = {
@@ -477,6 +481,7 @@ static const Transition at_mai_transitions[] = {
 static const Transition zero_transitions[] = {
     KEEP(literal_period, ALL_STACK_TOPS, NUMBER_DOT),
     KEEP(a8_exponent, ALL_STACK_TOPS, NUMBER_DOT_NUMBER_E),
+    KEEP(a4_digits, ALL_STACK_TOPS, TRAP_INVALID_INT),
 };  // q53
 
 static const Transition escaped_1_transitions[] = {
@@ -610,7 +615,7 @@ static const Transition unit_with_whitespace_transitions[] = {
 };  // q81
 
 // States without outgoing rules have a NULL pointer and zero count.
-static const StateTransitions state_transitions[UNIT_WITH_WHITESPACE + 1] = {
+static const StateTransitions state_transitions[TRAP_INVALID_DOUBLE + 1] = {
     [START] = OUTGOING(start_transitions, false),
     [IDENTIFIER] = OUTGOING(identifier_transitions, true),
     [INTEGER_STATE] = OUTGOING(integer_state_transitions, true),
@@ -700,6 +705,8 @@ static const StateTransitions state_transitions[UNIT_WITH_WHITESPACE + 1] = {
     [TRIPLE_S_STRING_STRING] =
         OUTGOING(triple_s_string_string_transitions, true),
     [UNIT_WITH_WHITESPACE] = OUTGOING(unit_with_whitespace_transitions, false),
+    [TRAP_INVALID_INT] = {.accepting = true},
+    [TRAP_INVALID_DOUBLE] = {.accepting = true},
 };
 
 // END GENERATED LEXER TRANSITIONS
