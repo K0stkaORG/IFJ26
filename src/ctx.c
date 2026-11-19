@@ -12,13 +12,6 @@
  */
 
 #include "ctx.h"
-#include "array.h"
-#include "ast.h"  // ast_node_destroy
-#include "ir.h"   // ir_init, ir_free
-#include "lexer.h"
-#include "optimizer.h"
-#include "symtable.h"           // symtable_init, symtable_destroy
-#include "symtable_builtins.h"  // symtable_builtins_populate
 
 #include <errno.h>   // errno, ERANGE
 #include <limits.h>  // INT_MAX
@@ -27,6 +20,14 @@
 #include <stdio.h>   // fprintf, size_t, vfprintf, stderr
 #include <stdlib.h>  // malloc, realloc, strtol, exit
 #include <string.h>  // strcmp
+
+#include "array.h"
+#include "ast.h"  // ast_node_destroy
+#include "ir.h"   // ir_init, ir_free
+#include "lexer.h"
+#include "optimizer.h"
+#include "symtable.h"           // symtable_init, symtable_destroy
+#include "symtable_builtins.h"  // symtable_builtins_populate
 
 void ctx_init(Ctx* ctx, Flags flags) {
   // Default exit code
@@ -131,7 +132,6 @@ ExitCode ctx_free(Ctx* ctx) {
   array_free(&ctx->lexer.buffer);
   array_free(&ctx->lexer.stack);
   array_free(&ctx->lexer.saved_stack);
-  ir_free(&ctx->ir);
 
   // Free the AST
   if (ctx->ast != NULL) {

@@ -15,9 +15,10 @@
 #ifndef CTX_H
 #define CTX_H
 
-#include <setjmp.h>     // jmp_buf
-#include <stdbool.h>    // bool, true, false
-#include <stddef.h>     // NULL, size_t
+#include <setjmp.h>   // jmp_buf
+#include <stdbool.h>  // bool, true, false
+#include <stddef.h>   // NULL, size_t
+
 #include "ir.h"         // IrProgram
 #include "lexer.h"      // LexerByteBuffer
 #include "optimizer.h"  // OptimizerCtx
