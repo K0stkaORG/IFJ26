@@ -102,6 +102,8 @@ typedef enum {
   DOUBLE_DOLLAR_SIGN,              // q79
   TRIPLE_S_STRING_STRING,          // q80
   UNIT_WITH_WHITESPACE,            // q81
+  TRAP_INVALID_INT,                // q82
+  TRAP_INVALID_DOUBLE,             // q83
 } State;
 
 // enum for internal fsm stack
