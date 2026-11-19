@@ -155,8 +155,8 @@ ifeq ($(HOST_OS),linux)
 	@$(CC) $(CFLAGS_DEBUG) -Dmain=compiler_main -c -o $@ $<
 
     # Memory test executable
-    $(DEBUG_BUILD_DIR)/memory_driver: tests/memory_driver.c $(DEBUG_BUILD_DIR)/memory_main.o $(UNIT_OBJS)
-	@$(CC) $(CFLAGS_DEBUG) -Isrc -Wl,--wrap=ctx_malloc_helper,--wrap=ctx_realloc_helper -o $@ $^
+    $(DEBUG_BUILD_DIR)/memory_driver: tests/memory_driver.c $(DEBUG_BUILD_DIR)/memory_main.o $(filter-out $(DEBUG_BUILD_DIR)/ifj26.o,$(DEBUG_OBJS)) | $(DEBUG_BUILD_DIR)
+	@$(CC) $(CFLAGS_DEBUG) -Isrc -Wl,--wrap=ctx_malloc_helper,--wrap=ctx_realloc_helper -o $@ $^ $(LIBS)
 
     # Add recepie dependency
     test-memory: $(DEBUG_BUILD_DIR)/memory_driver
