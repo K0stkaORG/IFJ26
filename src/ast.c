@@ -3,6 +3,15 @@
 // ticket 01: prefactor, AST scope ownership and shared test helpers;
 // mattpocock-skills:implement, AST wrap operation (ast_node_wrap)"
 // Changes: only the functions with a Changes note.
+/**
+ * @file ast.c
+ * Project: IFJ26
+ *
+ * @author Lukáš Pollák (xpollal00)
+ * @date 13. 10. 2026
+ *
+ * @brief Implementation of the Abstract Syntax Tree (AST).
+ */
 #include "ast.h"
 #include <stddef.h>
 #include <stdio.h>
