@@ -9,6 +9,7 @@
  */
 
 #include "codegen.h"
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -50,7 +51,7 @@ static void cg_print_preamble(FILE* out) {
  * @param value value to print
  */
 static void cg_print_int(FILE* out, IrInt value) {
-  fprintf(out, "int@%ld", value);
+  fprintf(out, "int@%" PRId64, value);
 }
 
 /**
