@@ -21,8 +21,11 @@
 // Prompt: "Could you add to ifj26.c a call to the parser with lexer, it sould
 // live int ctx->lexer, if you need you can merge, also remove any unneded
 // function that are in the parser when the lexer wasnt implemented"
-// Changes: includes the parser.
-#include "parser.h"  // parser_parse
+// Changes: includes the parser and the semantic analysis.
+// Prompt (2): "Add a semantic analysis run into the ifj26.c main function"
+// Changes (2): main runs semantics_analyze after parser_parse.
+#include "parser.h"     // parser_parse
+#include "semantics.h"  // semantics_analyze
 
 /**
  * @brief Entrypoint of the IFJ26 compiler
@@ -47,6 +50,7 @@ int main(int argc, char** argv) {
 
     // Run the compiler
     parser_parse(ctx);
+    semantics_analyze(ctx);
   }
   CATCH {
     // No need to do anything special in case of error, ctx_free will handle it
