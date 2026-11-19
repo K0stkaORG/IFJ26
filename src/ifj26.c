@@ -18,6 +18,8 @@
 
 #include "codegen.h"    // cg_generate
 #include "ctx.h"        // Shared memory and error context
+#include "lowering.h"   // lower_ast
+#include "optimizer.h"  // optimize_ir
 #include "parser.h"     // parser_parse
 #include "semantics.h"  // semantics_analyze
 
@@ -42,16 +44,25 @@ int main(int argc, char** argv) {
     // Allocate memory for the shared context
     ctx_allocate(ctx);
 
-    // Run the compiler
+    // Parse the input source code into an AST
     parser_parse(ctx);
+
+    // Perform semantic analysis on the AST
     semantics_analyze(ctx);
+
+    // Lower the AST to IR
+    lower_ast(ctx);
+
+    // Optimize the IR (if not disabled)
+    if (!flags.disableOptimizations)
+      optimize_ir(ctx);
+
+    // Generate output from the IR
+    cg_generate(stdout, ctx);
   }
   CATCH {
     // No need to do anything special in case of error, ctx_free will handle it
   }
-
-  // Codegen
-  cg_generate(stdout, &context);
 
   // Free allocated resources and exit
   return ctx_free(ctx);
