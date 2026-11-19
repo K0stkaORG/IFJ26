@@ -15,13 +15,14 @@
 #ifndef CTX_H
 #define CTX_H
 
-#include "ir.h"         // IrProgram
-#include "optimizer.h"  // OptimizerCtx
-#include "symtable.h"   // Symtable
-
 #include <setjmp.h>   // jmp_buf
 #include <stdbool.h>  // bool, true, false
 #include <stddef.h>   // NULL, size_t
+
+#include "ir.h"         // IrProgram
+#include "lexer.h"      // LexerByteBuffer
+#include "optimizer.h"  // OptimizerCtx
+#include "symtable.h"   // Symtable
 
 typedef struct AstNode AstNode;  // Forward declaration (ast.h includes ctx.h)
 
@@ -129,6 +130,8 @@ typedef struct Ctx {
 
   // Global symbol table
   Symtable global_symtable;
+  // Lexer state
+  LexerCtx lexer;
 
   // Intermediate representation of the program
   IrProgram ir;
