@@ -1,0 +1,35 @@
+/**
+ * @file codegen.h
+ * Project: IFJ26
+ *
+ * @author David Daniel Slapal (xslapad00)
+ * @date 14. 11. 2026
+ *
+ * @brief IFJcode26 generator from Intermediate Representation
+ */
+
+#ifndef CODEGEN_H
+#define CODEGEN_H
+
+#include <stdio.h>
+
+typedef struct Ctx Ctx;
+
+typedef struct CodegenState {
+  size_t builtin_label_id;
+} CodegenState;
+
+/**
+ * @brief Codegen state init
+ * @param ctx Compiler context
+ */
+void cg_state_init(CodegenState* state);
+
+/**
+ * @brief IFJcode26 generator
+ * @param out File to output to
+ * @param state Codegen state in context
+ */
+void cg_generate(FILE* out, Ctx* ctx);
+
+#endif
