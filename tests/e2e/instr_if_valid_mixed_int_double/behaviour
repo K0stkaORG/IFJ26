@@ -1,0 +1,4 @@
+OUT int lt double\n
+OUT double gt int\n
+OUT int eq double\n
+EXIT 0

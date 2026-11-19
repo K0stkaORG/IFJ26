@@ -1,0 +1,4 @@
+IN Line1
+IN Line2
+OUT Line1\nLine2\n
+EXIT 0

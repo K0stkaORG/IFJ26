@@ -1,0 +1,3 @@
+OUT unit_eq\n
+OUT unit_neq_false\n
+EXIT 0

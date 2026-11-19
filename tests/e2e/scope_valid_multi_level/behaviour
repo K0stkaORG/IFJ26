@@ -1,0 +1,6 @@
+OUT outer:1:10\n
+OUT if1:2:20\n
+OUT while:3:30\n
+OUT if1_after:2:20\n
+OUT outer_after:1:10\n
+EXIT 0

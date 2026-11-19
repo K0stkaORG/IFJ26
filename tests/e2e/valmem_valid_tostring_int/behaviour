@@ -1,0 +1,5 @@
+OUT 42\n
+OUT -100\n
+OUT 0\n
+OUT 999\n
+EXIT 0

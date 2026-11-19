@@ -1,0 +1,7 @@
+IN 12345
+OUT 12345\n
+IN 12.34
+OUT 12.34\n
+IN Test line input
+OUT Test line input\n
+EXIT 0

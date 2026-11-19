@@ -1,0 +1,6 @@
+OUT length ok\n
+OUT 3\n
+OUT 2\n
+OUT 1\n
+OUT func ok\n
+EXIT 0

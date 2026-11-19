@@ -1,0 +1,5 @@
+OUT 10
+OUT 20.5
+OUT test
+OUT ()
+EXIT 0

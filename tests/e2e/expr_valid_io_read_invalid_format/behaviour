@@ -1,0 +1,7 @@
+IN abc
+OUT 0\n
+IN  42
+OUT 0\n
+IN xyz
+OUT 0.00\n
+EXIT 0

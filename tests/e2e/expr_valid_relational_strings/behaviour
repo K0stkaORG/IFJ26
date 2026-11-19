@@ -1,0 +1,7 @@
+OUT lt_ok\n
+OUT gt_ok\n
+OUT le_ok\n
+OUT ge_ok\n
+OUT eq_ok\n
+OUT neq_ok\n
+EXIT 0

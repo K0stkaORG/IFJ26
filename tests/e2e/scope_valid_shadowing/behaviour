@@ -1,0 +1,6 @@
+OUT 10outer\n
+OUT inner_if99\n
+OUT 10outer\n
+OUT inner_while42\n
+OUT 10outer\n
+EXIT 0
