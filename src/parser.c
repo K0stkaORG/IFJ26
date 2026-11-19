@@ -5,9 +5,12 @@
 // and fixes matching the PDF specification"; preparing the parser for the
 // lexer's next_token, the column-0 INDENT fix and running it from ifj26.c;
 // "implementation done using skill: mattpocock-skills:implement, give the
-// parser's Token layer its own module (architecture-review candidate 1)"
+// parser's Token layer its own module (architecture-review candidate 1)";
+// "implementation done using skill: mattpocock-skills:implement, fix Unit (type
+// name) vs () (unit value) interchangeability in the token layer"
 // Changes: new module, recursive descent parser; the token layer moved to
-// token_layer.c. Each function notes what changed.
+// token_layer.c; `Unit` and `()` are told apart. Each function notes what
+// changed.
 /**
  * @file parser.c
  * Project: IFJ26
@@ -84,6 +87,11 @@ bool parser_after_line_break(const Parser* parser) {
   return token_layer_after_line_break(&parser->tokens);
 }
 
+// Changes: new, whether the current TYPE_UNIT token was spelled `()`.
+bool parser_current_is_unit_value(const Parser* parser) {
+  return token_layer_current_is_unit_value(&parser->tokens);
+}
+
 // Changes: moved to token_layer_advance, this only forwards to it.
 void parser_advance(Ctx* ctx, Parser* parser) {
   token_layer_advance(ctx, &parser->tokens);
@@ -108,11 +116,15 @@ bool parser_accept(Ctx* ctx, Parser* parser, TokenType type) {
   return true;
 }
 
-// Changes: reads the token info table; token positions are size_t.
+// Changes: reads the token info table; token positions are size_t; names `()`
+// apart from `Unit` in the message.
 void parser_syntax_error(Ctx* ctx, const Parser* parser, const char* expected) {
   const Token* token = parser_current(parser);
+  const char* got = parser_current_is_unit_value(parser)
+                        ? "()"
+                        : parser_token_info(token->type)->name;
   THROW(E_SYNTAX_ERROR, "%zu:%zu: syntax error: expected %s, got %s", token->line,
-        token->column, expected, parser_token_info(token->type)->name);
+        token->column, expected, got);
 }
 
 // Changes: the token info table (see TokenInfo), names for syntax errors and
@@ -300,10 +312,14 @@ static void attach_expr(Ctx* ctx, Parser* parser, AstNode* parent) {
 // Expected terminals of the predict sets shared by several functions
 #define EXPECTED_TYPE "Int, Double, String, Unit or Boolean"
 
+// Changes: TYPE_UNIT must be the type name `Unit`, `()` is a syntax error here
+// (ADR-0009).
 // TYPE -> TYPE_INT | TYPE_DOUBLE | TYPE_STRING | TYPE_UNIT | TYPE_BOOL
 // (rules 9 to 13)
 static void parse_type(Ctx* ctx, Parser* parser, AstNode* parent) {
   AstDataType data_type;
+  if (parser_current_is_unit_value(parser))
+    parser_syntax_error(ctx, parser, EXPECTED_TYPE);
   switch (parser_current(parser)->type) {
     case TYPE_INT:
       data_type = AST_DATA_TYPE_INT;
@@ -397,12 +413,17 @@ static void parse_param_list(Ctx* ctx, Parser* parser, AstNode* parent) {
   }
 }
 
+// Changes: TYPE_UNIT must be `()`, the type name `Unit` is a syntax error here
+// (ADR-0009).
 // FUNC_PARAMS -> TYPE_UNIT | L_PAREN PARAM_LIST R_PAREN (rules 15, 16)
 // Attaches the PARAM_LIST, empty for `def f()`.
 static void parse_func_params(Ctx* ctx, Parser* parser, AstNode* parent) {
   switch (parser_current(parser)->type) {
-    // `()` is one token, the unit value (GLOSSARY.md, Unit value)
+    // `()` is one token, the unit value (GLOSSARY.md, Unit value); the type
+    // name `Unit` is no parameter list (ADR-0009)
     case TYPE_UNIT:
+      if (!parser_current_is_unit_value(parser))
+        parser_syntax_error(ctx, parser, "( or ()");
       attach_node(ctx, parser, parent, AST_NODE_PARAM_LIST);
       parser_advance(ctx, parser);
       return;

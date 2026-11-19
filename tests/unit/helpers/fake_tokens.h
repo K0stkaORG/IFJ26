@@ -4,10 +4,13 @@
 // the parser for the lexer's next_token; the column-0 INDENT fix; fixes
 // matching the PDF specification; "implementation done using skill:
 // mattpocock-skills:implement, trimming parser tests by necessity rank and
-// filling coverage gaps"
+// filling coverage gaps"; "implementation done using skill:
+// mattpocock-skills:implement, fix Unit (type name) vs () (unit value)
+// interchangeability in the token layer"
 // Changes: new shared test helper, the fake token source and program-shaped
 // token macros moved from test_parser.c, the shared asserts and the error
-// table (ROW, ASSERT_SYNTAX_ERRORS) added. Each declaration notes what changed.
+// table (ROW, ASSERT_SYNTAX_ERRORS) added; UNIT_TYPE added. Each declaration
+// notes what changed.
 /**
  * @file fake_tokens.h
  * Project: IFJ26
@@ -104,6 +107,8 @@ Token fake_next(Ctx* ctx, void* state);
 #define TSTR(s) ((Token){.type = TRIPLE_STRING, .value.text = (s)})
 // Changes: `()` is the lexer's UNIT token.
 #define UNIT_VALUE TOK(UNIT)
+// Changes: new, the type name `Unit`, a different token from `()`.
+#define UNIT_TYPE TOK(TYPE_UNIT)
 
 // Changes: the delimiters carry no text, as from the lexer.
 #define S_OPEN TOK(S_STRING_START)

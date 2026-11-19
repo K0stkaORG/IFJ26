@@ -159,6 +159,16 @@ const Token* parser_current(const Parser* parser);
  */
 bool parser_after_line_break(const Parser* parser);
 
+// Changes: new, whether the current TYPE_UNIT token was spelled `()`.
+/**
+ * @brief Returns whether the current token is the unit value `()` and not the
+ * type name `Unit`; both are the grammar's TYPE_UNIT (ADR-0009).
+ *
+ * @param[in] parser Parser state
+ * @return Whether the current token is a TYPE_UNIT that was spelled `()`
+ */
+bool parser_current_is_unit_value(const Parser* parser);
+
 // Changes: forwards to token_layer_advance.
 /**
  * @brief Moves to the next token, freeing the current one.

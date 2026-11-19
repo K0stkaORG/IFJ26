@@ -7,10 +7,12 @@
 // mattpocock-skills:implement, give the parser's Token layer its own module
 // (architecture-review candidate 1)"; "implementation done using skill:
 // mattpocock-skills:implement, trimming parser tests by necessity rank and
-// filling coverage gaps"
+// filling coverage gaps"; "implementation done using skill:
+// mattpocock-skills:implement, fix Unit (type name) vs () (unit value)
+// interchangeability in the token layer"
 // Changes: new test suite, trimmed to one table-driven error test per grammar
 // area; the expression tests moved to test_expr_parser.c, the token layer
-// tests to test_token_layer.c.
+// tests to test_token_layer.c; tests for every position of `Unit` and `()`.
 /**
  * @file test_parser.c
  * Project: IFJ26
@@ -213,6 +215,70 @@ describe(parser) {
           ONE(TOK(OPERATOR_MINUS)),
           // def f() = :
           ONE(TOK(COLON)));
+    }
+
+    // Changes: new, `Unit` is only a type name and `()` the only Unit value and
+    // empty parameter or argument list (PDF 1.2, 1.3, ADR-0009).
+    it("accepts `Unit` where a type goes and `()` where a value or an empty "
+       "list goes") {
+      // def f(a: Unit): Unit = a
+      // def g() =
+      //   val u: Unit = ()
+      //   var v: Unit = readInt()
+      ASSERT_AST(
+          "(PROGRAM (DEF (IDENT f) (TYPE_ANNOTATION Unit) (BLOCK (IDENT a)) "
+          "(PARAM_LIST (PARAM (IDENT a) (TYPE_ANNOTATION Unit)))) "
+          "(DEF (IDENT g) NONE (BLOCK "
+          "(VAL (IDENT u) (TYPE_ANNOTATION Unit) (UNIT_LIT)) "
+          "(VAR (IDENT v) (TYPE_ANNOTATION Unit) (CALL (IDENT readInt)))) "
+          "(PARAM_LIST)))",
+          PROLOG,
+          TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON), UNIT_TYPE,
+            TOK(R_PAREN), TOK(COLON), UNIT_TYPE, TOK(ASSIGN), ID("a"), EOL,
+          TOK(DEF), ID("g"), UNIT_VALUE, TOK(ASSIGN), EOL,
+          LINE(2), TOK(VAL), ID("u"), TOK(COLON), UNIT_TYPE, TOK(ASSIGN),
+            UNIT_VALUE, EOL,
+          LINE(2), TOK(VAR), ID("v"), TOK(COLON), UNIT_TYPE, TOK(ASSIGN),
+            ID("readInt"), UNIT_VALUE, EOL);
+    }
+
+    // Changes: new, the wrong spelling is a syntax error in every position.
+    it("rejects `()` as a type and `Unit` as a value or an empty list") {
+      ASSERT_SYNTAX_ERRORS(
+          // def f(): () = ()
+          ROW(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON), UNIT_VALUE,
+              TOK(ASSIGN), UNIT_VALUE, EOL),
+          // def f(a: ()) = a
+          ROW(PROLOG, TOK(DEF), ID("f"), TOK(L_PAREN), ID("a"), TOK(COLON),
+              UNIT_VALUE, TOK(R_PAREN), TOK(ASSIGN), ID("a"), EOL),
+          // val x: () = ()
+          MANY(LINE(2), TOK(VAL), ID("x"), TOK(COLON), UNIT_VALUE,
+               TOK(ASSIGN), UNIT_VALUE, EOL),
+          // var x: () = ()
+          MANY(LINE(2), TOK(VAR), ID("x"), TOK(COLON), UNIT_VALUE,
+               TOK(ASSIGN), UNIT_VALUE, EOL),
+          // def f Unit = ()
+          ROW(PROLOG, TOK(DEF), ID("f"), UNIT_TYPE, TOK(ASSIGN), UNIT_VALUE,
+              EOL),
+          // def main Unit = Unit
+          ROW(PROLOG, TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_TYPE,
+              TOK(ASSIGN), UNIT_TYPE, EOL),
+          // def f() = Unit
+          ONE(UNIT_TYPE),
+          // def f() = readInt Unit
+          ONE(ID("readInt"), UNIT_TYPE),
+          // def f() = print(Unit)
+          ONE(ID("print"), TOK(L_PAREN), UNIT_TYPE, TOK(R_PAREN)),
+          // def f() = 1 + Unit, a Unit in the operand position
+          ONE(INT(1), TOK(OPERATOR_PLUS), UNIT_TYPE),
+          // def f() = (Unit)
+          ONE(TOK(L_PAREN), UNIT_TYPE, TOK(R_PAREN)),
+          // val x = Unit
+          MANY(LINE(2), TOK(VAL), ID("x"), TOK(ASSIGN), UNIT_TYPE, EOL),
+          // return Unit
+          MANY(LINE(2), TOK(RETURN), UNIT_TYPE, EOL),
+          // Unit as a statement
+          MANY(LINE(2), UNIT_TYPE, EOL));
     }
   }
 

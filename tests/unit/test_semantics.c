@@ -3,13 +3,16 @@
 // semantic analysis tickets 02-09 and review fixes;
 // mattpocock-skills:implement, review judgement calls and fixes matching the
 // PDF spec; implementation done using skill: mattpocock-skills:implement,
-// trimming test_semantics.c by necessity rank and filling coverage gaps"
+// trimming test_semantics.c by necessity rank and filling coverage gaps;
+// implementation done using skill: mattpocock-skills:implement, fix Unit (type
+// name) vs () (unit value) interchangeability in the token layer"
 // Changes: new test suite. One seam: tokens in through the fake token source
 // and the real parser, then the pass, then the exit code or the printed
 // annotated AST out. One subdesc per topic; error programs are tables of
 // {tokens, exit code}, one row per distinct throw site; one shared
 // allocation-failure program; trimmed by necessity rank, calls_reach and
-// phase-order cases added.
+// phase-order cases added; `Unit` as a type is UNIT_TYPE, `()` stays the unit
+// value (ADR-0009).
 /**
  * @file test_semantics.c
  * Project: IFJ26
@@ -510,7 +513,7 @@ describe(semantics) {
           "(RETURN (IDENT a :Int @0))) (PARAM_LIST)))",
           PROLOG,
           TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE,
-            TOK(COLON), UNIT_VALUE, TOK(ASSIGN), EOL,
+            TOK(COLON), UNIT_TYPE, TOK(ASSIGN), EOL,
           VAL_("a"), INT(1), EOL,
           VAL_("s"), STR("x"), EOL,
           STMT(ID("print"), TOK(L_PAREN), ID("a"), TOK(OPERATOR_PLUS),
@@ -1202,7 +1205,7 @@ describe(semantics) {
           "(PARAM_LIST (PARAM (IDENT x @0) (TYPE_ANNOTATION Double)))))",
           PROLOG,
           TOK(AT_MAIN), TOK(DEF), ID("main"), UNIT_VALUE,
-            TOK(COLON), UNIT_VALUE, TOK(ASSIGN), EOL,
+            TOK(COLON), UNIT_TYPE, TOK(ASSIGN), EOL,
           LINE(2), TOK(VAL), ID("n"), TOK(ASSIGN), INT(1), EOL,
           LINE(2), ID("widen"), TOK(L_PAREN), ID("n"), TOK(R_PAREN), EOL,
           TOK(DEF), ID("widen"), TOK(L_PAREN), ID("x"), TOK(COLON),
@@ -1223,7 +1226,7 @@ describe(semantics) {
             TOK(ASSIGN), ID("sink"), TOK(L_PAREN), UNIT_VALUE, TOK(R_PAREN),
             EOL,
           TOK(DEF), ID("sink"), TOK(L_PAREN), ID("u"), TOK(COLON),
-            UNIT_VALUE, TOK(R_PAREN), TOK(ASSIGN), UNIT_VALUE, EOL);
+            UNIT_TYPE, TOK(R_PAREN), TOK(ASSIGN), UNIT_VALUE, EOL);
     }
 
     it("rejects a call with too few arguments or an argument of the wrong "
@@ -1247,7 +1250,7 @@ describe(semantics) {
                        TOK(ASSIGN), ID("sink"), TOK(L_PAREN), INT(5),
                        TOK(R_PAREN), EOL,
                      TOK(DEF), ID("sink"), TOK(L_PAREN), ID("u"), TOK(COLON),
-                       UNIT_VALUE, TOK(R_PAREN), TOK(ASSIGN), UNIT_VALUE,
+                       UNIT_TYPE, TOK(R_PAREN), TOK(ASSIGN), UNIT_VALUE,
                        EOL));
     }
   }
@@ -1592,7 +1595,7 @@ describe(semantics) {
           PROLOG, MAIN_DEF,
           DEF_HEAD("a", TYPE_UNIT), LINE(2), TOK(RETURN), INT(5), EOL,
           DEF_HEAD("b", TYPE_UNIT), LINE(2), TOK(RETURN), EOL,
-          TOK(DEF), ID("c"), UNIT_VALUE, TOK(COLON), UNIT_VALUE,
+          TOK(DEF), ID("c"), UNIT_VALUE, TOK(COLON), UNIT_TYPE,
             TOK(ASSIGN), INT(7), EOL);
     }
 
@@ -1683,7 +1686,7 @@ describe(semantics) {
           "(BLOCK (RETURN (INT_LIT 5 :Int))) (PARAM_LIST)))",
           PROLOG,
           TOK(AT_MAIN), TOK(DEF), ID("m"), UNIT_VALUE, TOK(COLON),
-            UNIT_VALUE, TOK(ASSIGN), EOL,
+            UNIT_TYPE, TOK(ASSIGN), EOL,
           LINE(2), TOK(RETURN), INT(5), EOL);
     }
 
@@ -1852,7 +1855,7 @@ describe(semantics) {
           LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
           LINE(4), INT(1), EOL,
           TOK(DEF), ID("g"), TOK(L_PAREN), ID("c"), TOK(COLON),
-            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), UNIT_VALUE,
+            TOK(TYPE_BOOL), TOK(R_PAREN), TOK(COLON), UNIT_TYPE,
             TOK(ASSIGN), EOL,
           LINE(2), TOK(IF), ID("c"), TOK(THEN), EOL,
           LINE(4), INT(1), EOL,
