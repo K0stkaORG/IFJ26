@@ -1,5 +1,5 @@
 M = (Q, Σ, Γ, R, s, S, F)
-Q = {q0, q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14, q15, q16, q17, q18, q19, q20, q21, q22, q23, q24, q25, q26, q27, q28, q29, q30, q31, q32, q33, q34, q35, q36, q37, q38, q39, q40, q41, q42, q43, q44, q45, q46, q47, q48, q49, q50, q51, q52, q53, q54, q55, q56, q57, q58, q59, q60, q61, q62, q63, q64, q65, q66, q67, q68, q69, q70, q71, q72, q73, q74, q75, q76, q77, q78, q79, q80, q81, q82, q83}
+Q = {q0, q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14, q15, q16, q17, q18, q19, q20, q21, q22, q23, q24, q25, q26, q27, q28, q29, q30, q31, q32, q33, q34, q35, q36, q37, q38, q39, q40, q41, q42, q43, q44, q45, q46, q47, q48, q49, q50, q51, q52, q53, q54, q55, q56, q57, q58, q59, q60, q61, q62, q63, q64, q65, q66, q67, q68, q69, q70, q71, q72, q73, q74, q75, q76, q77, q78, q79, q80, q81, q82, q83, q84, q85, q86}
 Σ = {0x00..0x7F}
 A1 = {A..Z, a..r, t..z} // [a-rt-zA-Z]
 A2 = {0..9, A..Z, _, a..z} // [a-zA-Z0-9_]
@@ -624,10 +624,16 @@ R = {
   DOLLAR_EXPR q38 . → DOLLAR_EXPR q83,
   NESTED_COMMENT q38 . → NESTED_COMMENT q83,
   S_STRING q38 . → S_STRING q83,
-  MULTILINE_S_STRING q38 . → MULTILINE_S_STRING q83
+  MULTILINE_S_STRING q38 . → MULTILINE_S_STRING q83,
+  EMPTY q22 + → EMPTY q84,
+  DOLLAR_EXPR q22 + → DOLLAR_EXPR q84,
+  EMPTY q0 [ → EMPTY q85,
+  DOLLAR_EXPR q0 [ → DOLLAR_EXPR q85,
+  EMPTY q0 ] → EMPTY q86,
+  DOLLAR_EXPR q0 ] → DOLLAR_EXPR q86
 }
 s = q0
-F = {q1, q2, q3, q6, q7, q8, q9, q10, q11, q12, q13, q14, q15, q16, q17, q18, q21, q22, q23, q24, q25, q26, q31, q33, q35, q40, q42, q43, q44, q46, q48, q52, q53, q55, q56, q57, q62, q65, q67, q69, q71, q72, q73, q74, q75, q76, q77, q79, q80, q82, q83}
+F = {q1, q2, q3, q6, q7, q8, q9, q10, q11, q12, q13, q14, q15, q16, q17, q18, q21, q22, q23, q24, q25, q26, q31, q33, q35, q40, q42, q43, q44, q46, q48, q52, q53, q55, q56, q57, q62, q65, q67, q69, q71, q72, q73, q74, q75, q76, q77, q79, q80, q82, q83, q84, q85, q86}
 
 State names:
 q0 = "start"
@@ -714,3 +720,6 @@ q80 = "triple s_string string"
 q81 = "unit with whitespace"
 q82 = "TRAP INVALID INT"
 q83 = "TRAP INVALID DOUBLE"
+q84 = "++"
+q85 = "["
+q86 = "]"
