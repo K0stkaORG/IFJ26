@@ -91,6 +91,7 @@ typedef enum {
   IR_DOUBLE,
   IR_STRING,
   IR_BOOL,
+  IR_ARRAY,
   IR_UNIT,
 } IrType;
 
@@ -174,6 +175,40 @@ typedef enum {
 
   // chr(IrInt) -> IrString
   IR_FX_CHR,
+
+  // List(v1, v2, ...) -> IrArray
+  IR_FX_LIST_CREATE,
+
+  // lst(IrInt) -> any
+  IR_FX_LIST_GET,
+
+  // List.range(IrInt, IrInt, IrInt) -> IrArray
+  IR_FX_LIST_RANGE,
+
+  // lst.drop(IrInt) -> IrArray
+  IR_FX_LIST_DROP,
+
+  // lst.take(IrInt) -> IrArray
+  IR_FX_LIST_TAKE,
+
+  // lst.slice(IrInt, IrInt) -> IrArray
+  IR_FX_LIST_SLICE,
+
+  // lst.head -> any
+  IR_FX_LIST_HEAD,
+
+  // lst.tail -> IrArray
+  IR_FX_LIST_TAIL,
+
+  // lst.toString / toStr(lst) -> IrString
+  IR_FX_LIST_TO_STR,
+
+  // range.toList -> IrArray
+  IR_FX_RANGE_TO_LIST,
+
+  // lst ++ lst -> IrArray
+  IR_FX_LIST_CONCAT,
+
 } IrFunctionType;
 
 /**
