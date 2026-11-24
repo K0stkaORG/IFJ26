@@ -607,6 +607,63 @@ static void cg_print_builtin(Ctx* ctx, FILE* out, IrInstruction* inst) {
       fprintf(out, "LABEL $cg_sub_end_%zu\n", ctx->cg_state.builtin_label_id);
       break;
 
+    case IR_FX_LIST_CREATE:
+      if (inst->result == IR_INVALID_ID)
+        break;
+      size_t args = inst->operands.call.arg_count;
+      fputs("NEWARRAY ", out);
+      cg_print_localframe_val(out, inst->result);
+      cg_print_ws(out);
+      cg_print_int(out, (IrInt)(args + 1));
+      cg_print_nl(out);
+      fputs("ARRAYSET ", out);
+      cg_print_localframe_val(out, inst->result);
+      cg_print_ws(out);
+      cg_print_int(out, (IrInt)0);
+      cg_print_ws(out);
+      cg_print_int(out, (IrInt)args);
+      cg_print_nl(out);
+      for (size_t i = 0; i < args; i++) {
+        fputs("ARRAYSET ", out);
+        cg_print_localframe_val(out, inst->result);
+        cg_print_ws(out);
+        cg_print_int(out, (IrInt)(i + 1));
+        cg_print_ws(out);
+        cg_print_operand(out, &inst->operands.call.args[i]);
+        cg_print_nl(out);
+      }
+      break;
+
+    case IR_FX_LIST_GET:
+      break;
+
+    case IR_FX_LIST_RANGE:
+      break;
+
+    case IR_FX_LIST_DROP:
+      break;
+
+    case IR_FX_LIST_TAKE:
+      break;
+
+    case IR_FX_LIST_SLICE:
+      break;
+
+    case IR_FX_LIST_HEAD:
+      break;
+
+    case IR_FX_LIST_TAIL:
+      break;
+
+    case IR_FX_LIST_TO_STR:
+      break;
+
+    case IR_FX_RANGE_TO_LIST:
+      break;
+
+    case IR_FX_LIST_CONCAT:
+      break;
+
     case IR_FX_USER:  // silence warning
       break;
   }
