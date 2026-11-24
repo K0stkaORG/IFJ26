@@ -28,6 +28,7 @@ static void symtable_create_builtin(Ctx* ctx,
   data.ir_index = fx_type;  // index in ir.h enum of built-in functions
   data.param_count = param_count;
   data.is_val = false;
+  data.param_element_types = NULL;
 
   if (param_count > 0) {
     IrType* param_arr = TRY_MALLOC(sizeof(IrType) * param_count);
