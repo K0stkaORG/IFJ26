@@ -385,7 +385,7 @@ static const Transition pipe_transitions[] = {
 };  // q20
 
 static const Transition plus_transitions[] = {
-    KEEP(literal_plus, CODE_TOPS, INCREMENT_STATE),
+    KEEP(literal_plus, CODE_TOPS, CONCAT_STATE),
 };  // q22
 
 static const Transition slash_transitions[] = {
@@ -724,7 +724,7 @@ static const StateTransitions state_transitions[RIGHT_BRACKET + 1] = {
     [UNIT_WITH_WHITESPACE] = OUTGOING(unit_with_whitespace_transitions, false),
     [TRAP_INVALID_INT] = {.accepting = true},
     [TRAP_INVALID_DOUBLE] = {.accepting = true},
-    [INCREMENT_STATE] = {.accepting = true},
+    [CONCAT_STATE] = {.accepting = true},
     [LEFT_BRACKET] = {.accepting = true},
     [RIGHT_BRACKET] = {.accepting = true},
 };

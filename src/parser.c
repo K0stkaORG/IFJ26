@@ -134,7 +134,7 @@ static const TokenInfo token_infos[] = {
     [LIST] = {.name = "List"},
     [L_BRACKET] = {.name = "["},
     [R_BRACKET] = {.name = "]"},
-    [OPERATOR_INCREMENT] = {.name = "++"},
+    [OPERATOR_CONCAT] = {.name = "++"},
     [IDENT] = {.name = "identifier"},
     [AT_MAIN] = {.name = "@main"},
     [IMPORT] = {.name = "import"},
