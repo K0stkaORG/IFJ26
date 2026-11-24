@@ -230,6 +230,7 @@ typedef enum {
   AST_DATA_TYPE_DOUBLE,
   AST_DATA_TYPE_BOOLEAN,
   AST_DATA_TYPE_STRING,
+  AST_DATA_TYPE_LIST,
   AST_DATA_TYPE_UNIT,
 } AstDataType;
 
@@ -306,6 +307,15 @@ void ast_node_destroy(Ctx* ctx, AstNode* node);
 void ast_node_set_type(AstNode* node, AstNodeType type);
 
 /**
+ * @brief Sets type for (list) element of given node
+ *
+ * @pre Node pointer is not NULL!
+ * @param node pointer to a AST node
+ * @param elem_type type to set for given element
+ */
+void ast_node_set_element_type(AstNode* node, AstDataType elem_type);
+
+/**
  * @brief Sets value for given node
  *
  * For a STRING_LIT node, the node stores its own copy of value.string_value
@@ -327,6 +337,15 @@ void ast_node_set_value(Ctx* ctx, AstNode* node, AstNodeValue value);
  * @return node type
  */
 AstNodeType ast_node_get_type(const AstNode* node);
+
+/**
+ * @brief Returns node (list) element type
+ *
+ * @pre Node pointer is not NULL!
+ * @param node pointer to a AST node
+ * @return element type
+ */
+AstDataType ast_node_get_element_type(const AstNode* node);
 
 /**
  * @brief Returns node value
