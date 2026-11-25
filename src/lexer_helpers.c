@@ -72,9 +72,9 @@ bool lexer_populate_token(Ctx* ctx,
           // [@lexer.txt](file:///home/daalbu/Code/IFJ26/lexer.txt) and use the
           // [@generate_lexer_transitions.py](file:///home/daalbu/Code/IFJ26/scripts/generate_lexer_transitions.py)
           // to implement it. Also add a case sensitive "List" keyword which
-          // matches to the LIST token." Changes: Recognize List through the
-          // case-sensitive keyword lookup.
-          {"List", LIST},
+          // matches to the TYPE_LIST token." Changes: Recognize List through
+          // the case-sensitive keyword lookup.
+          {"List", TYPE_LIST},
           {"Int", TYPE_INT},
           {"Double", TYPE_DOUBLE},
           {"String", TYPE_STRING},
@@ -233,7 +233,7 @@ bool lexer_populate_token(Ctx* ctx,
     // [@lexer.txt](file:///home/daalbu/Code/IFJ26/lexer.txt) and use the
     // [@generate_lexer_transitions.py](file:///home/daalbu/Code/IFJ26/scripts/generate_lexer_transitions.py)
     // to implement it. Also add a case sensitive "List" keyword which matches
-    // to the LIST token." Changes: Emit tokens for the three new accepting
+    // to the TYPE_LIST token." Changes: Emit tokens for the three new accepting
     // states.
     case CONCAT_STATE:
       token->type = OPERATOR_CONCAT;

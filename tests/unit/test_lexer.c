@@ -53,11 +53,11 @@ describe(LEXER) {
   // [@lexer.txt](file:///home/daalbu/Code/IFJ26/lexer.txt) and use the
   // [@generate_lexer_transitions.py](file:///home/daalbu/Code/IFJ26/scripts/generate_lexer_transitions.py)
   // to implement it. Also add a case sensitive "List" keyword which matches to
-  // the LIST token." Changes: Verify the new tokens, longest match, and exact
-  // keyword spelling.
+  // the TYPE_LIST token." Changes: Verify the new tokens, longest match, and
+  // exact keyword spelling.
   it("Recognizes exact List, brackets, and increment") {
     set_input(ctx, "List[Int]+++ list LIST List2");
-    asserteq(next_token(ctx).type, LIST);
+    asserteq(next_token(ctx).type, TYPE_LIST);
     asserteq(next_token(ctx).type, L_BRACKET);
     asserteq(next_token(ctx).type, TYPE_INT);
     asserteq(next_token(ctx).type, R_BRACKET);

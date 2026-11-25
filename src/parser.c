@@ -131,7 +131,7 @@ static const TokenInfo token_infos[] = {
     // to the LIST token."
     // Changes: Name the new tokens in syntax diagnostics without changing
     // parsing rules.
-    [LIST] = {.name = "List"},
+    [TYPE_LIST] = {.name = "List"},
     [L_BRACKET] = {.name = "["},
     [R_BRACKET] = {.name = "]"},
     [OPERATOR_CONCAT] = {.name = "++"},

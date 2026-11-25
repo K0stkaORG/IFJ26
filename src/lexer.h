@@ -37,13 +37,13 @@ typedef enum {
   ELSE,
   WHILE,
   DO,
-  LIST,
 
   // Types
   TYPE_INT,
   TYPE_DOUBLE,
   TYPE_STRING,
   TYPE_UNIT,
+  TYPE_LIST,
 
   // LISTS
   L_BRACKET,
