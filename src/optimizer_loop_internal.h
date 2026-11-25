@@ -172,7 +172,7 @@ bool optimizer_loop_jumps_to(const IrBlock* block, IrBlockId target);
  * @brief Expose mutable operands for supported instruction layouts.
  *
  * @param inst Instruction to inspect.
- * @param operands Output array for operand pointers.
+ * @param operands Output array with room for three operand pointers.
  * @return Number of operand pointers written.
  */
 size_t optimizer_loop_operands_of(IrInstruction* inst, IrOperand** operands);
