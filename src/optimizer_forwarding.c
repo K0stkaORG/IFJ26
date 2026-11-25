@@ -121,7 +121,7 @@ static bool same_fact(SlotFact a, SlotFact b) {
       // Compare bits because +0.0 == -0.0 and NaN != NaN
       // NOLINTNEXTLINE(bugprone-suspicious-memory-comparison)
       return memcmp(&a.constant->value.double_value,
-                    &b.constant->value.double_value, sizeof(IrDouble));
+                    &b.constant->value.double_value, sizeof(IrDouble)) == 0;
 
     case IR_OP_STRING:
       return strcmp(a.constant->value.string_value,

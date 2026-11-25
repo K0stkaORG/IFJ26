@@ -206,9 +206,10 @@ void optimizer_loop_substitute_iteration(IrFunction* fn,
   if (operand->type != IR_OP_VALUE)
     return;
 
-  if (operand->value.id == induction)
+  if (operand->value.id == induction) {
     *operand = current;
-  return;
+    return;
+  }
 
   for (size_t b = 0; b < body->count; b++) {
     const IrInstructionArray* instructions =
