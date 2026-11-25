@@ -153,7 +153,7 @@ static bool optimizer_fold_builtin(Ctx* ctx,
         return false;
 
       IrInt code = args[0].value.int32_value;
-      if (code < 0 || code > 127)
+      if (code <= 0 || code > 127)
         return false;  // TODO: Throw runtime error 58
 
       // Convert the integer code to a character and return it as a string.
