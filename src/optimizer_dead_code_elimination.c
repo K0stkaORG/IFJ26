@@ -53,8 +53,7 @@ bool optimizer_eliminate_dead_code(Ctx* ctx, IrFunctionId function_id) {
         if (!optimizer_is_discardable(instruction)) {
           // Codegen skips FLOAT2INT when the result is IR_INVALID_ID.
           // Keep the destination so the conversion still runs and can fault.
-          if (instruction->type == IR_INST_CALL &&
-              instruction->operands.call.type == IR_FX_TO_INT)
+          if (instruction->type == IR_INST_TO_INT)
             continue;
 
           instruction->result = IR_INVALID_ID;

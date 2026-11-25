@@ -47,11 +47,11 @@ IrInstruction* optimizer_find_definition(IrFunction* function,
 // Changes: Classify builtin calls using the full instruction.
 bool optimizer_is_discardable(const IrInstruction* instruction) {
   switch (instruction->type) {
-    case IR_INST_CALL: {
-      IrFunctionType builtin = instruction->operands.call.type;
-      return builtin == IR_FX_STR_LEN || builtin == IR_FX_ORD;
-    }
+    case IR_INST_CALL:
+      return instruction->operands.call.type == IR_FX_ORD;
 
+    case IR_INST_WRITE:
+    case IR_INST_TO_INT:
     case IR_INST_STORE:
       return false;
 
