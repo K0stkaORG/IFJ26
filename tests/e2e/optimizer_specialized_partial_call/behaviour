@@ -1,0 +1,7 @@
+IN 5
+OUT 6:
+IN 8
+OUT 9:
+IN false
+OUT 9
+EXIT 0
