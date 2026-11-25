@@ -166,7 +166,7 @@ void optimizer_resize(Ctx* ctx) {
   // Resize value data buffer if necessary
   if (new_values > o_ctx->sizes.values) {
     o_ctx->sizes.values = new_values;
-    TRY_REALLOC(o_ctx->value_data, o_ctx->sizes.values * sizeof(bool));
+    TRY_REALLOC(o_ctx->value_data, o_ctx->sizes.values * sizeof(size_t));
   }
 
   size_t new_blocks = 0;
