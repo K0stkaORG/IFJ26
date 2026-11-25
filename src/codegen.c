@@ -132,7 +132,7 @@ static void cg_print_tempframe_slot(FILE* out, size_t id) {
  * @param out File to print to
  * @param op operand
  */
-static void cg_print_operand(FILE* out, IrOperand* op) {
+static void cg_print_operand(FILE* out, const IrOperand* op) {
   switch (op->type) {
     case IR_OP_VALUE:
       cg_print_localframe_val(out, op->value.id);
