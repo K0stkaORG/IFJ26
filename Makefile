@@ -201,7 +201,7 @@ test-unit: $(UNIT_BINS)
 
 # Run end-to-end tests
 test-e2e: debug
-	@$(PY) $(SCRIPT_DIR)/run_e2e.py $(VALGRIND_FLAG) --compiler "$(abspath $(DEBUG_BIN))" --build-dir "$(TEST_BUILD_DIR)"
+	@$(PY) $(SCRIPT_DIR)/run_e2e.py $(VALGRIND_FLAG) --compiler "$(abspath $(DEBUG_BIN))" --build-dir "$(TEST_BUILD_DIR)" $(if $(strip $(E2E_CASE)),--only "$(strip $(E2E_CASE))")
 
 # Run memory tests (Linux only, requires Valgrind)
 test-memory: debug
