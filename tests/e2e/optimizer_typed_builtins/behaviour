@@ -1,0 +1,6 @@
+IN 5
+IN text
+OUT text\n5
+IN 1.5
+OUT 1.50()
+EXIT 0
