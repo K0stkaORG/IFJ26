@@ -1,0 +1,8 @@
+OUT start
+IN 2
+OUT end
+IN 8
+OUT step
+IN 3
+OUT 25List(2, 5)
+EXIT 0
