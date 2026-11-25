@@ -55,9 +55,11 @@ static size_t cg_instruction_uses(IrInstruction* inst, IrValueId value) {
   switch (ir_get_instruction_class(inst)) {
     case IR_INST_CLASS_UNARY:
       return cg_uses_value(inst->operands.unary.operand, value);
+
     case IR_INST_CLASS_BINARY:
       return (size_t)cg_uses_value(inst->operands.binary.left, value) +
              cg_uses_value(inst->operands.binary.right, value);
+
     case IR_INST_CLASS_STORE:
       return cg_uses_value(inst->operands.store.source, value);
 
@@ -74,6 +76,7 @@ static size_t cg_instruction_uses(IrInstruction* inst, IrValueId value) {
 
       return uses;
     }
+
     case IR_INST_CLASS_CALL: {
       size_t uses = 0;
 
@@ -82,6 +85,7 @@ static size_t cg_instruction_uses(IrInstruction* inst, IrValueId value) {
 
       return uses;
     }
+
     default:
       return 0;
   }
@@ -234,7 +238,8 @@ void cg_reuse_locals(IrBlock* block,
     IrValueId value = inst->result;
 
     if (value == IR_INVALID_ID || inst->type == IR_INST_FLOOR ||
-        placement[value].slot != IR_INVALID_ID || uses[value] != 1)
+        placement[value].slot != IR_INVALID_ID || placement[value].on_stack ||
+        uses[value] != 1)
       continue;
 
     size_t last_use = i + 1;
