@@ -299,9 +299,8 @@ static void shift_operand(Ctx* ctx, Parser* parser) {
                            (AstNodeValue){.string_value = token->value.text});
         break;
       case AST_NODE_BOOL_LIT:
-        ast_node_set_value(
-            ctx, node,
-            (AstNodeValue){.boolean_value = type == BOOL_TRUE});
+        ast_node_set_value(ctx, node,
+                           (AstNodeValue){.boolean_value = type == BOOL_TRUE});
         break;
       default:  // UNIT_LIT carries no value
         break;
@@ -360,9 +359,8 @@ static void shift_inline_if(Ctx* ctx, Parser* parser) {
   // RANGE_TAIL -> IDENT EXPR RANGE_STEP | ε: the IF is cut off at `to` and
   // `until` because its frame has no `(` open
   const Token* token = parser_current(parser);
-  if (token->type == IDENT &&
-      (strcmp(token->value.text, "to") == 0 ||
-       strcmp(token->value.text, "until") == 0)) {
+  if (token->type == IDENT && (strcmp(token->value.text, "to") == 0 ||
+                               strcmp(token->value.text, "until") == 0)) {
     ast_node_set_type(holder, strcmp(token->value.text, "to") == 0
                                   ? AST_NODE_RANGE_TO
                                   : AST_NODE_RANGE_UNTIL);

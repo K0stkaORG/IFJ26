@@ -1105,16 +1105,14 @@ static void parse_generator(Ctx* ctx, Parser* parser, AstNode* for_node) {
           AstNode* source;
           ast_node_detach_child(ctx, range, 0, &source);
           ast_node_detach_child(ctx, for_node,
-                                ast_node_get_child_count(for_node) - 1,
-                                &range);
+                                ast_node_get_child_count(for_node) - 1, &range);
           ast_node_destroy(ctx, range);
           parser_attach(ctx, parser, for_node, source);
           return;
         }
 
         default:
-          parser_syntax_error(ctx, parser,
-                              "to, until, if, do or end of line");
+          parser_syntax_error(ctx, parser, "to, until, if, do or end of line");
       }
       return;
     }

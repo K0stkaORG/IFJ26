@@ -220,6 +220,12 @@ static void cg_print_not_result(FILE* out, size_t result) {
 // cg_print_builtin and replace the inline TYPE checks with switch-case."
 // Changes: Add cg_operand_type and inline list-to-string/list-write helpers,
 // and pass IrFunction* into cg_print_builtin.
+/**
+ * @brief Determines the static IR type of an operand
+ * @param fn Enclosing IR function
+ * @param op Operand to inspect
+ * @return IR type of the operand
+ */
 static IrType cg_operand_type(const IrFunction* fn, const IrOperand* op) {
   switch (op->type) {
     case IR_OP_INT32:
@@ -239,6 +245,13 @@ static IrType cg_operand_type(const IrFunction* fn, const IrOperand* op) {
   }
 }
 
+/**
+ * @brief Emits IFJcode26 instructions to format a list into a string
+ * @param ctx Compiler context
+ * @param out Output file stream
+ * @param list_op Operand holding the list reference
+ * @param result Target IR value ID to store the resulting string
+ */
 static void cg_print_list_to_str(Ctx* ctx,
                                  FILE* out,
                                  const IrOperand* list_op,
@@ -330,6 +343,13 @@ static void cg_print_list_to_str(Ctx* ctx,
   fprintf(out, "LABEL $cg_ltostr_end_%zu\n", id);
 }
 
+/**
+ * @brief Emits IFJcode26 instructions to print a list to stdout in "List(...)"
+ * format
+ * @param ctx Compiler context
+ * @param out Output file stream
+ * @param list_op Operand holding the list reference
+ */
 static void cg_print_list_write(Ctx* ctx, FILE* out, const IrOperand* list_op) {
   size_t id = ctx->cg_state.builtin_label_id;
   fputs("PUSHS nil@nil\n", out);
@@ -1957,6 +1977,13 @@ static void cg_generate_function(Ctx* ctx, FILE* out, IrFunction* fn) {
 // cg_print_builtin and replace the inline TYPE checks with switch-case."
 // Changes: Pass IrFunction* to cg_instruction_helper_count and request 4
 // helpers only for IR_ARRAY in print/toStr (and list-to-str).
+/**
+ * @brief Returns the number of global scratch variables (GF@$tmp*) needed
+ *        by a single IR instruction
+ * @param fn Enclosing IR function
+ * @param inst IR instruction to inspect
+ * @return Number of GF@$tmp* helper variables required
+ */
 static size_t cg_instruction_helper_count(const IrFunction* fn,
                                           const IrInstruction* inst) {
   switch (inst->type) {

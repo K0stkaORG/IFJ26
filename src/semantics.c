@@ -1316,12 +1316,11 @@ static void check_call_arguments(Ctx* ctx,
     Type expected = get_param_type(ctx, symbol, first_param + i);
     // A list mismatch is exit 6 for a user function only; a built-in keeps
     // exit 5 for any wrong type
-    bool list = !builtin && (expected.depth > 0 ||
-                             expr_type(ctx, argument).depth > 0);
-    require_compatible(
-        ctx, argument, expected,
-        list ? E_SEMANTIC_TYPE_ERROR : E_SEMANTIC_ARGUMENT_ERROR,
-        "an argument");
+    bool list =
+        !builtin && (expected.depth > 0 || expr_type(ctx, argument).depth > 0);
+    require_compatible(ctx, argument, expected,
+                       list ? E_SEMANTIC_TYPE_ERROR : E_SEMANTIC_ARGUMENT_ERROR,
+                       "an argument");
   }
 }
 
