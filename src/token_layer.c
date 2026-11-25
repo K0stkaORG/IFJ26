@@ -137,8 +137,8 @@ static Token fetch_token(Ctx* ctx, TokenLayer* layer) {
       if (layer->fetched_after_break && token.type != EOF_TOKEN &&
           continuation_indent <= layer->logical_indent) {
         token_free(&token);
-        THROW(E_LEXER_ERROR,
-              "ifj26:%zu:%zu: error[lexical]: continuation indentation of %d "
+        THROW(E_SYNTAX_ERROR,
+              "ifj26:%zu:%zu: error[syntax]: continuation indentation of %d "
               "must be greater than logical line indentation of %d",
               token.line, token.column, continuation_indent,
               layer->logical_indent);
