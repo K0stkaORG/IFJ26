@@ -1,4 +1,4 @@
-OUT 1
-OUT 2
-OUT 999
+OUT 1\n
+OUT 2\n
+OUT 999\n
 EXIT 0

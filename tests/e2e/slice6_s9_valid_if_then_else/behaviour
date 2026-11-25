@@ -1,3 +1,3 @@
-OUT not greater
-OUT less
+OUT not greater\n
+OUT less\n
 EXIT 0

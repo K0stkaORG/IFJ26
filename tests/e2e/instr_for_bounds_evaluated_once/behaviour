@@ -1,7 +1,7 @@
-OUT from
-OUT to
-OUT step
-OUT iter
-OUT iter
-OUT iter
+OUT from\n
+OUT to\n
+OUT step\n
+OUT iter\n
+OUT iter\n
+OUT iter\n
 EXIT 0

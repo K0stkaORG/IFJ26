@@ -1,8 +1,8 @@
-OUT 0
-OUT 1
-OUT 2
-OUT 4
-OUT 5
-OUT 6
-OUT 7
+OUT 0\n
+OUT 1\n
+OUT 2\n
+OUT 4\n
+OUT 5\n
+OUT 6\n
+OUT 7\n
 EXIT 0
