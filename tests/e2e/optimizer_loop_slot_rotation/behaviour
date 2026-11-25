@@ -1,0 +1,7 @@
+IN 12
+IN 5
+OUT 5:2|
+IN 19
+IN 7
+OUT 5:2|
+EXIT 0
