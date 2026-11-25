@@ -1,5 +1,10 @@
 /**
  * @file optimizer_loops.h
+ * Project: IFJ26
+ *
+ * @author Jan Kostka (xkostkj00)
+ * @date 25. 11. 2026
+ *
  * @brief Interfaces for loop transformation and slot rotation.
  */
 
@@ -11,6 +16,11 @@
 
 #include "ctx.h"
 
+/**
+ * @brief Walk candidate loop headers and select supported transformations.
+ *
+ * @param ctx Compiler context owning the IR.
+ */
 void optimizer_transform_loops(Ctx* ctx);
 
 #endif
