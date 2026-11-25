@@ -30,6 +30,12 @@
     "args": ["benchmark"],
   },
   {
+    "label": "Docs",
+    "command": "make",
+    "args": ["docs"],
+    "hide": "on_success"
+  },
+  {
     "label": "Clean",
     "command": "make",
     "args": ["clean"],
