@@ -24,15 +24,18 @@ typedef struct CodegenState {
 } CodegenState;
 
 /**
- * @brief Codegen state init
- * @param ctx Compiler context
+ * @brief Initialize persistent codegen state before emitting a program.
+ *
+ * @param state Codegen state to initialize.
  */
 void cg_state_init(CodegenState* state);
 
 /**
- * @brief IFJcode26 generator
- * @param out File to output to
- * @param state Codegen state in context
+ * @brief Select return conventions, emit the program, and release the temporary
+ * plan on failure.
+ *
+ * @param out Target output stream.
+ * @param ctx Compiler context.
  */
 void cg_generate(FILE* out, Ctx* ctx);
 
