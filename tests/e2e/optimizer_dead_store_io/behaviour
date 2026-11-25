@@ -1,0 +1,8 @@
+OUT first>
+IN 19
+OUT second>
+IN 42
+OUT 42|ignored>
+IN keep consuming input
+OUT done
+EXIT 0

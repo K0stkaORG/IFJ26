@@ -1,0 +1,5 @@
+OUT eq\n
+OUT ne\n
+OUT lt\n
+OUT gt\n
+EXIT 0

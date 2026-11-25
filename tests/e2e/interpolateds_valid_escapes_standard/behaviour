@@ -1,0 +1,3 @@
+OUT Backslash: \\\\, Tab: [\ttest]\n
+OUT Newline test\n
+EXIT 0

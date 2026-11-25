@@ -1,0 +1,5 @@
+OUT 10\n
+OUT 0x1.48p+4\n
+OUT test\n
+OUT ()\n
+EXIT 0

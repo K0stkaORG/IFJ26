@@ -1,0 +1,7 @@
+IN 0
+OUT and>
+IN 1
+OUT or>
+IN 0
+OUT done
+EXIT 0

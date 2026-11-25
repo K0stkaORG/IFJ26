@@ -1,0 +1,3 @@
+OUT then branch scope\n
+OUT else branch scope\n
+EXIT 0

@@ -1,0 +1,22 @@
+OUT items>\x20
+IN 3
+OUT item 1 name>\x20
+IN Notebook
+OUT quantity>\x20
+IN 3
+OUT unit cents>\x20
+IN 1299
+OUT accepted Notebook: 3897\nitem 2 name>\x20
+IN Bad stock
+OUT quantity>\x20
+IN -1
+OUT unit cents>\x20
+IN 9000
+OUT rejected Bad stock\nitem 3 name>\x20
+IN Cable
+OUT quantity>\x20
+IN 2
+OUT unit cents>\x20
+IN 850
+OUT accepted Cable: 1700\nsubtotal=5597 discount=559 tax=1058 total=6096\n
+EXIT 0

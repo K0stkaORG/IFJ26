@@ -1,0 +1,8 @@
+OUT a
+IN 10
+OUT b
+IN 20
+OUT c
+IN 30
+OUT List(10, 20, 30)
+EXIT 0

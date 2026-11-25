@@ -1,0 +1,4 @@
+OUT negative\n
+OUT zero\n
+OUT positive\n
+EXIT 0

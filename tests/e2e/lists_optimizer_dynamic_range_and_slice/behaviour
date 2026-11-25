@@ -1,0 +1,7 @@
+IN 8
+IN 0
+IN -2
+IN 1
+IN 3
+OUT List(8, 6, 4, 2)List(6, 4)6
+EXIT 0

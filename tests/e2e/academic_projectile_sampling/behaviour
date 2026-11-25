@@ -1,0 +1,4 @@
+OUT launch speed>\x20
+IN 12.5
+OUT 0.00:0.00\n0.50:5.00\n1.00:7.50\n1.50:7.50\n2.00:5.00\nlanding sample=2.50\npeak=7.50 at 1.00\n
+EXIT 0

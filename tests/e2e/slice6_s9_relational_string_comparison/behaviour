@@ -1,0 +1,3 @@
+OUT s1 < s2\n
+OUT not equal\n
+EXIT 0

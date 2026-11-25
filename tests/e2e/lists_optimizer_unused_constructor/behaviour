@@ -1,0 +1,6 @@
+OUT first
+IN 4
+OUT second
+IN 5
+OUT done
+EXIT 0

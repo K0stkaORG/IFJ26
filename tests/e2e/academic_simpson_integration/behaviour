@@ -1,0 +1,8 @@
+OUT lower>\x20
+IN 0
+OUT upper>\x20
+IN 2
+OUT even panels>\x20
+IN 8
+OUT forward=10.00 reverse=-10.00 zero=0.00\n
+EXIT 0
