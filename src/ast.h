@@ -2,7 +2,9 @@
 // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
 // semantics ticket 01 (AST prefactor), parser tickets 06-07;
 // mattpocock-skills:implement, review judgement calls;
-// mattpocock-skills:implement, AST wrap operation (ast_node_wrap)"
+// mattpocock-skills:implement, AST wrap operation (ast_node_wrap)";
+// "implementation done using skill: mattpocock-skills:implement-spec, LISTS
+// tickets 01-10 and review fixes"
 // Changes: only the declarations with a Changes note.
 /**
  * @file ast.h
@@ -315,6 +317,19 @@ void ast_node_set_type(AstNode* node, AstNodeType type);
  */
 void ast_node_set_element_type(AstNode* node, AstDataType elem_type);
 
+// Changes: new, the list depth setter.
+/**
+ * @brief Sets the list depth of given node (ADR-0006)
+ *
+ * A list type is a base type plus a depth: the node's element type is the
+ * base, the depth counts the nested `List`s (0 for a plain value).
+ *
+ * @pre Node pointer is not NULL!
+ * @param node pointer to a AST node
+ * @param depth number of nested lists
+ */
+void ast_node_set_list_depth(AstNode* node, size_t depth);
+
 /**
  * @brief Sets value for given node
  *
@@ -346,6 +361,16 @@ AstNodeType ast_node_get_type(const AstNode* node);
  * @return element type
  */
 AstDataType ast_node_get_element_type(const AstNode* node);
+
+// Changes: new, the list depth getter.
+/**
+ * @brief Returns the list depth of given node (0 until type checking sets it)
+ *
+ * @pre Node pointer is not NULL!
+ * @param node pointer to a AST node
+ * @return number of nested lists
+ */
+size_t ast_node_get_list_depth(const AstNode* node);
 
 /**
  * @brief Returns node value

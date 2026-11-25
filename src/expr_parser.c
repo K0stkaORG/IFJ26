@@ -3,9 +3,10 @@
 // "implementation done using skill: mattpocock-skills:implement-spec, tickets
 // 04, 05, 07 and review fixes; mattpocock-skills:implement, review judgement
 // calls; give the parser's Token layer its own module (architecture-review
-// candidate 1)"; "implementation done using skill:
-// mattpocock-skills:implement, split the Unit type name (TYPE_UNIT) from the ()
-// unit value (UNIT) in the grammar"
+// candidate 1)"; "implementation done using skill: mattpocock-skills:implement,
+// split the Unit type name (TYPE_UNIT) from the () unit value (UNIT) in the
+// grammar"; "implementation done using skill: mattpocock-skills:implement-spec,
+// LISTS tickets 01-10 and review fixes"
 // Changes: new module, precedence parser (the precedence table and algorithm
 // are the parser author's); `()` is the terminal UNIT (ADR-0009). Each function
 // notes what changed.
@@ -27,6 +28,7 @@
 
 #include "expr_parser.h"
 
+#include <stdio.h>   // snprintf
 #include <string.h>  // memmove
 
 // === PRECEDENCE TABLE ===
@@ -38,21 +40,24 @@
 #define RED '>'  // `>`, reduce the handle
 #define ERR 0    // empty cell, a syntax error
 
+// Changes: the range and by terminals (ADR-0010); `++` is in the add row.
 // clang-format off
 static const char prec_table[PREC_TERMINAL_COUNT][PREC_TERMINAL_COUNT] = {
-  //               .m   pre  mul  add  rel  eq   and  or   (    )    i    $
-  [PREC_MEMBER]  = {RED, ERR, RED, RED, RED, RED, RED, RED, ERR, RED, ERR, RED},
-  [PREC_PREFIX]  = {SHF, SHF, RED, RED, RED, RED, RED, RED, SHF, RED, SHF, RED},
-  [PREC_MUL]     = {SHF, SHF, RED, RED, RED, RED, RED, RED, SHF, RED, SHF, RED},
-  [PREC_ADD]     = {SHF, SHF, SHF, RED, RED, RED, RED, RED, SHF, RED, SHF, RED},
-  [PREC_REL]     = {SHF, SHF, SHF, SHF, ERR, RED, RED, RED, SHF, RED, SHF, RED},
-  [PREC_EQ]      = {SHF, SHF, SHF, SHF, SHF, ERR, RED, RED, SHF, RED, SHF, RED},
-  [PREC_AND]     = {SHF, SHF, SHF, SHF, SHF, SHF, RED, RED, SHF, RED, SHF, RED},
-  [PREC_OR]      = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, RED, SHF, RED, SHF, RED},
-  [PREC_LPAREN]  = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, EQL, SHF, ERR},
-  [PREC_RPAREN]  = {RED, ERR, RED, RED, RED, RED, RED, RED, ERR, RED, ERR, RED},
-  [PREC_OPERAND] = {RED, ERR, RED, RED, RED, RED, RED, RED, ERR, RED, ERR, RED},
-  [PREC_END]     = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, ERR, SHF, ERR},
+  //               .m   pre  mul  add  rel  eq   and  or   rng  by   (    )    i    $
+  [PREC_MEMBER]  = {RED, ERR, RED, RED, RED, RED, RED, RED, RED, RED, ERR, RED, ERR, RED},
+  [PREC_PREFIX]  = {SHF, SHF, RED, RED, RED, RED, RED, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_MUL]     = {SHF, SHF, RED, RED, RED, RED, RED, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_ADD]     = {SHF, SHF, SHF, RED, RED, RED, RED, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_REL]     = {SHF, SHF, SHF, SHF, ERR, RED, RED, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_EQ]      = {SHF, SHF, SHF, SHF, SHF, ERR, RED, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_AND]     = {SHF, SHF, SHF, SHF, SHF, SHF, RED, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_OR]      = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, RED, RED, RED, SHF, RED, SHF, RED},
+  [PREC_RANGE]   = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, ERR, EQL, SHF, RED, SHF, ERR},
+  [PREC_BY]      = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, ERR, ERR, SHF, RED, SHF, ERR},
+  [PREC_LPAREN]  = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, EQL, SHF, ERR},
+  [PREC_RPAREN]  = {RED, ERR, RED, RED, RED, RED, RED, RED, RED, RED, ERR, RED, ERR, RED},
+  [PREC_OPERAND] = {RED, ERR, RED, RED, RED, RED, RED, RED, RED, RED, ERR, RED, ERR, RED},
+  [PREC_END]     = {SHF, SHF, SHF, SHF, SHF, SHF, SHF, SHF, ERR, ERR, SHF, ERR, SHF, ERR},
 };
 // clang-format on
 
@@ -112,13 +117,13 @@ static bool stack_ends_with_operand(const PrecStack* stack, size_t base) {
 
 // === OPERANDS ===
 
-// Changes: an interpolated string start also starts an operand; literals come
-// from the token info table.
+// Changes: an interpolated string start and the List of a list creation also
+// start an operand; literals come from the token info table.
 /**
  * @brief Returns whether the token starts an operand
  */
 static bool starts_operand(TokenType type) {
-  return type == IDENT || type == S_STRING_START ||
+  return type == IDENT || type == TYPE_LIST || type == S_STRING_START ||
          type == TRIPLE_S_STRING_START ||
          parser_token_info(type)->literal != AST_NODE_NONE;
 }
@@ -162,7 +167,7 @@ static void build_call(Ctx* ctx, Parser* parser, size_t operand) {
   stack->data[operand].node = call;
   stack->count--;
 
-  // CALL_ARGS -> UNIT | L_PAREN ARG_LIST R_PAREN (rules 85, 86); the callback
+  // CALL_ARGS -> UNIT | L_PAREN ARG_LIST R_PAREN (rules 89, 90); the callback
   // is ARG_LIST with the CALL as parent
   if (parser_current(parser)->type == UNIT) {
     parser_advance(ctx, parser);
@@ -222,8 +227,9 @@ static void build_interp_string(Ctx* ctx,
   parser_advance(ctx, parser);  // the closing token
 }
 
-// Changes: builds an INTERP_STRING or a CALL operand; the literal kind comes
-// from the token info table; reads the current token through parser_current.
+// Changes: builds an INTERP_STRING or a CALL operand; `List(...)` is a CALL of
+// the IDENT "List", `List.name` one IDENT "List.name"; the literal kind comes
+// from the token info table.
 /**
  * @brief Shifts the operand starting at the current token as one `i`
  *
@@ -235,25 +241,49 @@ static void shift_operand(Ctx* ctx, Parser* parser) {
   size_t index = stack_push(ctx, stack, PREC_ENTRY_TERMINAL, PREC_OPERAND);
 
   const Token* token = parser_current(parser);
+  // The token layer reuses its slot on advance, so read the type now
+  const TokenType type = token->type;
   AstNode* node;
   ast_node_create(ctx, &node);
   stack->data[index].node = node;
   ast_node_set_position(node, token->line, token->column);
 
-  if (token->type == S_STRING_START || token->type == TRIPLE_S_STRING_START) {
+  if (type == S_STRING_START || type == TRIPLE_S_STRING_START) {
     TokenType close =
-        token->type == S_STRING_START ? S_STRING_END : TRIPLE_S_STRING_END;
+        type == S_STRING_START ? S_STRING_END : TRIPLE_S_STRING_END;
     ast_node_set_type(node, AST_NODE_INTERP_STRING);
     parser_advance(ctx, parser);
     build_interp_string(ctx, parser, node, close);
     return;
   }
 
-  if (token->type == IDENT) {
+  if (type == TYPE_LIST) {
+    // LIST_CREATE -> TYPE_LIST CALL_ARGS, the name is not in the token
+    ast_node_set_type(node, AST_NODE_IDENT);
+    if (parser_peek(ctx, parser)->type == PERIOD) {
+      // LIST_TAIL -> PERIOD IDENT, one IDENT operand named "List.<name>"
+      parser_advance(ctx, parser);
+      parser_advance(ctx, parser);
+      if (parser_current(parser)->type != IDENT)
+        parser_syntax_error(ctx, parser, "a name after List.");
+      char name[128];
+      snprintf(name, sizeof(name), "List.%s",
+               parser_current(parser)->value.text);
+      ast_node_set_name(ctx, node, name);
+    } else {
+      ast_node_set_name(ctx, node, "List");
+      if (parser_peek(ctx, parser)->type != L_PAREN &&
+          parser_peek(ctx, parser)->type != UNIT) {
+        // Report the offending token, not the List before it
+        parser_advance(ctx, parser);
+        parser_syntax_error(ctx, parser, "( after List");
+      }
+    }
+  } else if (type == IDENT) {
     ast_node_set_type(node, AST_NODE_IDENT);
     ast_node_set_name(ctx, node, token->value.text);
   } else {
-    AstNodeType kind = parser_token_info(token->type)->literal;
+    AstNodeType kind = parser_token_info(type)->literal;
     ast_node_set_type(node, kind);
     switch (kind) {
       case AST_NODE_INT_LIT:
@@ -271,14 +301,14 @@ static void shift_operand(Ctx* ctx, Parser* parser) {
       case AST_NODE_BOOL_LIT:
         ast_node_set_value(
             ctx, node,
-            (AstNodeValue){.boolean_value = token->type == BOOL_TRUE});
+            (AstNodeValue){.boolean_value = type == BOOL_TRUE});
         break;
       default:  // UNIT_LIT carries no value
         break;
     }
   }
 
-  bool is_ident = token->type == IDENT;
+  bool is_ident = type == IDENT || type == TYPE_LIST;
   parser_advance(ctx, parser);
 
   // `(` or `()` directly after an identifier is a call
@@ -299,16 +329,19 @@ static bool starts_inline_if(Ctx* ctx, Parser* parser) {
 }
 
 // Changes: new, an if expression in parentheses is one operand whose IF is
-// built by the IF_INLINE callback; reads the current token through
-// parser_current.
+// built by the IF_INLINE callback; a range tail (`to`/`until`, `by`) makes it a
+// RANGE_TO or RANGE_UNTIL with the IF as its first child.
 /**
- * @brief Shifts `( if ... )` as one `i`, the operand being the IF
+ * @brief Shifts `( if ... )` or `( if ... to ... )` as one `i`
  *
- * The callback attaches its IF to a NONE holder node (the operand entry owns
- * it from the start, so a THROW inside leaves the partly built IF owned by the
- * stack, ADR-0004). Afterwards the IF is detached from the holder, which is
- * destroyed, and becomes the operand's node. Only indices are used: the stack
- * may move while the nested expressions are parsed.
+ * NO_IDENT_OPERAND -> L_PAREN INLINE_VALUE RANGE_TAIL R_PAREN (rule 68), the
+ * value being an if. The callback attaches its IF to a NONE holder node (the
+ * operand entry owns it from the start, so a THROW inside leaves the partly
+ * built IF owned by the stack, ADR-0004). Without a range tail the IF is
+ * detached from the holder, which is destroyed, and becomes the operand's
+ * node; with one the holder itself becomes the range node, the IF its first
+ * child. Only indices are used: the stack may move while the nested
+ * expressions are parsed.
  */
 static void shift_inline_if(Ctx* ctx, Parser* parser) {
   PrecStack* stack = &parser->prec_stack;
@@ -321,9 +354,38 @@ static void shift_inline_if(Ctx* ctx, Parser* parser) {
   ast_node_set_position(holder, parser_current(parser)->line,
                         parser_current(parser)->column);
 
-  // NO_IDENT_OPERAND -> L_PAREN INLINE_VALUE R_PAREN, the value is an if
   parser_advance(ctx, parser);
   parse_if_inline(ctx, parser, holder);
+
+  // RANGE_TAIL -> IDENT EXPR RANGE_STEP | ε: the IF is cut off at `to` and
+  // `until` because its frame has no `(` open
+  const Token* token = parser_current(parser);
+  if (token->type == IDENT &&
+      (strcmp(token->value.text, "to") == 0 ||
+       strcmp(token->value.text, "until") == 0)) {
+    ast_node_set_type(holder, strcmp(token->value.text, "to") == 0
+                                  ? AST_NODE_RANGE_TO
+                                  : AST_NODE_RANGE_UNTIL);
+    ast_node_set_position(holder, token->line, token->column);
+    parser_advance(ctx, parser);
+    parser_attach(ctx, parser, holder, expr_parse(ctx, parser));
+
+    token = parser_current(parser);
+    if (token->type == IDENT && strcmp(token->value.text, "by") == 0) {
+      parser_advance(ctx, parser);
+      parser_attach(ctx, parser, holder, expr_parse(ctx, parser));
+    } else {
+      AstNode* none;
+      ast_node_create(ctx, &none);
+      ast_node_set_type(none, AST_NODE_NONE);
+      ast_node_set_position(none, ast_node_get_line(holder),
+                            ast_node_get_column(holder));
+      parser_attach(ctx, parser, holder, none);
+    }
+    parser_expect(ctx, parser, R_PAREN);
+    return;
+  }
+
   parser_expect(ctx, parser, R_PAREN);
 
   AstNode* if_node;
@@ -334,9 +396,9 @@ static void shift_inline_if(Ctx* ctx, Parser* parser) {
 
 // === PRECEDENCE PARSER ===
 
-// Changes: a `(` followed by `if` is shifted as an if expression operand; the
-// operator node comes from the token info table; reads the current token
-// through parser_current.
+// Changes: rng creates the RANGE_TO or RANGE_UNTIL node; a `(` followed by `if`
+// is shifted as an if expression operand; the operator node comes from the
+// token info table; reads the current token through parser_current.
 /**
  * @brief Shifts the current token as the given precedence terminal
  */
@@ -356,6 +418,9 @@ static void shift(Ctx* ctx, Parser* parser, PrecTerminal input) {
   const TokenInfo* token_info = parser_token_info(token->type);
   AstNodeType kind = input == PREC_PREFIX ? token_info->prefix_node
                                           : token_info->operator_node;
+  if (input == PREC_RANGE)
+    kind = strcmp(token->value.text, "to") == 0 ? AST_NODE_RANGE_TO
+                                                : AST_NODE_RANGE_UNTIL;
   if (kind != AST_NODE_NONE) {
     AstNode* node;
     ast_node_create(ctx, &node);
@@ -393,9 +458,10 @@ static size_t open_parens(const PrecStack* stack, size_t base) {
   return open;
 }
 
-// Changes: a `(` directly followed by `if` is an operand (peeks, so the parser
-// is not const); the binary class comes from the token info table; reads the
-// current token through parser_current.
+// Changes: `to`, `until` and `by` right after an operand inside a `(` are the
+// terminals rng and by (ADR-0010); a `(` followed by `if` is an operand (peeks,
+// so the parser is not const); the binary class comes from the token info
+// table.
 /**
  * @brief Maps the current token to the precedence terminal it stands for, or
  * PREC_END at the expression end (GLOSSARY.md, Expression end)
@@ -404,6 +470,16 @@ static PrecTerminal classify(Ctx* ctx, Parser* parser, size_t base) {
   const PrecStack* stack = &parser->prec_stack;
   TokenType type = parser_current(parser)->type;
   bool after_operand = stack_ends_with_operand(stack, base);
+
+  // `to`, `until` and `by` are terminals only right after a complete operand
+  // with a `(` of this expression open; anywhere else they are plain names
+  if (type == IDENT && after_operand && open_parens(stack, base) > 0) {
+    const char* text = parser_current(parser)->value.text;
+    if (strcmp(text, "to") == 0 || strcmp(text, "until") == 0)
+      return PREC_RANGE;
+    if (strcmp(text, "by") == 0)
+      return PREC_BY;
+  }
 
   // A token that could start an operand ends the expression right after a
   // complete operand or `)`
@@ -414,8 +490,7 @@ static PrecTerminal classify(Ctx* ctx, Parser* parser, size_t base) {
     case PERIOD:
       return PREC_MEMBER;
     case L_PAREN:
-      if (after_operand)
-        return PREC_END;
+      // After an operand a `(` is a call, taken by starts_postfix_call
       // `( if` starts an if expression, an operand of its own
       return starts_inline_if(ctx, parser) ? PREC_OPERAND : PREC_LPAREN;
     case R_PAREN:
@@ -474,6 +549,39 @@ static void reduce_to_operator(Ctx* ctx,
   replace_handle(stack, handle, node);
 }
 
+// Changes: new, E -> E rng E [by E] builds RANGE_TO or RANGE_UNTIL.
+/**
+ * @brief Reduces the range handle starting at index handle to its RANGE_TO or
+ * RANGE_UNTIL [from, to, step|NONE]
+ *
+ * The operands are attached one by one and each entry gives up its node right
+ * after, like reduce_to_operator; the NONE step is attached with
+ * parser_attach so a failed append cannot leak it.
+ */
+static void reduce_range(Ctx* ctx, Parser* parser, size_t handle) {
+  PrecStack* stack = &parser->prec_stack;
+  size_t length = stack->count - handle - 1;
+  AstNode* range = stack->data[handle + 2].node;
+
+  size_t operands[] = {handle + 1, handle + 3, handle + 5};
+  size_t operand_count = length == 5 ? 3 : 2;
+  for (size_t i = 0; i < operand_count; i++) {
+    ast_node_append_child(ctx, range, stack->data[operands[i]].node);
+    stack->data[operands[i]].node = NULL;
+  }
+  if (length == 3) {
+    AstNode* none;
+    ast_node_create(ctx, &none);
+    ast_node_set_type(none, AST_NODE_NONE);
+    ast_node_set_position(none, ast_node_get_line(range),
+                          ast_node_get_column(range));
+    parser_attach(ctx, parser, range, none);
+  }
+  stack->data[handle + 2].node = NULL;
+  replace_handle(stack, handle, range);
+}
+
+// Changes: a range handle is reduced by reduce_range.
 /**
  * @brief Reduces the handle on top of the frame starting at base by a
  * reduction rule; a handle matching no rule is a syntax error
@@ -518,6 +626,16 @@ static void reduce(Ctx* ctx, Parser* parser, size_t base) {
     return;
   }
 
+  // E -> E rng E | E rng E by E, the step is NONE when there is no `by`
+  if ((length == 3 || length == 5) && symbols[0].kind == PREC_ENTRY_EXPR &&
+      is_terminal(&symbols[1], PREC_RANGE) &&
+      symbols[2].kind == PREC_ENTRY_EXPR &&
+      (length == 3 || (is_terminal(&symbols[3], PREC_BY) &&
+                       symbols[4].kind == PREC_ENTRY_EXPR))) {
+    reduce_range(ctx, parser, handle);
+    return;
+  }
+
   // E -> ( E ), leaves no node
   if (length == 3 && is_terminal(&symbols[0], PREC_LPAREN) &&
       symbols[1].kind == PREC_ENTRY_EXPR &&
@@ -529,6 +647,39 @@ static void reduce(Ctx* ctx, Parser* parser, size_t base) {
   parser_syntax_error(ctx, parser, "expression");
 }
 
+// The table's `call` terminal and the reduction `E -> E call` have no row of
+// their own: starts_postfix_call intercepts a `(` or `()` after a finished
+// expression (equivalent, no grammar context lets `(` follow one). `to`,
+// `until` and `by` are plain IDENTs in the grammar; classify narrows them to
+// the range terminals, so `(a by b)`, `(1 to 3 to 4)` and `for x <- xs by 2`
+// are syntax errors (ADR-0010, table conformance).
+// Changes: new, a `(` or `()` right after a complete operand starts a CALL of
+// that expression.
+/**
+ * @brief Returns whether the current token starts a call of the expression
+ * just parsed (`f()(0)`, `(a ++ b)(0)`, `xs.tail(0)`)
+ */
+static bool starts_postfix_call(const Parser* parser, size_t base) {
+  TokenType type = parser_current(parser)->type;
+  return (type == L_PAREN || type == UNIT) &&
+         stack_ends_with_operand(&parser->prec_stack, base);
+}
+
+// Changes: new, turns the finished expression into the callee of a CALL.
+/**
+ * @brief Turns the expression on top of the frame into the callee of a CALL
+ * and parses its arguments
+ */
+static void shift_postfix_call(Ctx* ctx, Parser* parser, size_t base) {
+  PrecStack* stack = &parser->prec_stack;
+  const PrecEntry* top = &stack->data[stack->count - 1];
+  if (top->kind == PREC_ENTRY_TERMINAL &&
+      (top->terminal == PREC_RPAREN || top->terminal == PREC_MEMBER))
+    reduce(ctx, parser, base);
+  build_call(ctx, parser, stack->count - 1);
+}
+
+// Changes: a call may follow any operand, `)` or member (indexing).
 AstNode* expr_parse(Ctx* ctx, Parser* parser) {
   PrecStack* stack = &parser->prec_stack;
 
@@ -536,6 +687,10 @@ AstNode* expr_parse(Ctx* ctx, Parser* parser) {
   size_t base = stack_push(ctx, stack, PREC_ENTRY_TERMINAL, PREC_END);
 
   while (true) {
+    if (starts_postfix_call(parser, base)) {
+      shift_postfix_call(ctx, parser, base);
+      continue;
+    }
     size_t top = stack_top_terminal(stack, base);
     PrecTerminal row = stack->data[top].terminal;
     PrecTerminal input = classify(ctx, parser, base);

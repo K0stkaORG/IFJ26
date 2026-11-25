@@ -19,6 +19,7 @@
  * @param data Data to destruct
  * @pre param_types in function data must be on heap
  * @pre param_element_types in function data must be on heap
+ * @pre param_list_depths in function data must be on heap
  */
 static void symtabledata_destructor(void* data) {
   SymtableData* dataptr = (SymtableData*)data;
@@ -28,6 +29,8 @@ static void symtabledata_destructor(void* data) {
         free(dataptr->param_types);
       if (dataptr->param_element_types != NULL)
         free(dataptr->param_element_types);
+      if (dataptr->param_list_depths != NULL)
+        free(dataptr->param_list_depths);
     }
     free(dataptr);
   }
@@ -63,6 +66,8 @@ void symtable_insert(Ctx* ctx,
       free(data.param_types);
     if (data.param_element_types != NULL)
       free(data.param_element_types);
+    if (data.param_list_depths != NULL)
+      free(data.param_list_depths);
   });
   *dataptr = data;
 

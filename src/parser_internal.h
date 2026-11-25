@@ -4,7 +4,9 @@
 // 04-05 and review fixes; mattpocock-skills:implement, review judgement calls";
 // preparing the parser for the lexer's next_token and the column-0 INDENT fix;
 // "implementation done using skill: mattpocock-skills:implement, give the
-// parser's Token layer its own module (architecture-review candidate 1)"
+// parser's Token layer its own module (architecture-review candidate 1)";
+// "implementation done using skill: mattpocock-skills:implement-spec, LISTS
+// tickets 01-10 and review fixes"
 // Changes: new header, private parser state and token helpers; the token layer
 // moved to token_layer.h. Each declaration notes what changed.
 /**
@@ -36,6 +38,7 @@
 #include <stdbool.h>  // bool
 #include <stddef.h>   // size_t
 
+// Changes: PREC_RANGE and PREC_BY added (ADR-0010).
 /**
  * @brief Terminals of the precedence table (its rows and columns), in the
  * table's order
@@ -49,6 +52,8 @@ typedef enum {
   PREC_EQ,       // eq, == !=
   PREC_AND,      // and, &&
   PREC_OR,       // or, ||
+  PREC_RANGE,    // rng, to and until inside a `(` (ADR-0010)
+  PREC_BY,       // by, the step of a range inside a `(` (ADR-0010)
   PREC_LPAREN,   // (
   PREC_RPAREN,   // )
   PREC_OPERAND,  // i, a whole operand (GLOSSARY.md, Operand)

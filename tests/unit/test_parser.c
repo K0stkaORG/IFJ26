@@ -9,10 +9,11 @@
 // mattpocock-skills:implement, trimming parser tests by necessity rank and
 // filling coverage gaps"; "implementation done using skill:
 // mattpocock-skills:implement, fix Unit (type name) vs () (unit value)
-// interchangeability in the token layer"
+// interchangeability in the token layer"; "implementation done using skill:
+// mattpocock-skills:implement-spec, LISTS tickets 01-10 and review fixes"
 // Changes: new test suite, trimmed to one table-driven error test per grammar
-// area; the expression tests moved to test_expr_parser.c, the token layer
-// tests to test_token_layer.c; tests for every position of `Unit` and `()`.
+// area; the expression tests moved to test_expr_parser.c, the token layer tests
+// to test_token_layer.c; tests for every position of `Unit` and `()`.
 /**
  * @file test_parser.c
  * Project: IFJ26
@@ -282,6 +283,260 @@ describe(parser) {
           MANY(LINE(2), TOK(RETURN), UNIT_TYPE, EOL),
           // Unit as a statement
           MANY(LINE(2), UNIT_TYPE, EOL));
+    }
+  }
+
+  // Changes: new, list type annotations.
+  subdesc(list_types) {
+    it("parses List[T] in a parameter and a return type as TYPE_LIST") {
+      // def f(xs: List[Int]): List[Int] = xs
+      ASSERT_AST(
+          "(PROGRAM (DEF (IDENT f) (TYPE_LIST (TYPE_ANNOTATION Int)) "
+          "(BLOCK (IDENT xs)) "
+          "(PARAM_LIST (PARAM (IDENT xs) (TYPE_LIST (TYPE_ANNOTATION Int))))))",
+          PROLOG,
+          TOK(DEF), ID("f"), TOK(L_PAREN), ID("xs"), TOK(COLON),
+            LIST_OF(INT_TYPE), TOK(R_PAREN), TOK(COLON), LIST_OF(INT_TYPE),
+            TOK(ASSIGN), ID("xs"), EOL);
+    }
+
+    it("nests TYPE_LIST for nested lists and accepts every element type") {
+      // def f(m: List[List[String]], u: List[Unit]) = m
+      ASSERT_AST(
+          "(PROGRAM (DEF (IDENT f) NONE (BLOCK (IDENT m)) "
+          "(PARAM_LIST (PARAM (IDENT m) (TYPE_LIST (TYPE_LIST "
+          "(TYPE_ANNOTATION String)))) (PARAM (IDENT u) (TYPE_LIST "
+          "(TYPE_ANNOTATION Unit))))))",
+          PROLOG,
+          TOK(DEF), ID("f"), TOK(L_PAREN), ID("m"), TOK(COLON),
+            LIST_OF(LIST_OF(TOK(TYPE_STRING))), TOK(COMMA), ID("u"),
+            TOK(COLON), LIST_OF(UNIT_TYPE), TOK(R_PAREN), TOK(ASSIGN),
+            ID("m"), EOL);
+    }
+
+    it("parses List[T] as the annotation of val and var") {
+      // def f() =
+      //   val a: List[Int] = xs
+      //   var b: List[Double] = ys
+      ASSERT_AST(
+          "(PROGRAM (DEF (IDENT f) NONE (BLOCK "
+          "(VAL (IDENT a) (TYPE_LIST (TYPE_ANNOTATION Int)) (IDENT xs)) "
+          "(VAR (IDENT b) (TYPE_LIST (TYPE_ANNOTATION Double)) (IDENT ys))) "
+          "(PARAM_LIST)))",
+          PROLOG, DEF_F,
+          LINE(2), TOK(VAL), ID("a"), TOK(COLON), LIST_OF(INT_TYPE),
+            TOK(ASSIGN), ID("xs"), EOL,
+          LINE(2), TOK(VAR), ID("b"), TOK(COLON), LIST_OF(TOK(TYPE_DOUBLE)),
+            TOK(ASSIGN), ID("ys"), EOL);
+    }
+
+    // Changes: new, list creation `List(...)`.
+    it("parses List(a, b) as a CALL of the IDENT List") {
+      ASSERT_AST(BODY_AST("(CALL (IDENT List) (INT_LIT 1) (INT_LIT 2))"),
+                 BODY(TOK(TYPE_LIST), TOK(L_PAREN), INT(1), TOK(COMMA), INT(2),
+                      TOK(R_PAREN)));
+    }
+
+    it("parses nested creations and List() without elements") {
+      ASSERT_AST(BODY_AST("(CALL (IDENT List) (CALL (IDENT List) (INT_LIT 1)) "
+                          "(CALL (IDENT List)))"),
+                 BODY(TOK(TYPE_LIST), TOK(L_PAREN), TOK(TYPE_LIST),
+                      TOK(L_PAREN), INT(1), TOK(R_PAREN), TOK(COMMA),
+                      TOK(TYPE_LIST), UNIT_VALUE, TOK(R_PAREN)));
+    }
+
+    it("takes List(...) as one operand of an operator") {
+      ASSERT_AST(BODY_AST("(ADD (CALL (IDENT List) (INT_LIT 1)) (INT_LIT 2))"),
+                 BODY(TOK(TYPE_LIST), TOK(L_PAREN), INT(1), TOK(R_PAREN),
+                      TOK(OPERATOR_PLUS), INT(2)));
+    }
+
+    // Changes: new, `++` as an ADD_OP building CONCAT.
+    it("parses a ++ b ++ c as a left-associative CONCAT") {
+      ASSERT_AST(BODY_AST("(CONCAT (CONCAT (IDENT a) (IDENT b)) (IDENT c))"),
+                 BODY(ID("a"), TOK(OPERATOR_CONCAT), ID("b"),
+                      TOK(OPERATOR_CONCAT), ID("c")));
+    }
+
+    it("binds * and / tighter than ++") {
+      ASSERT_AST(BODY_AST("(CONCAT (IDENT a) (MUL (IDENT b) (IDENT c)))"),
+                 BODY(ID("a"), TOK(OPERATOR_CONCAT), ID("b"),
+                      TOK(OPERATOR_MULTIPLY), ID("c")));
+    }
+
+    it("groups ++ and + left to right") {
+      ASSERT_AST(BODY_AST("(CONCAT (ADD (IDENT a) (IDENT b)) (IDENT c))"),
+                 BODY(ID("a"), TOK(OPERATOR_PLUS), ID("b"),
+                      TOK(OPERATOR_CONCAT), ID("c")));
+    }
+
+    it("groups ++ and - left to right") {
+      ASSERT_AST(BODY_AST("(SUB (CONCAT (IDENT a) (IDENT b)) (IDENT c))"),
+                 BODY(ID("a"), TOK(OPERATOR_CONCAT), ID("b"),
+                      TOK(OPERATOR_MINUS), ID("c")));
+    }
+
+    it("binds ++ tighter than a comparison") {
+      ASSERT_AST(BODY_AST("(LT (CONCAT (IDENT a) (IDENT b)) (IDENT c))"),
+                 BODY(ID("a"), TOK(OPERATOR_CONCAT), ID("b"),
+                      TOK(COMPARISON_L), ID("c")));
+    }
+
+    // Changes: new, indexing: a call after any operand.
+    it("parses xs(0) as a CALL of the variable name") {
+      ASSERT_AST(BODY_AST("(CALL (IDENT xs) (INT_LIT 0))"),
+                 BODY(ID("xs"), TOK(L_PAREN), INT(0), TOK(R_PAREN)));
+    }
+
+    it("parses m(0)(1) as a CALL of a CALL") {
+      ASSERT_AST(BODY_AST("(CALL (CALL (IDENT m) (INT_LIT 0)) (INT_LIT 1))"),
+                 BODY(ID("m"), TOK(L_PAREN), INT(0), TOK(R_PAREN),
+                      TOK(L_PAREN), INT(1), TOK(R_PAREN)));
+    }
+
+    it("parses f()(0) as a CALL whose callee is a call") {
+      ASSERT_AST(BODY_AST("(CALL (CALL (IDENT f)) (INT_LIT 0))"),
+                 BODY(ID("f"), UNIT_VALUE, TOK(L_PAREN), INT(0),
+                      TOK(R_PAREN)));
+    }
+
+    it("parses (a + b)(0) with the parenthesised expression as callee") {
+      ASSERT_AST(BODY_AST("(CALL (ADD (IDENT a) (IDENT b)) (INT_LIT 0))"),
+                 BODY(TOK(L_PAREN), ID("a"), TOK(OPERATOR_PLUS), ID("b"),
+                      TOK(R_PAREN), TOK(L_PAREN), INT(0), TOK(R_PAREN)));
+    }
+
+    it("parses xs.tail(0) with the member as callee") {
+      ASSERT_AST(BODY_AST("(CALL (MEMBER tail (IDENT xs)) (INT_LIT 0))"),
+                 BODY(ID("xs"), TOK(PERIOD), ID("tail"), TOK(L_PAREN), INT(0),
+                      TOK(R_PAREN)));
+    }
+
+    // Changes: new, list members.
+    it("parses xs.head as a MEMBER of the receiver") {
+      ASSERT_AST(BODY_AST("(MEMBER head (IDENT xs))"),
+                 BODY(ID("xs"), TOK(PERIOD), ID("head")));
+    }
+
+    it("parses xs.take(2) as a CALL of the MEMBER") {
+      ASSERT_AST(BODY_AST("(CALL (MEMBER take (IDENT xs)) (INT_LIT 2))"),
+                 BODY(ID("xs"), TOK(PERIOD), ID("take"), TOK(L_PAREN), INT(2),
+                      TOK(R_PAREN)));
+    }
+
+    it("parses xs.slice(1, 3) with both arguments after the MEMBER") {
+      ASSERT_AST(BODY_AST("(CALL (MEMBER slice (IDENT xs)) (INT_LIT 1) "
+                          "(INT_LIT 3))"),
+                 BODY(ID("xs"), TOK(PERIOD), ID("slice"), TOK(L_PAREN),
+                      INT(1), TOK(COMMA), INT(3), TOK(R_PAREN)));
+    }
+
+    it("chains xs.tail.tail.head as nested MEMBERs") {
+      ASSERT_AST(
+          BODY_AST("(MEMBER head (MEMBER tail (MEMBER tail (IDENT xs))))"),
+          BODY(ID("xs"), TOK(PERIOD), ID("tail"), TOK(PERIOD), ID("tail"),
+               TOK(PERIOD), ID("head")));
+    }
+
+    it("chains xs.drop(1).toString as a MEMBER of a CALL") {
+      ASSERT_AST(BODY_AST("(MEMBER toString (CALL (MEMBER drop (IDENT xs)) "
+                          "(INT_LIT 1)))"),
+                 BODY(ID("xs"), TOK(PERIOD), ID("drop"), TOK(L_PAREN), INT(1),
+                      TOK(R_PAREN), TOK(PERIOD), ID("toString")));
+    }
+
+    it("binds an index tighter than the operators around it") {
+      // 1 + m(0)(1) * 2
+      ASSERT_AST(BODY_AST("(ADD (INT_LIT 1) (MUL (CALL (CALL (IDENT m) "
+                          "(INT_LIT 0)) (INT_LIT 1)) (INT_LIT 2)))"),
+                 BODY(INT(1), TOK(OPERATOR_PLUS), ID("m"), TOK(L_PAREN),
+                      INT(0), TOK(R_PAREN), TOK(L_PAREN), INT(1), TOK(R_PAREN),
+                      TOK(OPERATOR_MULTIPLY), INT(2)));
+    }
+
+    it("takes a member of an indexed parenthesised expression") {
+      // (a + b)(0).head
+      ASSERT_AST(BODY_AST("(MEMBER head (CALL (ADD (IDENT a) (IDENT b)) "
+                          "(INT_LIT 0)))"),
+                 BODY(TOK(L_PAREN), ID("a"), TOK(OPERATOR_PLUS), ID("b"),
+                      TOK(R_PAREN), TOK(L_PAREN), INT(0), TOK(R_PAREN),
+                      TOK(PERIOD), ID("head")));
+    }
+
+    it("rejects an unclosed index") {
+      ASSERT_SYNTAX_ERRORS(
+          // f()(0
+          ONE(ID("f"), UNIT_VALUE, TOK(L_PAREN), INT(0)),
+          // (a)(
+          ONE(TOK(L_PAREN), ID("a"), TOK(R_PAREN), TOK(L_PAREN)));
+    }
+
+    // Changes: new, List.range as one IDENT operand.
+    it("parses List.range(a, b) as a CALL of the one IDENT List.range") {
+      ASSERT_AST(BODY_AST("(CALL (IDENT List.range) (INT_LIT 1) (INT_LIT 5))"),
+                 BODY(TOK(TYPE_LIST), TOK(PERIOD), ID("range"), TOK(L_PAREN),
+                      INT(1), TOK(COMMA), INT(5), TOK(R_PAREN)));
+    }
+
+    it("parses List.range(a, b, step) with the step as written") {
+      ASSERT_AST(BODY_AST("(CALL (IDENT List.range) (INT_LIT 0) (INT_LIT 10) "
+                          "(INT_LIT 2))"),
+                 BODY(TOK(TYPE_LIST), TOK(PERIOD), ID("range"), TOK(L_PAREN),
+                      INT(0), TOK(COMMA), INT(10), TOK(COMMA), INT(2),
+                      TOK(R_PAREN)));
+    }
+
+    it("parses any List.name as a CALL of one IDENT") {
+      ASSERT_AST(BODY_AST("(CALL (IDENT List.fill) (INT_LIT 3))"),
+                 BODY(TOK(TYPE_LIST), TOK(PERIOD), ID("fill"), TOK(L_PAREN),
+                      INT(3), TOK(R_PAREN)));
+    }
+
+    it("takes a bare List.range as one operand and rejects a missing name") {
+      ASSERT_AST(BODY_AST("(ADD (IDENT List.range) (INT_LIT 1))"),
+                 BODY(TOK(TYPE_LIST), TOK(PERIOD), ID("range"),
+                      TOK(OPERATOR_PLUS), INT(1)));
+      ASSERT_SYNTAX_ERRORS(
+          // List.
+          ONE(TOK(TYPE_LIST), TOK(PERIOD)),
+          // List.(1)
+          ONE(TOK(TYPE_LIST), TOK(PERIOD), TOK(L_PAREN), INT(1),
+              TOK(R_PAREN)));
+    }
+
+    it("follows the argument-list rule for a trailing comma and bad lists") {
+      // A trailing comma before a line break is accepted
+      ASSERT_AST(BODY_AST("(CALL (IDENT List) (INT_LIT 1))"),
+                 PROLOG, DEF_F,
+                 LINE(2), TOK(TYPE_LIST), TOK(L_PAREN), INT(1), TOK(COMMA),
+                   BREAK, LINE(4), TOK(R_PAREN), EOL);
+      ASSERT_SYNTAX_ERRORS(
+          // List(1,)
+          ONE(TOK(TYPE_LIST), TOK(L_PAREN), INT(1), TOK(COMMA), TOK(R_PAREN)),
+          // List(,1)
+          ONE(TOK(TYPE_LIST), TOK(L_PAREN), TOK(COMMA), INT(1), TOK(R_PAREN)),
+          // List(1
+          ONE(TOK(TYPE_LIST), TOK(L_PAREN), INT(1)),
+          // List on its own is a type name, not a value
+          ONE(TOK(TYPE_LIST)));
+    }
+
+    it("rejects malformed list types as syntax errors") {
+      ASSERT_SYNTAX_ERRORS(
+          // def f(): List[] = xs
+          ROW(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON),
+              TOK(TYPE_LIST), TOK(L_BRACKET), TOK(R_BRACKET), TOK(ASSIGN),
+              ID("xs"), EOL),
+          // def f(): List[Int = xs
+          ROW(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON),
+              TOK(TYPE_LIST), TOK(L_BRACKET), TOK(TYPE_INT), TOK(ASSIGN),
+              ID("xs"), EOL),
+          // def f(): List Int = xs
+          ROW(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON),
+              TOK(TYPE_LIST), TOK(TYPE_INT), TOK(ASSIGN), ID("xs"), EOL),
+          // def f(): List[Int]] = xs
+          ROW(PROLOG, TOK(DEF), ID("f"), UNIT_VALUE, TOK(COLON),
+              LIST_OF(INT_TYPE), TOK(R_BRACKET), TOK(ASSIGN), ID("xs"), EOL));
     }
   }
 
@@ -864,6 +1119,57 @@ describe(parser) {
                  LINE(2), TOK(VAL), ID("to"), TOK(ASSIGN), ID("by"), EOL);
     }
 
+    // Changes: new, for over a list.
+    it("parses a for over a list source in both header forms") {
+      // def f() =
+      //   for x <- xs do y
+      //   for x <- g() if a do y
+      //   for
+      //     row <- List(1, 2)
+      //     if a
+      //   do y
+      //   for i <- xs to 3 do y
+      ASSERT_AST(
+          BODY_AST("(FOR (IDENT x) (IDENT xs) (BLOCK (IDENT y))) "
+                   "(FOR (IDENT x) (CALL (IDENT g)) (BLOCK (IDENT y)) "
+                   "(IDENT a)) "
+                   "(FOR (IDENT row) (CALL (IDENT List) (INT_LIT 1) "
+                   "(INT_LIT 2)) (BLOCK (IDENT y)) (IDENT a)) "
+                   "(FOR (IDENT i) (RANGE_TO (IDENT xs) (INT_LIT 3) NONE) "
+                   "(BLOCK (IDENT y)))"),
+          PROLOG, DEF_F,
+          LINE(2), TOK(FOR), ID("x"), TOK(CONTROL_ARROW), ID("xs"), TOK(DO),
+            ID("y"), EOL,
+          LINE(2), TOK(FOR), ID("x"), TOK(CONTROL_ARROW), ID("g"),
+            TOK(L_PAREN), TOK(R_PAREN), TOK(IF), ID("a"), TOK(DO), ID("y"),
+            EOL,
+          LINE(2), TOK(FOR), EOL,
+          LINE(4), ID("row"), TOK(CONTROL_ARROW), TOK(TYPE_LIST),
+            TOK(L_PAREN), INT(1), TOK(COMMA), INT(2), TOK(R_PAREN), EOL,
+          LINE(4), TOK(IF), ID("a"), EOL,
+          LINE(2), TOK(DO), ID("y"), EOL,
+          LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), ID("xs"),
+            ID("to"), INT(3), TOK(DO), ID("y"), EOL);
+    }
+
+    // Changes: new, a parenthesised range value as the for source.
+    it("parses a parenthesised range value, with a step, as the for source") {
+      // def f() =
+      //   for x <- (1 to 5) do y
+      //   for x <- (1 until 9 by 2) do y
+      ASSERT_AST(
+          BODY_AST("(FOR (IDENT x) (RANGE_TO (INT_LIT 1) (INT_LIT 5) NONE) "
+                   "(BLOCK (IDENT y))) "
+                   "(FOR (IDENT x) (RANGE_UNTIL (INT_LIT 1) (INT_LIT 9) "
+                   "(INT_LIT 2)) (BLOCK (IDENT y)))"),
+          PROLOG, DEF_F,
+          LINE(2), TOK(FOR), ID("x"), TOK(CONTROL_ARROW), TOK(L_PAREN),
+            INT(1), ID("to"), INT(5), TOK(R_PAREN), TOK(DO), ID("y"), EOL,
+          LINE(2), TOK(FOR), ID("x"), TOK(CONTROL_ARROW), TOK(L_PAREN),
+            INT(1), ID("until"), INT(9), ID("by"), INT(2), TOK(R_PAREN),
+            TOK(DO), ID("y"), EOL);
+    }
+
     it("rejects malformed while and for statements") {
       ASSERT_SYNTAX_ERRORS(
           // for i <- 1 tu 5 do x
@@ -876,9 +1182,6 @@ describe(parser) {
           // for i <- 1 to 5 bye 2 do x
           MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
                ID("to"), INT(5), ID("bye"), INT(2), TOK(DO), ID("x"), EOL),
-          // for i <- 1 do x
-          MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
-               TOK(DO), ID("x"), EOL),
           // for i <- 1 to do x
           MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
                ID("to"), TOK(DO), ID("x"), EOL),
@@ -905,6 +1208,12 @@ describe(parser) {
           // for i <- do x
           MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), TOK(DO),
                ID("x"), EOL),
+          // for x <- xs by 2 do y, a list source takes no step
+          MANY(LINE(2), TOK(FOR), ID("x"), TOK(CONTROL_ARROW), ID("xs"),
+               ID("by"), INT(2), TOK(DO), ID("y"), EOL),
+          // for x <- xs 5 do y, the source ends at a token that is no keyword
+          MANY(LINE(2), TOK(FOR), ID("x"), TOK(CONTROL_ARROW), ID("xs"),
+               INT(5), TOK(DO), ID("y"), EOL),
           // for i <- 1 to 5 if do x
           MANY(LINE(2), TOK(FOR), ID("i"), TOK(CONTROL_ARROW), INT(1),
                ID("to"), INT(5), TOK(IF), TOK(DO), ID("x"), EOL),
