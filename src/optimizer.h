@@ -76,6 +76,13 @@ void optimizer_init(OptimizerCtx* optimizer);
 void optimizer_prepare(Ctx* ctx);
 
 /**
+ * @brief Resizes the optimizer context to fit the current IR size
+ *
+ * @param[in,out] ctx The context of the program
+ */
+void optimizer_resize(Ctx* ctx);
+
+/**
  * @brief Frees the optimizer context
  *
  * @param[in,out] optimizer The context of the optimizer
