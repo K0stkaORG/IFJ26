@@ -33,15 +33,32 @@ void optimize_ir(Ctx* ctx);
  * efficient memory usage.
  */
 typedef struct {
-  // Number of times each value is used (valid only in specific contexts)
-  size_t* value_uses;
+  // Stores the sizes of the dynamic memory pools
+  struct {
+    size_t values;
+    size_t blocks;
+    size_t functions;
+  } sizes;
 
-  // Tracks whether each block/function is reachable (valid only in specific
+  // Stores some data for each temporary value (valid only in specific contexts)
+  size_t* value_data;
+
+  // Tracks whether some condition holds for each block (valid only in specific
   // contexts)
-  bool* reachable;
+  bool* blocks;
 
-  // Maps block/function IDs to their new IDs (valid only in specific contexts)
-  size_t* id_map;
+  // Stores some data for each block (valid only in specific contexts)
+  size_t* block_data;
+
+  // Tracks whether some condition holds for each function (valid only in
+  // specific contexts)
+  bool* functions;
+
+  // Maps function IDs to their new IDs (valid only in specific contexts)
+  size_t* function_id_map;
+
+  // CFG scratch storage
+  void* cfg_facts;
 } OptimizerCtx;
 
 /**

@@ -20,7 +20,7 @@ describe(optimizer) {
     it("initializes optimizer context to default values") {
       optimizer_init(&ctx->optimizer);
 
-      assert(ctx->optimizer.value_uses == NULL);
+      assert(ctx->optimizer.value_data == NULL);
     }
   }
 
@@ -38,12 +38,12 @@ describe(optimizer) {
 
       optimizer_prepare(ctx);
 
-      assert(ctx->optimizer.value_uses != NULL);
+      assert(ctx->optimizer.value_data != NULL);
 
       for (size_t i = 0; i < max_values; i++)
-        ctx->optimizer.value_uses[i] = i + 1;
+        ctx->optimizer.value_data[i] = i + 1;
       for (size_t i = 0; i < max_values; i++)
-        assert(ctx->optimizer.value_uses[i] == i + 1);
+        assert(ctx->optimizer.value_data[i] == i + 1);
     }
 
     it("throws on allocation failure") {
@@ -52,7 +52,7 @@ describe(optimizer) {
 
       assertThrow(E_INTERNAL_ERROR, { optimizer_prepare(ctx); });
 
-      assert(ctx->optimizer.value_uses == NULL);
+      assert(ctx->optimizer.value_data == NULL);
     }
   }
 
@@ -60,17 +60,17 @@ describe(optimizer) {
     it("frees empty optimizer context correctly") {
       optimizer_free(&ctx->optimizer);
 
-      assert(ctx->optimizer.value_uses == NULL);
+      assert(ctx->optimizer.value_data == NULL);
     }
 
     it("frees all allocated memory") {
       generate_mock_ir(&ctx->ir);
       optimizer_prepare(ctx);
-      assert(ctx->optimizer.value_uses != NULL);
+      assert(ctx->optimizer.value_data != NULL);
 
       optimizer_free(&ctx->optimizer);
 
-      assert(ctx->optimizer.value_uses == NULL);
+      assert(ctx->optimizer.value_data == NULL);
     }
 
     it("is safe to call twice") {
@@ -80,7 +80,7 @@ describe(optimizer) {
       optimizer_free(&ctx->optimizer);
       optimizer_free(&ctx->optimizer);
 
-      assert(ctx->optimizer.value_uses == NULL);
+      assert(ctx->optimizer.value_data == NULL);
     }
   }
 
