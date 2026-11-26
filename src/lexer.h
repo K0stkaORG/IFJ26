@@ -171,6 +171,20 @@ typedef struct {
 } LexerCtx;
 
 /**
+ * @brief Initializes the lexer context
+ *
+ * @param lexer pointer to the lexer context
+ */
+void lexer_init(LexerCtx* lexer);
+
+/**
+ * @brief Frees the lexer context
+ *
+ * @param ctx pointer to the context
+ */
+void ctx_free_lexer(Ctx* ctx);
+
+/**
  * @brief Returns next token and deletes from the reel
  *
  * @return Next token

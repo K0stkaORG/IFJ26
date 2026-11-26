@@ -16,6 +16,34 @@
 #include "lexer_internal.h"
 
 /**
+ * @brief Initializes the lexer context
+ *
+ * @param lexer pointer to the lexer context
+ */
+void lexer_init(LexerCtx* lexer) {
+  array_init(&lexer->buffer);
+  array_init(&lexer->stack);
+  array_init(&lexer->saved_stack);
+  lexer->line = 1;
+  lexer->column = 1;
+  lexer->cursor = 0;
+  lexer->indent_flag = INDENTATION;
+  lexer->indent_level = 0;
+  lexer->multiline_comment_end_line = 0;
+}
+
+/**
+ * @brief Frees the lexer context
+ *
+ * @param ctx pointer to the context
+ */
+void ctx_free_lexer(Ctx* ctx) {
+  array_free(&ctx->lexer.buffer);
+  array_free(&ctx->lexer.stack);
+  array_free(&ctx->lexer.saved_stack);
+}
+
+/**
  * @brief provides next token from the stdin stream
  *
  * @param ctx context of the compiler
