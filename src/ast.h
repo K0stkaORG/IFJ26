@@ -2,7 +2,9 @@
 // Prompt: "implementation done using skill: mattpocock-skills:implement-spec,
 // semantics ticket 01 (AST prefactor), parser tickets 06-07;
 // mattpocock-skills:implement, review judgement calls;
-// mattpocock-skills:implement, AST wrap operation (ast_node_wrap)"
+// mattpocock-skills:implement, AST wrap operation (ast_node_wrap)";
+// "implementation done using skill: mattpocock-skills:implement-spec, LISTS
+// tickets 01-10 and review fixes"
 // Changes: only the declarations with a Changes note.
 /**
  * @file ast.h
@@ -19,6 +21,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "ctx.h"
 
 typedef struct AstNode AstNode;
@@ -230,6 +233,7 @@ typedef enum {
   AST_DATA_TYPE_DOUBLE,
   AST_DATA_TYPE_BOOLEAN,
   AST_DATA_TYPE_STRING,
+  AST_DATA_TYPE_LIST,
   AST_DATA_TYPE_UNIT,
 } AstDataType;
 
@@ -270,7 +274,7 @@ typedef enum {
  * The node owns a copy of string_value, the caller keeps its own string.
  */
 typedef union {
-  int int_value;
+  int64_t int_value;
   double double_value;
   bool boolean_value;
   const char* string_value;
@@ -306,6 +310,28 @@ void ast_node_destroy(Ctx* ctx, AstNode* node);
 void ast_node_set_type(AstNode* node, AstNodeType type);
 
 /**
+ * @brief Sets type for (list) element of given node
+ *
+ * @pre Node pointer is not NULL!
+ * @param node pointer to a AST node
+ * @param elem_type type to set for given element
+ */
+void ast_node_set_element_type(AstNode* node, AstDataType elem_type);
+
+// Changes: new, the list depth setter.
+/**
+ * @brief Sets the list depth of given node (ADR-0006)
+ *
+ * A list type is a base type plus a depth: the node's element type is the
+ * base, the depth counts the nested `List`s (0 for a plain value).
+ *
+ * @pre Node pointer is not NULL!
+ * @param node pointer to a AST node
+ * @param depth number of nested lists
+ */
+void ast_node_set_list_depth(AstNode* node, size_t depth);
+
+/**
  * @brief Sets value for given node
  *
  * For a STRING_LIT node, the node stores its own copy of value.string_value
@@ -327,6 +353,25 @@ void ast_node_set_value(Ctx* ctx, AstNode* node, AstNodeValue value);
  * @return node type
  */
 AstNodeType ast_node_get_type(const AstNode* node);
+
+/**
+ * @brief Returns node (list) element type
+ *
+ * @pre Node pointer is not NULL!
+ * @param node pointer to a AST node
+ * @return element type
+ */
+AstDataType ast_node_get_element_type(const AstNode* node);
+
+// Changes: new, the list depth getter.
+/**
+ * @brief Returns the list depth of given node (0 until type checking sets it)
+ *
+ * @pre Node pointer is not NULL!
+ * @param node pointer to a AST node
+ * @return number of nested lists
+ */
+size_t ast_node_get_list_depth(const AstNode* node);
 
 /**
  * @brief Returns node value

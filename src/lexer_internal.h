@@ -104,6 +104,9 @@ typedef enum {
   UNIT_WITH_WHITESPACE,            // q81
   TRAP_INVALID_INT,                // q82
   TRAP_INVALID_DOUBLE,             // q83
+  CONCAT_STATE,                    // q84
+  LEFT_BRACKET,                    // q85
+  RIGHT_BRACKET,                   // q86
 } State;
 
 // enum for internal fsm stack

@@ -18,9 +18,8 @@
 #ifndef EXPR_PARSER_H
 #define EXPR_PARSER_H
 
-#include "ast.h"              // AstNode
-#include "ctx.h"              // Ctx
-#include "parser_internal.h"  // Parser
+#include "ast.h"  // AstNode
+#include "ctx.h"  // Ctx
 
 /**
  * @brief Parses one expression starting at the current token.

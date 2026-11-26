@@ -41,6 +41,11 @@ typedef struct Symtable {
  * @param param_count for functions: number of parameters function accepts
  * @param param_types for functions: array of types of function params
  * @param is_val for variables: is value or variable (true if value)
+ * @param element_type type of element (list)
+ * @param param_element_types types of elements in parameters (lists as params)
+ * @param list_depth number of nested lists of the type (0 for a plain value)
+ * element_type is the base type
+ * @param param_list_depths for functions: list depth of every parameter
  */
 typedef struct SymtableData {
   // common
@@ -54,6 +59,12 @@ typedef struct SymtableData {
 
   // variables
   bool is_val;
+
+  // lists
+  IrType element_type;
+  IrType* param_element_types;
+  size_t list_depth;
+  size_t* param_list_depths;
 } SymtableData;
 
 /**
@@ -79,8 +90,9 @@ void symtable_destroy(Symtable* table);
  * @param data Symbol table data
  * @pre Table must be initialized
  * @pre Caller retains ownership of identifier string
- * @pre Data passed by value. param_types in the struct must be allocated on
- * heap by caller and ownership is transferred to symtable.
+ * @pre Data passed by value. param_types, param_element_types and
+ * param_list_depths in the struct must be NULL or allocated on heap by caller
+ * and ownership is transferred to symtable.
  */
 void symtable_insert(Ctx* ctx,
                      Symtable* table,

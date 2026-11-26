@@ -35,6 +35,8 @@ IrType ast_to_ir_data_type(Ctx* ctx, AstDataType data_type) {
       return IR_BOOL;
     case AST_DATA_TYPE_STRING:
       return IR_STRING;
+    case AST_DATA_TYPE_LIST:
+      return IR_ARRAY;
     case AST_DATA_TYPE_UNIT:
       return IR_UNIT;
 

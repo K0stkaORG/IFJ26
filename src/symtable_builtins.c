@@ -22,12 +22,11 @@ static void symtable_create_builtin(Ctx* ctx,
                                     IrType return_type,
                                     size_t param_count,
                                     IrType* params) {
-  SymtableData data;
+  SymtableData data = {0};
   data.symbol_type = SYMBOL_FUNCTION;
   data.ir_type = return_type;
   data.ir_index = fx_type;  // index in ir.h enum of built-in functions
   data.param_count = param_count;
-  data.is_val = false;
 
   if (param_count > 0) {
     IrType* param_arr = TRY_MALLOC(sizeof(IrType) * param_count);

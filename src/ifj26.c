@@ -16,6 +16,7 @@
 
 #include <stdio.h>  // fprintf, stderr
 
+#include "ast.h"
 #include "codegen.h"    // cg_generate
 #include "ctx.h"        // Shared memory and error context
 #include "lowering.h"   // lower_ast
@@ -47,15 +48,31 @@ int main(int argc, char** argv) {
     // Parse the input source code into an AST
     parser_parse(ctx);
 
+    // Free lexer struct/buffer
+    ctx_free_lexer(ctx);
+
     // Perform semantic analysis on the AST
     semantics_analyze(ctx);
 
     // Lower the AST to IR
     lower_ast(ctx);
 
+    // Free the AST
+    if (ctx->ast != NULL) {
+      AstNode* ast = ctx->ast;
+      ctx->ast = NULL;
+      ast_node_destroy(ctx, ast);
+    }
+
+    // Destroy global symbol table
+    symtable_destroy(&ctx->global_symtable);
+
     // Optimize the IR (if not disabled)
     if (!flags.disableOptimizations)
       optimize_ir(ctx);
+
+    // Free optimizer context
+    optimizer_free(&ctx->optimizer);
 
     // Generate output from the IR
     cg_generate(stdout, ctx);

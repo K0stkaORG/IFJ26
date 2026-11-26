@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "array.h"
 typedef struct Ctx Ctx;  // Forward declaration to avoid circular includes
 
@@ -25,6 +26,7 @@ typedef struct Ctx Ctx;  // Forward declaration to avoid circular includes
 typedef enum {
   IDENT,
 
+  // Keywords
   AT_MAIN,
   IMPORT,
   DEF,
@@ -37,36 +39,48 @@ typedef enum {
   WHILE,
   DO,
 
+  // Types
   TYPE_INT,
   TYPE_DOUBLE,
   TYPE_STRING,
   TYPE_UNIT,
+  TYPE_LIST,
 
+  // LISTS
+  L_BRACKET,
+  R_BRACKET,
+
+  // CONTROL, BOOLTHEN
   FOR,
   TYPE_BOOL,
   BOOL_TRUE,
   BOOL_FALSE,
 
+  // Values
   NUMBER_INT,
   NUMBER_DOUBLE,
-
   UNIT,
 
+  // Strings
   STRING,
   TRIPLE_STRING,
+
+  // INTERPOLATEDS
   S_STRING_START,
   S_STRING_END,
   TRIPLE_S_STRING_START,
   TRIPLE_S_STRING_END,
-
   DOLLAR_EXPRESSION_START,
   DOLLAR_EXPRESSION_END,
 
+  // Operators
   OPERATOR_PLUS,
   OPERATOR_MINUS,
   OPERATOR_MULTIPLY,
   OPERATOR_DIVIDE,
+  OPERATOR_CONCAT,
 
+  // Comparisons
   ASSIGN,
   COMPARISON_EQ,
   COMPARISON_NEQ,
@@ -75,10 +89,12 @@ typedef enum {
   COMPARISON_GE,
   COMPARISON_LE,
 
+  // BOOLTHEN
   BOOL_AND,
   BOOL_OR,
   BOOL_NEG,
 
+  // Punctuation
   L_PAREN,
   R_PAREN,
   COMMA,
@@ -86,8 +102,10 @@ typedef enum {
   COLON,
   SEMICOLON,
 
+  // CONTROL
   CONTROL_ARROW,
 
+  // Whitespace
   INDENT,
   EOL_TOKEN,
   WHITESPACE,
@@ -98,7 +116,7 @@ typedef enum {
  * @brief Union defining the value of a token
  */
 typedef union {
-  int integer;
+  int64_t integer;
   double decimal;
   char* text;
 } TokenValue;
@@ -121,6 +139,7 @@ typedef struct {
   TokenValueType value_type;
   size_t line;
   size_t column;
+  size_t numeric_length;
 } Token;
 
 /**
@@ -150,6 +169,20 @@ typedef struct {
   // forbidden.
   size_t multiline_comment_end_line;
 } LexerCtx;
+
+/**
+ * @brief Initializes the lexer context
+ *
+ * @param lexer pointer to the lexer context
+ */
+void lexer_init(LexerCtx* lexer);
+
+/**
+ * @brief Frees the lexer context
+ *
+ * @param ctx pointer to the context
+ */
+void ctx_free_lexer(Ctx* ctx);
 
 /**
  * @brief Returns next token and deletes from the reel
