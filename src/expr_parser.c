@@ -28,8 +28,9 @@
 
 #include "expr_parser.h"
 
-#include <stdio.h>   // snprintf
-#include <string.h>  // memmove
+#include <stdio.h>            // snprintf
+#include <string.h>           // memmove
+#include "parser_internal.h"  // Parser
 
 // === PRECEDENCE TABLE ===
 

@@ -446,9 +446,6 @@ describe(LEXER) {
   }
 
   it("Rejects numeric overflow") {
-    set_input(ctx, "2147483648 ");
-    assertThrow(E_LEXER_ERROR, { next_token(ctx); });
-    ctx->exit_code = E_OK;
     set_input(ctx, "1e9999 ");
     assertThrow(E_LEXER_ERROR, { next_token(ctx); });
     ctx->exit_code = E_OK;

@@ -34,6 +34,7 @@
 
 #include <stdbool.h>  // bool
 #include <stddef.h>   // size_t
+#include <stdint.h>
 
 // Changes: moved from parser_internal.h.
 /**
@@ -85,7 +86,7 @@ typedef struct {
   // the logical line and report lexical error 1 if its indentation is not
   // strictly greater." Changes: Keep the logical line's indentation across
   // continuations.
-  int logical_indent;
+  int64_t logical_indent;
 
   // Token that closed blocks without being a raw indent (a line in column 0,
   // the end of file), delivered after those closes (valid when has_held).

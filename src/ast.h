@@ -21,6 +21,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "ctx.h"
 
 typedef struct AstNode AstNode;
@@ -273,7 +274,7 @@ typedef enum {
  * The node owns a copy of string_value, the caller keeps its own string.
  */
 typedef union {
-  int int_value;
+  int64_t int_value;
   double double_value;
   bool boolean_value;
   const char* string_value;

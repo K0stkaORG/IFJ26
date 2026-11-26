@@ -17,6 +17,7 @@
 
 #include "token_layer.h"
 
+#include <stdint.h>
 #include <stdlib.h>  // free
 
 // Changes: moved from parser.c, frees only text the lexer marks with value_type
@@ -124,7 +125,7 @@ static Token fetch_token(Ctx* ctx, TokenLayer* layer) {
   // the logical line and report lexical error 1 if its indentation is not
   // strictly greater." Changes: Validate continuation indentation before hiding
   // line breaks.
-  int continuation_indent = 0;
+  int64_t continuation_indent = 0;
   while (true) {
     Token token = source_read(ctx, layer);
     // Line breaks inside parentheses are hidden, except in string text
@@ -194,7 +195,7 @@ static Token fetch_token(Ctx* ctx, TokenLayer* layer) {
       return token;
 
     IndentStack* indents = &layer->indents;
-    int indentation = closes_all ? 0 : token.value.integer;
+    int64_t indentation = closes_all ? 0 : token.value.integer;
     int enclosing = indents->data[indents->count - 1];
 
     // Same block, the raw indent is not visible to the grammar

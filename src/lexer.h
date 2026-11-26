@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "array.h"
 typedef struct Ctx Ctx;  // Forward declaration to avoid circular includes
 
@@ -115,7 +116,7 @@ typedef enum {
  * @brief Union defining the value of a token
  */
 typedef union {
-  int integer;
+  int64_t integer;
   double decimal;
   char* text;
 } TokenValue;
