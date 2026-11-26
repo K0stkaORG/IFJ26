@@ -139,6 +139,7 @@ typedef struct {
   TokenValueType value_type;
   size_t line;
   size_t column;
+  size_t numeric_length;
 } Token;
 
 /**
