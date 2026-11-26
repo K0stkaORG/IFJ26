@@ -146,7 +146,7 @@
 
   \begin{tabular}{ll}
     \textbf{Varianta:} & vv-BVS \\
-    \textbf{Implementovaná rozšíření:} & \texttt{FUNEXP}, \texttt{BOOLTHEN}, \texttt{CONTROL}, \texttt{VALMEM}, \texttt{INTERPOLATEDS} \\
+    \textbf{Implementovaná rozšíření:} & \texttt{FUNEXP}, \texttt{BOOLTHEN}, \texttt{CONTROL}, \texttt{VALMEM}, \texttt{INTERPOLATEDS}, \texttt{LISTS} \\
     \textbf{Git repozitář:} & \url{https://github.com/K0stkaORG/IFJ26} \\
   \end{tabular}
 
@@ -186,17 +186,17 @@
 \section{Týmová spolupráce}
 
 \subsection{Způsob spolupráce, code review a schvalování PR}
-Základ splupráce spočíval v rozdělení celého projektu na jednotlivé části. Prvním úkolem každého bylo připravit veřejný interface jeho části (interface vždy vlastnila ta část, která ho emitovala) což nám dalo možnost vývoj velmi brzo paralelizovat. Toto se nám povedlo bez větších potíží. Nicméně při zpětném pohledu na návrh určitých částí (hlavně IR) si jsme vědomi, že jsou věci, které by šlo udělat jinak (hlavně posunout řešení vestavěných funkcí z CG do loweringu).
+Základ spolupráce spočíval v rozdělení celého projektu na jednotlivé části. Prvním úkolem každého bylo připravit veřejné rozhraní dané části (rozhraní vždy vlastnila ta část, která ho emitovala), což nám dalo možnost vývoj velmi brzo paralelizovat. To se nám povedlo bez větších potíží. Nicméně při zpětném pohledu na návrh určitých částí (hlavně IR) jsme si vědomi, že jsou věci, které by šlo udělat jinak (hlavně posunout řešení vestavěných funkcí z CG do loweringu).
 
-Primární kanál pro komunikaci pro nás byl Discord. Při naší velikosti týmu jsme s ním na žádný problém nenarazili a jeho silné stránky (rychlost, zvyk ho používat) se nám velmi oplatily v časovém nedostatku, se kterým jsme se potýkali ve finálním týdnu projektu (hlavně ze strany ostatních projektů/testů).
+Náš primární komunikační kanál byl Discord. Při velikosti našeho týmu jsme s ním na žádný problém nenarazili a jeho silné stránky (rychlost, zvyk ho používat) se nám velmi oplatily v časovém nedostatku, se kterým jsme se potýkali ve finálním týdnu projektu (hlavně ze strany ostatních projektů/testů).
 
-Pro code review jsme využívali nástroje platformy GitHub. Zpravidla vždy kód kontroloval člověk, který měl na starost tu část projektu, která měla dané změně nejblíže. Tzn. například pokud byly změny v tom, jak lexer řeší indentaci, code review dělal člověk, co má na starost parser. Pokud to v daný okamžik nebylo možné, udělal review Jan Kostka, aby se projekt zbytečně nezadrhnul. Jak se projekt rozrůstal, bylo do procesu schvalování PR postupně zaváděno automatizované testování.
+Pro code review jsme využívali nástroje platformy GitHub. Zpravidla vždy kód kontroloval člověk, který měl na starost tu část projektu, která měla dané změně nejblíže. Tzn. například pokud byly změny v tom, jak lexer řeší odsazení, code review dělal člověk, který má na starost parser. Pokud to v daný okamžik nebylo možné, udělal review Jan Kostka, aby se projekt zbytečně nezadrhnul. Jak se projekt rozrůstal, bylo do procesu schvalování PR postupně zaváděno automatizované testování.
 
 \subsection{Testování}
-V rámci projektu jsme využili 3 formy automatického testování pro samotný kód a poloautomatické testování pro stavový automat v lexeru. Hlavní potíž byla rozmanitost vývojových prostředí (Windows x86, Windows on ARM, Linux, macOS) a neergonomičnost běžných řešení (v C), kterou se nám ale podařilo velmi robustně vyřešit do takové úrovně, že plánujeme testovací nástroje extrahovat z tohoto projektu a využít v budoucnu i pro jiné projekty.
+V rámci projektu jsme využili 3 formy automatického testování pro samotný kód a poloautomatické testování pro stavový automat v lexeru. Hlavní potíží byla rozmanitost vývojových prostředí (Windows x86, Windows on ARM, Linux, macOS) a neergonomičnost běžných řešení (v C), kterou se nám ale podařilo velmi robustně vyřešit až na úroveň, že plánujeme testovací nástroje extrahovat z tohoto projektu a využít je v budoucnu i pro jiné projekty.
 
 \subsubsection{Jednotkové testy}
-Pro jednotkové testy jsme využili silně upravenou knihovnu snow.h\footnote{Knihovna Snow -- \url{https://github.com/mortie/snow}}. Za její silnou stránku jsme považovali (subjektivně) lepší čitelnost testů oproti například GTest a skutečnost, že se jedná pouze o jeden hlavičkový soubor. Pomocí agenta byla rozšířena o kompatibilitu s Windows a integraci s naším způsobem řešení paměti a chyb.
+Pro jednotkové testy jsme využili silně upravenou knihovnu snow.h\footnote{Knihovna Snow -- \url{https://github.com/mortie/snow}}. Za její silnou stránku jsme považovali (subjektivně) lepší čitelnost testů oproti například GTestu a skutečnost, že se jedná pouze o jeden hlavičkový soubor. Pomocí agenta byla rozšířena o kompatibilitu s Windows a integraci s naším způsobem řešení paměti a chyb.
 
 \begin{lstlisting}[style=cstyle]
 it("keeps buffer contents after failure") {
@@ -214,13 +214,13 @@ it("keeps buffer contents after failure") {
 \end{lstlisting}
 
 \subsubsection{End-to-end testy}
-End-to-end testy jsme spouštěli v prostředí co nejvíce podobném reálnému použití. Compiler dostal IFJ26 na stdin a musel na stdout vyprodukovat IFJ26Code, který po spuštění referenčním interpretem vykazoval správné chování. Konkrétní podoba IFJ26Code nebyla definována. Každý test byl spuštěn dvakrát, jednou se zapnutou a jednou s vypnutou optimalizací pro odhalení chyb v optimalizátoru. Poskytnutá testovací data jsme s pomocí AI značně rozšířili (cca 1500 příkladů). Takto vygenerované testy nebyly zcela bezchybné a cca 100 jsme po manuální kontrole odstranili. U nepřesně specifikovaných věcí jsme se snažili napodobit chování Scaly.
+End-to-end testy jsme spouštěli v prostředí co nejvíce podobném reálnému použití. Překladač dostal IFJ26 na stdin a musel na stdout vyprodukovat IFJ26Code, který po spuštění referenčním interpretem vykazoval správné chování. Konkrétní podoba IFJ26Code nebyla definována. Každý test byl spuštěn dvakrát, jednou se zapnutou a jednou s vypnutou optimalizací pro odhalení chyb v optimalizátoru. Poskytnutá testovací data jsme s pomocí AI značně rozšířili (cca 1500 příkladů). Takto vygenerované testy nebyly zcela bezchybné a cca 100 jsme po manuální kontrole odstranili. U nepřesně specifikovaných věcí jsme se snažili napodobit chování Scaly.
 
 \subsubsection{Paměťové testy}
-Běžnou dvojici jednotkových a e2e testů jsme rozšířili o testy práce s pamětí. Tyto testy spustili překladač na jednom konkrétním e2e testu, který byl navržen aby obsáhl co nejvíce komplexity. Testovaný binární soubor překladače byl upraven, aby se proces při každém volání funkce malloc/realloc rozdvojil. V jednom z procesů bylo následně vynuceno selhání dané funkce. Program pak musel korektně pokračovat/zkončit v obou případech. U těchto testů jsme narazili na potíže s multiplatformností, kdy je dokonce ani na určitých distribucích Linux kvůli chybám v nástroji Valgrind nebylo možno spustit. Samozřejmě testy pak nefungovaly na platformách, kde není Valgrind dostupný. Toto jsme v omezeném čase vyřešilil jejich spouštěním až v rámci CI/CD, která na to byla připravena.
+Běžnou dvojici jednotkových a e2e testů jsme rozšířili o testy práce s pamětí. Tyto testy spustily překladač na jednom konkrétním e2e testu, který byl navržen, aby zahrnoval co nejkomplexnější situace. Testovaný binární soubor překladače byl upraven, aby se proces při každém volání funkce malloc/realloc rozdvojil. V jednom z procesů bylo následně vynuceno selhání dané funkce. Program pak musel korektně pokračovat/skončit v obou případech. U těchto testů jsme narazili na potíže s multiplatformností, kdy je ani na určitých distribucích Linuxu kvůli chybám v nástroji Valgrind nebylo možno spustit. Samozřejmě testy pak nefungovaly na platformách, kde není Valgrind dostupný. Toto jsme v omezeném čase vyřešili jejich spouštěním až v rámci CI/CD, které na to bylo připraveno.
 
 \subsubsection{Testy lexeru}
-V úvodních fázích projektu, při návrhu stavového automatu v jádře lexeru, jsme se všichni podíleli na ověřování jeho kvality. K tomu jsme využili nástroj vytvořený (s pomocí agentů) Davidem Aloisem Burešem -- Lexica\footnote{Lexica -- \url{https://lexica.daalbu.app}}. Ten nám umožnil kromě tradičního ověřování automatů pozorováním jejich grafu navíc zkusmo nechat automat tokenizovat sekvence znaků a i daný proces odkrokovat. Toto tento proces značně usnadnilo a urychlilo a pomohlo nám zachytit velmi specifické chyby v rané fázi celého procesu.
+V úvodních fázích projektu, při návrhu stavového automatu v jádře lexeru, jsme se všichni podíleli na ověřování jeho kvality. K tomu jsme využili nástroj vytvořený (s pomocí agentů) Davidem Aloisem Burešem -- Lexica\footnote{Lexica -- \url{https://lexica.daalbu.app}}. Ten nám umožnil kromě tradičního ověřování automatů pozorováním jejich grafu navíc zkusmo nechat automat tokenizovat sekvence znaků a i daný proces odkrokovat. To tento proces značně usnadnilo a urychlilo a pomohlo nám zachytit velmi specifické chyby v rané fázi celého procesu.
 
 \subsection{Styl formátování kódu}
 Z výchozích stylů formátování jsme zvolili \verb|clang-format --style=Chromium|, což bylo následně na začátku projektu spolu s konfigurací linteru sjednoceno pomocí konfiguračních souborů editoru, který používal celý tým (Zed).
@@ -234,7 +234,7 @@ Z výchozích stylů formátování jsme zvolili \verb|clang-format --style=Chro
 % význam komponent a jejich propojení.
 % ============================================================================
 \section{Architektura řešení}
-Program je rozdělen do 7 základních modulů: lexer, parser, sémantická analýza, lowering, optimalizátor, codegen a tabulka symbolů. Obecně jsou všechna data předávána prostřednictvím sdíleného kontextu. Ten kromě datových struktur obsahuje informace o konfiguraci překladače a kontext pro řešení chyb. Vyjímkou jsou lexer a tabulka symbolů, se kterými je komunikováno prostřednictvím funkcí.
+Program je rozdělen do 7 základních modulů: lexer, parser, sémantická analýza, lowering, optimalizátor, codegen a tabulka symbolů. Obecně jsou všechna data předávána prostřednictvím sdíleného kontextu. Ten kromě datových struktur obsahuje informace o konfiguraci překladače a kontext pro řešení chyb. Výjimkou jsou lexer a tabulka symbolů, se kterými je komunikováno prostřednictvím funkcí.
 
 % AI generated by: ZCode (GLM-5.3)
 % Prompt: "Replace the school name with logo in fitlogo.svg. Then, touch empty pdfs lexer.pdf, schema.pdf and make blokové schéma and konečný automat to include from these (later added) PDFs. Simply stitch the whole PDFs into the documentation."
@@ -247,7 +247,7 @@ Program je rozdělen do 7 základních modulů: lexer, parser, sémantická anal
 \end{figure}
 
 \subsection{Paměť a chybové stavy}
-Nejedná se sice o modul jako takový, nicméně tento problém řešíme pro jazyk C poměrně neobvyklým způsobem. Ve středu všeho je sdílený kontext, skrze který se dá dostat na každý blok dynamicky alokované paměti. Toto neznamená, že paměť je uvolňována až na konci programu, paměť je uvolněna hned, jak již není potřeba. Co nám to ale umožní je mít jednu cestu pro řešení libovolného chybového stavu. Ta se jednoduše podívá do sdíleného kontextu, co vše je v daný moment alokováno a korektně vše uvolní. Ruku v ruce s tím jde systém řešení chyb, který se chová velmi podobně tomu, co je běžné v moderních jazycích. Interně používá setjump/longjmp se zásobníkem chybových rámců. Celá problematika řešení chybových stavů pak vypadá takto:
+Nejedná se sice o modul jako takový, nicméně tento problém řešíme pro jazyk C poměrně neobvyklým způsobem. Ve středu všeho je sdílený kontext, prostřednictvím kterého se dá dostat na každý blok dynamicky alokované paměti. To neznamená, že paměť je uvolňována až na konci programu, paměť je uvolněna hned, jak již není potřeba. To nám umožní mít jen jednu cestu pro řešení libovolného chybového stavu. Ta se jednoduše podívá do sdíleného kontextu, co vše je v daný moment alokováno, a korektně vše uvolní. Ruku v ruce s tím jde systém řešení chyb, který se chová velmi podobně tomu, co je běžné v moderních jazycích. Interně používá \texttt{setjmp}/\texttt{longjmp} se zásobníkem chybových rámců. Celá problematika řešení chybových stavů pak vypadá takto:
 
 \vfill
 
@@ -283,14 +283,14 @@ int get_random(int seed) {
 
 \subsection{Lexer}
 Vstup: (\verb|stdin|) = IFJ26 \\
-Výstup: \verb|struct Token| - skrz \verb|next_token()| \\
+Výstup: \verb|struct Token| -- pomocí \verb|next_token()| \\
 Existuje vždy pouze v průběhu volání funkce \verb|next_token()|. Mezi jednotlivými voláními si ve sdíleném kontextu uchovává vnitřní stav zásobníkového automatu a buffer načtených, ale nezpracovaných znaků.
 
 \subsection{Parser}
-Vstup: \verb|struct Token| - skrz \verb|next_token()| \\
+Vstup: \verb|struct Token| -- pomocí \verb|next_token()| \\
 Výstup: \verb|struct AstNode*| = ukazatel na AST uložený ve sdíleném kontextu, zatím bez typů \\
-Zavolán jako první funkce mimo technickou přípravu. Postupně si načítá pomocí lexeru tokeny, které nejdřiv projdou token layer vrstvou.
-Ta přispůsobí příchozý tokeny gramatice a poskytne parseru aktuální token, posun a nahlédnutí na další token.
+Zavolán jako první funkce mimo technickou přípravu. Postupně si načítá pomocí lexeru tokeny, které nejdřív projdou \texttt{token\_layer} vrstvou.
+Ta přizpůsobí příchozí tokeny gramatice a poskytne parseru aktuální token, posun a nahlédnutí na další token.
 Samotný parser je rekurzivní sestup řízený LL tabulkou. Výrazy předá precedenčnímu parseru.
 
 \subsection{Symtable}
@@ -301,7 +301,7 @@ Vyhledávací tabulka slouží jako interface pro generický vyvážený BST. Ak
 \subsection{Sémantická analýza}
 Vstup: \verb|struct AstNode*| = neotypovaný AST \\
 Výstup: \verb|struct AstNode*| = otypovaný AST (stále ve sdíleném kontextu) \\
-Volá se po parseru jako samostatný průchod nad AST. Její ulohou je kontrolovat definice funkcí a proměnných, existenci \verb|@main|, typy a jejich odvození a správa rozsahu platností a tabulek symbolů.
+Volá se po parseru jako samostatný průchod nad AST. Její úlohou je kontrolovat definice funkcí a proměnných, existenci \verb|@main|, typy a jejich odvození a spravovat rozsahy platnosti a tabulky symbolů.
 
 \subsection{Lowering}
 Vstup: \verb|struct AstNode*| = otypovaný AST \\
@@ -311,7 +311,7 @@ Projde AST a převede ho na vnitřní reprezentaci programu. Ta je blízko výsl
 \subsection{Optimalizátor}
 Vstup: \verb|struct IrProgram| = vnitřní reprezentace programu \\
 Výstup: \verb|struct IrProgram| = upravená vnitřní reprezentace programu \\
-Pokud není deaktivován (-o0), pokusí se co nejvíce optimalizovat vnitřní reprezentaci programu. Iterativně ji prochází a pokud prokáže, že lze nějakou část odstranit/vyměnit, tak tuto úpravu provede v originální struktuře. Toto umožňuje optimalizátor zapnout/vypnout bez vedlejších efektů.
+Pokud není deaktivován (\texttt{-o0}), pokusí se co nejvíce optimalizovat vnitřní reprezentaci programu. Iterativně ji prochází, a pokud prokáže, že lze nějakou část odstranit/vyměnit, tak tuto úpravu provede v originální struktuře. Toto umožňuje optimalizátor zapnout/vypnout bez vedlejších efektů.
 
 \subsection{Codegen}
 Vstup: \verb|struct IrProgram| = vnitřní reprezentace programu (stále ve sdíleném kontextu) \\
@@ -344,16 +344,16 @@ Projde vnitřní reprezentaci programu a vygeneruje korespondující IFJ26Code.
 
 Používáme deterministický zásobníkový automat, který má pouze mírné odchylky od standardního modelu.
 
-Přechody používají pro čitelnost zjednodušený zápis podobný regexu.
-Poté následuje $\cdot$ , po kterém jsou uvedeny pravidla pro zásobník.
-Pro jednoduchost a velikost zápisu nejsou vypsána všechna pravidla pro zásobník, ale jsou sdružena čárkami (\verb|,|).
+Přechody používají pro čitelnost zjednodušený zápis podobný regulárním výrazům.
+Poté následuje $\cdot$ , po které jsou uvedena pravidla pro zásobník.
+Pro přehlednost nejsou detailně vypsána všechna pravidla pro zásobník, ale jsou sdružena čárkami (\verb|,|), pokud mají stejnou operaci.
 Pokud je přechod možný pro všechny vrcholy zásobníku, značí ho \verb|(any)|.
 
-Přechody jsou umožněny pouze pokud je na levé straně od → stav na vrcholu zásobníku.
+Přechody jsou umožněny, pouze pokud je na levé straně od $\rightarrow$ stav na vrcholu zásobníku.
 Máme definovaných několik operací:
 
 \begin{itemize}
-\item \texttt{keep} je základní operace, která porovná vrchol zásobníku s vybraným stavem a nezmění zásobník.
+    \item \texttt{keep} je základní operace, která porovná vrchol zásobníku s vybraným stavem a nezmění zásobník.
     Umožní přechod pouze v případě, že se vybraný stav shoduje s vrcholem.
     Tato operace se provede v případě, že není v automatu specifikováno jinak (v přechodu není $\rightarrow$).
 
@@ -368,7 +368,12 @@ Máme definovaných několik operací:
 % // AI generated by: Codex (gpt-6.2-sol)
 % // Prompt: "You can move images"
 % // Changes: Make room below the overview for the first row of state groups.
-\lexerdiagram[.25]{1}{Přehled konečného automatu lexikálního analyzátoru}
+% // AI generated by: Codex (gpt-6.2-sol)
+% // Prompt: "Increase the size of this graph, you can remove a bit of padding from the top of this page"
+% // Changes: Increase the scale of the lexer overview figure.
+\clearpage
+\vspace*{-14mm}
+\lexerdiagram[.31]{1}{Přehled konečného automatu lexikálního analyzátoru}
   {fig:automat}
 
 \subsection{Skupiny stavů}
@@ -798,40 +803,40 @@ i & $>$ & $>$ &  & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ &  & $>$ &  & $
     \item \texttt{array.c\,/\,array.h} Dynamické pole obecných typů
     \item \texttt{ast.c\,/\,ast.h} Abstraktní syntaktický strom a operace nad ním
     \item \texttt{bst.c\,/\,bst.h} Generický výškově vyvážený binární strom AVL
-    \item \texttt{codegen.c\,/\,codegen.h} Generátor kódu a inline IFJcode26 funkcí
+    \item \texttt{codegen.c\,/\,codegen.h} Generátor kódu a vestavěných IFJ26Code funkcí
     \item \texttt{ctx.c\,/\,ctx.h} Sdílený kontext, makra pro práci s pamětí, řešení chybových stavů
-    \item \texttt{expr\_parser.c\,/\,expr\_parser.h} Parsing výrazů precedenční syntaktickou analýzou.
+    \item \texttt{expr\_parser.c\,/\,expr\_parser.h} Parsing výrazů precedenční syntaktickou analýzou
     \item \texttt{ifj26.c} Vstupní bod programu
     \item \texttt{ir.c\,/\,ir.h} Vnitřní reprezentace překládaného kódu
     \item \texttt{ir\_free\_helpers.c\,/\,ir\_free\_helpers.h} Pomocné funkce pro uvolnění IR
     \item \texttt{ir\_helpers.c\,/\,ir\_helpers.h} Pomocné funkce pro práci s IR
-    \item \texttt{lexer.c\,/\,lexer.h} Lexer programu IFJ26
-    \item \texttt{lexer\_diagnostics.c} Zajištuje vzhled lexikálních chybových hlášek
+    \item \texttt{lexer.c\,/\,lexer.h} Lexer jazyka IFJ26
+    \item \texttt{lexer\_diagnostics.c} Zajišťuje vzhled lexikálních chybových hlášek
     \item \texttt{lexer\_helpers.c} Hlavní funkcí je přiřazení dat do struktury Token
     \item \texttt{lexer\_internal.h} Vnitřní výčtové typy pro lexer
     \item \texttt{lexer\_transitions.c} Přechody konečného zásobníkového automatu
     \item \texttt{lowering.c\,/\,lowering.h} Funkce pro převod AST na IR
-    \item \texttt{lowering\_control\_flow.c\,/\,lowering\_control\_flow.h} Převod konstrukcí \verb|if, while| a zkrácené vyhodnocování logických operátorů (vyhodnocování jen nutných operátorů)
+    \item \texttt{lowering\_control\_flow.c\,/\,lowering\_control\_flow.h} Převod konstrukcí \verb|if, while| a zkrácené vyhodnocování logických operátorů (vyhodnocování jen nutných operandů)
     \item \texttt{lowering\_expression.c\,/\,lowering\_expression.h} Pomocné funkce pro převod výrazů
     \item \texttt{lowering\_helpers.c\,/\,lowering\_helpers.h} Pomocné funkce pro převod AST na IR
     \item \texttt{lowering\_range.c\,/\,lowering\_range.h} Převod cyklů \verb|for| nad rozsahy včetně kroku a filtrovacích podmínek
     \item \texttt{lowering\_statement.c\,/\,lowering\_statement.h} Převod příkazů a bloků a přidělování slotů pro lokální proměnné
     \item \texttt{optimizer.c\,/\,optimizer.h} Vnější rozhraní optimalizátoru
-    \item \texttt{optimizer\_constant\_folding.c\,/\,optimizer\_constant\_folding.h} Pomocné funkce pro optimalizování konstantních výrazů (1 + 2)
+    \item \texttt{optimizer\_constant\_folding.c\,/\,optimizer\_constant\_folding.h} Pomocné funkce pro optimalizování konstantních výrazů (\texttt{1 + 2})
     \item \texttt{optimizer\_constant\_propagation.c\,/\,optimizer\_constant\_propagation.h} Pomocné funkce pro šíření konstantních hodnot
     \item \texttt{optimizer\_control\_flow.c\,/\,optimizer\_control\_flow.h} Pomocné funkce pro odstraňování nedosažitelných funkcí/bloků kódu
     \item \texttt{optimizer\_dead\_code\_elimination.c\,/\,optimizer\_dead\_code\_elimination.h} Pomocné funkce pro odstraňování instrukcí, jejichž výsledek není nikde používaný
     \item \texttt{optimizer\_fold\_branches.c\,/\,optimizer\_fold\_branches.h} Pomocné funkce pro zjednodušování podmíněných skoků
-    \item \texttt{optimizer\_fold\_identities.c\,/\,optimizer\_fold\_identities.h} Pomocné funkce pro odstraňování algebraických identit (x + 0)
+    \item \texttt{optimizer\_fold\_identities.c\,/\,optimizer\_fold\_identities.h} Pomocné funkce pro odstraňování algebraických identit (\texttt{x + 0})
     \item \texttt{optimizer\_forwarding.c\,/\,optimizer\_forwarding.h} Pomocné funkce pro odstraňování zbytečných store instrukcí
-    \item \texttt{optimizer\_helpers.c\,/\,optimizer\_helpers.h} Pomocné funkce pro optimizaci
+    \item \texttt{optimizer\_helpers.c\,/\,optimizer\_helpers.h} Pomocné funkce pro optimalizaci
     \item \texttt{optimizer\_jump\_threading.c\,/\,optimizer\_jump\_threading.h} Pomocné funkce pro zjednodušování sekvencí skoků
     \item \texttt{parser.c\,/\,parser.h} Parsing struktury programu rekurzivním sestupem
     \item \texttt{parser\_internal.h} Pomocné funkce pro parser
-    \item \texttt{semantics.c\,/\,semantics.h} Semantická analýza
-    \item \texttt{symtable.c\,/\,symtable.h} Wrapper pro vv-BST poskytující interface tabulky symbolů
+    \item \texttt{semantics.c\,/\,semantics.h} Sémantická analýza
+    \item \texttt{symtable.c\,/\,symtable.h} Wrapper pro vv-BVS poskytující rozhraní tabulky symbolů
     \item \texttt{symtable\_builtins.c\,/\,symtable\_builtins.h} Helper pro vložení vestavěných funkcí IFJ26 do tabulky symbolů
-    \item \texttt{token\_layer.c\,/\,token\_layer.h} Pomocné funkcie pre manipuláciu tokenov z lexera pre parser
+    \item \texttt{token\_layer.c\,/\,token\_layer.h} Pomocné funkce pro manipulaci tokenů z lexeru pro parser
 \end{itemize}
 
 % ============================================================================
@@ -844,20 +849,18 @@ i & $>$ & $>$ &  & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ &  & $>$ &  & $
 \section{Využití prostředků AI}
 
 \subsection{Použité nástroje a pracovní postup}
-AI nástroje používal prakticky každý člen jiné a ještě se navíc v průběhu semestru neustále měnily. Dohromady byly použity následující aplikace:
+Každý člen týmu používal prakticky jiné AI nástroje a ještě se navíc v průběhu semestru neustále měnily. Dohromady byly použity následující aplikace:
 \begin{itemize}
   \item Antigravity
   \item ChatGPT App
   \item Claude Code
   \item OpenCode Desktop
   \item T3 Code
-  \item Z.Code
+  \item ZCode
   \item Zed
 \end{itemize}
 a tyto modely:
 \begin{itemize}
-  \item DeepSeek 4.1
-  \item Fable 5.2
   \item GLM 5.3
   \item GLM 5.3 Flash
   \item GPT 6.1 Astra
@@ -870,40 +873,39 @@ a tyto modely:
   \item Gemini 4 Hydrogen
   \item Gemini 4 Neon
   \item Muse 1.3 Spark
+  \item Fable 5.2
   \item Opus 5.5
   \item Sonnet 5.5
   \item Haiku 5.5
 \end{itemize}
-Ne všechny modely byly použity pro psaní kódu aplikace, některé byly použity pro pomoc pochopení problematiky, když jsme byli napřed oproti přednáškám.
+Ne všechny modely byly použity pro psaní kódu aplikace, některé byly použity pro pomoc s pochopením problematiky, když jsme byli napřed oproti přednáškám.
 
 \subsection{Individuální využití AI}
-David Alois Bureš: AI jsem používal na vývoj nástroje na výrobu zásobníkových automatů,
-samotný automat jsem ale implementoval sám. Dále jsem AI využil pro generaci skriptu v pythonu,
+Dodržování pravidel deklarace použití AI jsme vyřešili přes soubor \verb|AGENTS.md|. Z testování víme, že agenti pravidla v tomto souboru dodržují tak pečlivě, že je potřeba je přesvědčovat, aby pomohli jen posunout graf v dokumentaci.\\\\
+\textbf{David Alois Bureš}: AI jsem používal na vývoj nástroje na výrobu zásobníkových automatů,
+samotný automat jsem ale implementoval sám. Dále jsem AI využil pro generaci skriptu v Pythonu,
 který převedl \texttt{lexer.txt} do C tabulky, ve které se dají hledat přechody.
 Pro samotnou implementaci jsem první návrh konzultoval a poté implementoval
-samostatně, podle návodu co AI vytvořilo,
-nebo jsem (po specifikaci všech podrobností) nechal implementaci na agentovi.
-
-Lukáš Pollák: Při práci s AI jsem využíval sbírku skillů od Matta Pococka,
+samostatně, podle návodu, který AI vytvořila,
+nebo jsem (po specifikaci všech podrobností) nechal implementaci na agentovi.\\\\
+\textbf{Lukáš Pollák}: Při práci s AI jsem využíval sbírku skillů od Matta Pococka,
 především \texttt{grill-me} a \texttt{implement}. Vždy jsem začal sepsáním
 specifikace změny, kterou jsem chtěl provést. Tuto specifikaci jsem si poté
 ověřil pomocí skillu \texttt{grill-me}, a když jsem usoudil, že je adekvátní,
 nechal jsem si vygenerovat plán implementace.
 Na základě složitosti změny jsem se pak rozhodl, zda implementaci provedu sám,
 nebo pomocí agenta. Každý nový kód následně prošel několika koly code review,
-a to jak od mně samotného tak od agenta.
+a to jak ode mě samotného, tak od agenta.
 
 \subsection{Problémy a nevyužité návrhy}
-Při využívání AI jsme na žádné větší problémy AI nenarazili. Naopak se velmi dobře osvědčilo ve vytváření pomocných vedlejších prográmků:
+Při využívání AI jsme na žádné větší problémy nenarazili. Naopak se velmi dobře osvědčilo ve vytváření pomocných vedlejších prográmků:
 \begin{itemize}
-  \item Lexica - nástroj na tvorbu stavových automatů a jejich debugování (pro upřesnění, specificky neobsahuje žádné nástroje pro generování automatů ať už algoritmicky nebo s pomocí AI)
-  \item OptimizerDebugger - nástroj na vizuální debuggování optimalizátoru s hot-reload apod.
-  \item Table Maker - nástroj na návrh LL gramatiky, LL tabulky a precedenční tabulky.
+  \item Lexica -- nástroj na tvorbu stavových automatů a jejich debugování (pro upřesnění, specificky neobsahuje žádné nástroje pro generování automatů, ať už algoritmicky nebo s pomocí AI)
+  \item OptimizerDebugger -- nástroj na vizuální debugování optimalizátoru s hot-reload apod.
+  \item Table Maker -- nástroj na návrh LL gramatiky, LL tabulky a precedenční tabulky.
 \end{itemize}
 
-U generovaného kódu bylo potřeba dávat pozor na čitelnost, srozumitelnost a hlavně ať člověk neztratí přehled. Jeden takovýto neúspěšný pokus je v \verb|feat/improve-optimizer|. Kvůli časovému skluzu jsem (Jan Kostka) při vylepšování optimalizátoru začal více a více spoléhat na AI. Podařilo se mi ho takto neskutečně vylepšit (z průměrného -20\,\% ceny naskrz naše e2e testy jsem se dostal až na -82\,\% - což je více, než 5x, protože tuto statistiku zkresluje veliké množství malých krátkých testů). Optimalizátor byl schopen optimalizovat například celý program na rekurentní výpočet 13. fibonnaciho čísla na jednoduchý write 233. Navíc se mi podařilo opravit některé nešťastné architektonické řešení (vestavěné funkce v codegen). Následně jsem strávil celý den, kdy jsem se jen snažil celý kód rozmotat a pochopit. Dostal jsem se do fáze, kdy jsem rozuměl cca 80\,\%, kód byl nicméně stále čitelný jen s obtížemi. V \verb|feat/improve-optimizer| je už silně zlepšená verze. Když jsme se na finální kód dívali, tak jsme se rozhodli, že byť se jedná o technicky mnohem zajímavější kód, tak pravděpodobně nesplňuje parametry projektu a rozhodli jsme se odevzdat verzi, která je sice mnohem slabší, ale je celá psaná ručně.
-
-Dodržování pravidel použití AI jsme vyřešili přes soubor \verb|AGENTS.md|. Z testování víme, že agenti pravidla v tomto souboru dodržují neskutečně pečlivě kdy potřebují přesvědčovat, aby pomohli jen posunout graf v dokumentaci.
+U generovaného kódu bylo potřeba dávat pozor na čitelnost, srozumitelnost, a hlavně aby v něm člověk neztratil přehled. Jeden neúspěšný pokus je ve větvi \verb|feat/improve-optimizer|. Kvůli časovému skluzu jsem (Jan Kostka) při vylepšování optimalizátoru začal více a více spoléhat na AI. Podařilo se mi ho takto neskutečně vylepšit (z průměrného zlepšení -20\,\% ceny interpretace napříč našimi e2e testy jsem se dostal až na -82\,\% -- tuto statistiku navíc ještě silně zkresluje veliké množství malých, prakticky neoptimalizovatelných krátkých testů). Optimalizátor byl schopen optimalizovat například celý program na rekurentní výpočet 13. Fibonacciho čísla na jednoduchý \texttt{write 233}. Navíc se mi podařilo opravit některá nešťastná architektonická řešení (vestavěné funkce jsem posunul do loweringu z codegenu). Následně jsem strávil celý den, kdy jsem se jen snažil celý kód rozmotat a pochopit. Dostal jsem se do fáze, kdy jsem rozuměl cca 80\,\%, kód byl nicméně stále čitelný jen s obtížemi. V \verb|feat/improve-optimizer| je už hodně učesaná verze. Původní plán byl použít tuto verzi jako benchmark a postupně ručně implementovat verzi, která bude mít stejné schopnosti. Na to ale nezbyl čas. Nakonec jsme se vzhledem k neuspokojivé kvalitě, původu a porozumění kódu rozhodli odevzdat verzi, která je sice mnohem slabší, ale je celá psaná ručně.
 
 % ============================================================================
 % POUŽITÉ ZDROJE
