@@ -43,13 +43,16 @@
 
 % --- Rozvržení stránky ---
 \usepackage[margin=2.5cm]{geometry}
+\usepackage{rotating}
 
 % --- Tabulky, obrázky, seznamy ---
 \usepackage{graphicx}
+\usepackage{capt-of}
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{longtable}
 \usepackage{enumitem}
+\usepackage{float}
 \setlist{noitemsep}
 
 % --- Matematika (zápis gramatiky a tabulek) ---
@@ -65,6 +68,32 @@
 % správné dělení slov, \uv{} uvozovky a francouzské mezery; cmap navíc
 % umožní kopírování textu s diakritikou z vygenerovaného PDF.
 \usepackage{cmap}
+
+% C syntax highlight
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstdefinestyle{cstyle}{
+    language=C,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\bfseries\color{blue},
+    keywordstyle=[2]\color{teal},
+    morekeywords=[2]{size_t, ssize_t, ptrdiff_t, int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t, uint64_t, bool, true, false, NULL},
+    keywordstyle=[3]\bfseries\color{violet},
+    morekeywords=[3]{it, assertThrow, asserteq_str, asserteq_ptr, TRY_REALLOC, E_INTERNAL_ERROR, TEST_PATTERN},
+    commentstyle=\itshape\color{green!50!black},
+    morecomment=[l][\color{magenta!70!black}]{\#},
+    stringstyle=\color{orange!80!black},
+    showstringspaces=false,
+    showspaces=false,
+    showtabs=false,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    frame=single,
+    breaklines=true,
+    keepspaces=true,
+    tabsize=4
+}
 
 % --- Datum titulní strany ---
 \date{Brno, \today}
@@ -117,7 +146,7 @@
 
   \begin{tabular}{ll}
     \textbf{Varianta:} & vv-BVS \\
-    \textbf{Implementovaná rozšíření:} & \texttt{FUNEXP}, \texttt{BOOLTHEN}, \texttt{CONTROL}, \texttt{VALMEM}, \texttt{INTERPOLATEDS} \\
+    \textbf{Implementovaná rozšíření:} & \texttt{FUNEXP}, \texttt{BOOLTHEN}, \texttt{CONTROL}, \texttt{VALMEM}, \texttt{INTERPOLATEDS}, \texttt{LISTS} \\
     \textbf{Git repozitář:} & \url{https://github.com/K0stkaORG/IFJ26} \\
   \end{tabular}
 
@@ -138,10 +167,10 @@
 \section{Rozdělení práce v týmu}
 
 \begin{itemize}
-  \item \TODO{jméno -- na kterých částech se podílel/a}
-  \item \TODO{jméno -- na kterých částech se podílel/a}
-  \item \TODO{jméno -- na kterých částech se podílel/a}
-  \item \TODO{jméno -- na kterých částech se podílel/a}
+  \item Jan Kostka -- optimalizátor, lowering, CI/CD
+  \item David Alois Bureš -- návrh automatu, lexer
+  \item Lukáš Pollák -- parser, syntaktická a sémantická analýza
+  \item David Daniel Šlapal -- binární vyhledávací strom, codegen
 \end{itemize}
 
 % Při odchylce od rovnoměrného rozdělení bodů zde povinně uveďte zdůvodnění.
@@ -157,13 +186,44 @@
 \section{Týmová spolupráce}
 
 \subsection{Způsob spolupráce, code review a schvalování PR}
-\TODO{stručný popis způsobu spolupráce, kultury code review a schvalování PR}
+Základ spolupráce spočíval v rozdělení celého projektu na jednotlivé části. Prvním úkolem každého bylo připravit veřejné rozhraní dané části (rozhraní vždy vlastnila ta část, která ho emitovala), což nám dalo možnost vývoj velmi brzo paralelizovat. To se nám povedlo bez větších potíží. Nicméně při zpětném pohledu na návrh určitých částí (hlavně IR) jsme si vědomi, že jsou věci, které by šlo udělat jinak (hlavně posunout řešení vestavěných funkcí z CG do loweringu).
+
+Náš primární komunikační kanál byl Discord. Při velikosti našeho týmu jsme s ním na žádný problém nenarazili a jeho silné stránky (rychlost, zvyk ho používat) se nám velmi oplatily v časovém nedostatku, se kterým jsme se potýkali ve finálním týdnu projektu (hlavně ze strany ostatních projektů/testů).
+
+Pro code review jsme využívali nástroje platformy GitHub. Zpravidla vždy kód kontroloval člověk, který měl na starost tu část projektu, která měla dané změně nejblíže. Tzn. například pokud byly změny v tom, jak lexer řeší odsazení, code review dělal člověk, který má na starost parser. Pokud to v daný okamžik nebylo možné, udělal review Jan Kostka, aby se projekt zbytečně nezadrhnul. Jak se projekt rozrůstal, bylo do procesu schvalování PR postupně zaváděno automatizované testování.
 
 \subsection{Testování}
-\TODO{stručný popis využitých forem testování}
+V rámci projektu jsme využili 3 formy automatického testování pro samotný kód a poloautomatické testování pro stavový automat v lexeru. Hlavní potíží byla rozmanitost vývojových prostředí (Windows x86, Windows on ARM, Linux, macOS) a neergonomičnost běžných řešení (v C), kterou se nám ale podařilo velmi robustně vyřešit až na úroveň, že plánujeme testovací nástroje extrahovat z tohoto projektu a využít je v budoucnu i pro jiné projekty.
+
+\subsubsection{Jednotkové testy}
+Pro jednotkové testy jsme využili silně upravenou knihovnu snow.h\footnote{Knihovna Snow -- \url{https://github.com/mortie/snow}}. Za její silnou stránku jsme považovali (subjektivně) lepší čitelnost testů oproti například GTestu a skutečnost, že se jedná pouze o jeden hlavičkový soubor. Pomocí agenta byla rozšířena o kompatibilitu s Windows a integraci s naším způsobem řešení paměti a chyb.
+
+\begin{lstlisting}[style=cstyle]
+it("keeps buffer contents after failure") {
+    char* oldBuffer = ptr; // ptr allocated by before_each macro
+
+    ctx->flags.forceNthMallocFail = 1;
+
+    assertThrow(E_INTERNAL_ERROR, {
+        TRY_REALLOC(ptr, sizeof(char) * 20);
+    });
+
+    asserteq_str(ptr, TEST_PATTERN);
+    asserteq_ptr(ptr, oldBuffer);
+}
+\end{lstlisting}
+
+\subsubsection{End-to-end testy}
+End-to-end testy jsme spouštěli v prostředí co nejvíce podobném reálnému použití. Překladač dostal IFJ26 na stdin a musel na stdout vyprodukovat IFJ26Code, který po spuštění referenčním interpretem vykazoval správné chování. Konkrétní podoba IFJ26Code nebyla definována. Každý test byl spuštěn dvakrát, jednou se zapnutou a jednou s vypnutou optimalizací pro odhalení chyb v optimalizátoru. Poskytnutá testovací data jsme s pomocí AI značně rozšířili (cca 1500 příkladů). Takto vygenerované testy nebyly zcela bezchybné a cca 100 jsme po manuální kontrole odstranili. U nepřesně specifikovaných věcí jsme se snažili napodobit chování Scaly.
+
+\subsubsection{Paměťové testy}
+Běžnou dvojici jednotkových a e2e testů jsme rozšířili o testy práce s pamětí. Tyto testy spustily překladač na jednom konkrétním e2e testu, který byl navržen, aby zahrnoval co nejkomplexnější situace. Testovaný binární soubor překladače byl upraven, aby se proces při každém volání funkce malloc/realloc rozdvojil. V jednom z procesů bylo následně vynuceno selhání dané funkce. Program pak musel korektně pokračovat/skončit v obou případech. U těchto testů jsme narazili na potíže s multiplatformností, kdy je ani na určitých distribucích Linuxu kvůli chybám v nástroji Valgrind nebylo možno spustit. Samozřejmě testy pak nefungovaly na platformách, kde není Valgrind dostupný. Toto jsme v omezeném čase vyřešili jejich spouštěním až v rámci CI/CD, které na to bylo připraveno.
+
+\subsubsection{Testy lexeru}
+V úvodních fázích projektu, při návrhu stavového automatu v jádře lexeru, jsme se všichni podíleli na ověřování jeho kvality. K tomu jsme využili nástroj vytvořený (s pomocí agentů) Davidem Aloisem Burešem -- Lexica\footnote{Lexica -- \url{https://lexica.daalbu.app}}. Ten nám umožnil kromě tradičního ověřování automatů pozorováním jejich grafu navíc zkusmo nechat automat tokenizovat sekvence znaků a i daný proces odkrokovat. To tento proces značně usnadnilo a urychlilo a pomohlo nám zachytit velmi specifické chyby v rané fázi celého procesu.
 
 \subsection{Styl formátování kódu}
-\TODO{zvolený styl formátování kódu (clang-format a konkrétní --style)}
+Z výchozích stylů formátování jsme zvolili \verb|clang-format --style=Chromium|, což bylo následně na začátku projektu spolu s konfigurací linteru sjednoceno pomocí konfiguračních souborů editoru, který používal celý tým (Zed).
 
 % ============================================================================
 % ARCHITEKTURA
@@ -174,18 +234,89 @@
 % význam komponent a jejich propojení.
 % ============================================================================
 \section{Architektura řešení}
+Program je rozdělen do 7 základních modulů: lexer, parser, sémantická analýza, lowering, optimalizátor, codegen a tabulka symbolů. Obecně jsou všechna data předávána prostřednictvím sdíleného kontextu. Ten kromě datových struktur obsahuje informace o konfiguraci překladače a kontext pro řešení chyb. Výjimkou jsou lexer a tabulka symbolů, se kterými je komunikováno prostřednictvím funkcí.
 
 % AI generated by: ZCode (GLM-5.3)
 % Prompt: "Replace the school name with logo in fitlogo.svg. Then, touch empty pdfs lexer.pdf, schema.pdf and make blokové schéma and konečný automat to include from these (later added) PDFs. Simply stitch the whole PDFs into the documentation."
 % Changes: Placeholder nahrazen napřímým \includegraphics celého PDF fig/schema.pdf (blokové schéma).
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth]{fig/schema.pdf}
   \caption{Blokové schéma architektury překladače}
   \label{fig:architektura}
 \end{figure}
 
-\TODO{textový popis komponent a datových toků (vstupy, výstupy, význam komponent a jejich propojení)}
+\subsection{Paměť a chybové stavy}
+Nejedná se sice o modul jako takový, nicméně tento problém řešíme pro jazyk C poměrně neobvyklým způsobem. Ve středu všeho je sdílený kontext, prostřednictvím kterého se dá dostat na každý blok dynamicky alokované paměti. To neznamená, že paměť je uvolňována až na konci programu, paměť je uvolněna hned, jak již není potřeba. To nám umožní mít jen jednu cestu pro řešení libovolného chybového stavu. Ta se jednoduše podívá do sdíleného kontextu, co vše je v daný moment alokováno, a korektně vše uvolní. Ruku v ruce s tím jde systém řešení chyb, který se chová velmi podobně tomu, co je běžné v moderních jazycích. Interně používá \texttt{setjmp}/\texttt{longjmp} se zásobníkem chybových rámců. Celá problematika řešení chybových stavů pak vypadá takto:
+
+\vfill
+
+\begin{lstlisting}[style=cstyle]
+// ifj26.c
+
+// Initialize shared memory and error context
+
+TRY {
+    // Execute the compiler
+}
+CATCH {
+    // Handle any errors that might occur
+}
+
+// somewhere deeply nested in the program
+
+int get_random(int seed) {
+    TRY {
+        other_one();
+    }
+    CATCH {
+        cleanup();
+        RETHROW();
+    }
+
+    if(seed != 42)
+        THROW(E_INTERNAL_ERROR, "Wrong seed: %d", seed);
+
+    return 4;
+}
+\end{lstlisting}
+
+\subsection{Lexer}
+Vstup: (\verb|stdin|) = IFJ26 \\
+Výstup: \verb|struct Token| -- pomocí \verb|next_token()| \\
+Existuje vždy pouze v průběhu volání funkce \verb|next_token()|. Mezi jednotlivými voláními si ve sdíleném kontextu uchovává vnitřní stav zásobníkového automatu a buffer načtených, ale nezpracovaných znaků.
+
+\subsection{Parser}
+Vstup: \verb|struct Token| -- pomocí \verb|next_token()| \\
+Výstup: \verb|struct AstNode*| = ukazatel na AST uložený ve sdíleném kontextu, zatím bez typů \\
+Zavolán jako první funkce mimo technickou přípravu. Postupně si načítá pomocí lexeru tokeny, které nejdřív projdou \texttt{token\_layer} vrstvou.
+Ta přizpůsobí příchozí tokeny gramatice a poskytne parseru aktuální token, posun a nahlédnutí na další token.
+Samotný parser je rekurzivní sestup řízený LL tabulkou. Výrazy předá precedenčnímu parseru.
+
+\subsection{Symtable}
+Vstup: \verb|struct SymtableData| \\
+Výstup: \verb|struct SymtableData*| \\
+Vyhledávací tabulka slouží jako interface pro generický vyvážený BST. Akceptuje strukturu SymtableData a vloží ji do binárního stromu pod klíčem, který je řetězec. Implementuje funkce pro práci s řetězci, které předává BST, aby bylo možné vyhledávat podle klíčů tvořených řetězcem při zachování obecnosti BST. Po vyhledání dat vrací zpět strukturu. Podporuje vnořené rozsahy platnosti (globální tabulka v kontextu překladače a lokální tabulky procházené odspodu nahoru rekurzivně).
+
+\subsection{Sémantická analýza}
+Vstup: \verb|struct AstNode*| = neotypovaný AST \\
+Výstup: \verb|struct AstNode*| = otypovaný AST (stále ve sdíleném kontextu) \\
+Volá se po parseru jako samostatný průchod nad AST. Její úlohou je kontrolovat definice funkcí a proměnných, existenci \verb|@main|, typy a jejich odvození a spravovat rozsahy platnosti a tabulky symbolů.
+
+\subsection{Lowering}
+Vstup: \verb|struct AstNode*| = otypovaný AST \\
+Výstup: \verb|struct IrProgram| = vnitřní reprezentace programu uložená ve sdíleném kontextu \\
+Projde AST a převede ho na vnitřní reprezentaci programu. Ta je blízko výslednému IFJ26Code a umožní/usnadní optimalizace.
+
+\subsection{Optimalizátor}
+Vstup: \verb|struct IrProgram| = vnitřní reprezentace programu \\
+Výstup: \verb|struct IrProgram| = upravená vnitřní reprezentace programu \\
+Pokud není deaktivován (\texttt{-o0}), pokusí se co nejvíce optimalizovat vnitřní reprezentaci programu. Iterativně ji prochází, a pokud prokáže, že lze nějakou část odstranit/vyměnit, tak tuto úpravu provede v originální struktuře. Toto umožňuje optimalizátor zapnout/vypnout bez vedlejších efektů.
+
+\subsection{Codegen}
+Vstup: \verb|struct IrProgram| = vnitřní reprezentace programu (stále ve sdíleném kontextu) \\
+Výstup: \verb|(stdout)| = IFJ26Code \\
+Projde vnitřní reprezentaci programu a vygeneruje korespondující IFJ26Code.
 
 % ============================================================================
 % LEXIKÁLNÍ ANALÝZA
@@ -195,17 +326,87 @@
 % ============================================================================
 \section{Lexikální analýza}
 
-% AI generated by: ZCode (GLM-5.3)
-% Prompt: "Replace the school name with logo in fitlogo.svg. Then, touch empty pdfs lexer.pdf, schema.pdf and make bločné schéma and konečný automat to include from these (later added) PDFs. Simply stitch the whole PDFs into the documentation."
-% Changes: Placeholder nahrazen napřímým \includegraphics celého PDF fig/lexer.pdf (konečný automat).
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\textwidth]{fig/lexer.pdf}
-  \caption{Konečný automat lexikálního analyzátoru}
-  \label{fig:automat}
-\end{figure}
+% // AI generated by: Codex (gpt-6.2-sol)
+% // Prompt: "You can move images"
+% // Changes: Allow a smaller scale for the overview figure.
+% #1 = měřítko, #2 = stránka v lexer.pdf, #3 = popisek, #4 = odkaz
+\newcommand{\lexerdiagram}[4][.30]{
+  \noindent\begin{minipage}[t]{\linewidth}
+    \centering
+    \makebox[\linewidth][c]{
+      \includegraphics[page=#2,scale=#1,trim=23bp 23bp 23bp 23bp,clip]{fig/lexer.pdf}
+    }
+    \setlength{\abovecaptionskip}{4pt}
+    \captionof{figure}{#3}
+    \label{#4}
+  \end{minipage}\par\smallskip
+}
 
-\TODO{případný slovní popis odchylek od standardního modelu konečného automatu}
+Používáme deterministický zásobníkový automat, který má pouze mírné odchylky od standardního modelu.
+
+Přechody používají pro čitelnost zjednodušený zápis podobný regulárním výrazům.
+Poté následuje $\cdot$ , po které jsou uvedena pravidla pro zásobník.
+Pro přehlednost nejsou detailně vypsána všechna pravidla pro zásobník, ale jsou sdružena čárkami (\verb|,|), pokud mají stejnou operaci.
+Pokud je přechod možný pro všechny vrcholy zásobníku, značí ho \verb|(any)|.
+
+Přechody jsou umožněny, pouze pokud je na levé straně od $\rightarrow$ stav na vrcholu zásobníku.
+Máme definovaných několik operací:
+
+\begin{itemize}
+    \item \texttt{keep} je základní operace, která porovná vrchol zásobníku s vybraným stavem a nezmění zásobník.
+    Umožní přechod pouze v případě, že se vybraný stav shoduje s vrcholem.
+    Tato operace se provede v případě, že není v automatu specifikováno jinak (v přechodu není $\rightarrow$).
+
+    \item \texttt{push} je operace, která přidá nový prvek na vrchol zásobníku.
+
+    \item \texttt{pop} je operace, která odstraní prvek z vrcholu zásobníku.
+
+    \item \texttt{replace} je operace, která změní hodnotu vrcholu zásobníku.
+    Tato operace se provede v případě, že v přechodu je $\rightarrow$ a na pravé straně není specifikována jiná operace.
+\end{itemize}
+
+% // AI generated by: Codex (gpt-6.2-sol)
+% // Prompt: "You can move images"
+% // Changes: Make room below the overview for the first row of state groups.
+% // AI generated by: Codex (gpt-6.2-sol)
+% // Prompt: "Increase the size of this graph, you can remove a bit of padding from the top of this page"
+% // Changes: Increase the scale of the lexer overview figure.
+\clearpage
+\vspace*{-14mm}
+\lexerdiagram[.31]{1}{Přehled konečného automatu lexikálního analyzátoru}
+  {fig:automat}
+
+\subsection{Skupiny stavů}
+\noindent
+\begin{minipage}[t]{.48\linewidth}
+  \lexerdiagram{8}
+    {Less than and Control arrow}
+    {fig:lexer-less-than}
+\end{minipage}\hfill
+\begin{minipage}[t]{.48\linewidth}
+  \lexerdiagram{9}{Parenthesis and Unit}
+    {fig:lexer-unit}
+\end{minipage}
+
+\lexerdiagram{2}{Numbers and Floats}
+  {fig:lexer-numbers}
+
+\lexerdiagram{3}{Division and Comments}
+  {fig:lexer-comments}
+
+\lexerdiagram{6}{Main}
+  {fig:lexer-main}
+
+\lexerdiagram{4}{Strings}
+  {fig:lexer-strings}
+
+\lexerdiagram{5}
+  {Identifiers, S\_strings and Dollar expressions}
+  {fig:lexer-identifiers}
+
+\lexerdiagram{7}
+  {triple\_S\_string string and end}
+  {fig:lexer-triple-string}
 
 % ============================================================================
 % SYNTAKTICKÁ ANALÝZA
@@ -214,26 +415,381 @@
 % ============================================================================
 \section{Syntaktická analýza}
 
+Syntaktická analýza je implementována pomocí dvou částí: rekurzivního sestupu řízeného LL tabulkou, kde je pro každý neterminál vytvořena jedna funkce, a precedenčního parseru pro výrazy. Tokeny si parser načítá od lexikálního analyzátoru postupně, vždy až když je potřebuje. Podle aktuálního tokenu pak v LL tabulce vybere pravidlo, které se použije. Když rekurzivní sestup narazí na výraz, dočasně předá řízení precedenčnímu parseru, který pro výraz vytvoří podstrom AST a vrátí ho. Rekurzivní sestup ho pak připojí na místo, odkud byl parser zavolán. Při první syntaktické chybě se analýza ukončí a překladač skončí s návratovým kódem 2. Výstupem syntaktické analýzy je AST reprezentující strukturu programu.
+
 \subsection{LL gramatika}
-\TODO{LL gramatika}
 
+% Generated by tools/table-maker
+% Requires \usepackage{graphicx} (N and T shrink together to the text width when they are wider)
+% and \usepackage{geometry} (the productions use 5 mm margins).
+\ifdefined\defNbox\else\newsavebox\defNbox\newsavebox\defTbox\newlength\defsetwd\fi
+\sbox\defNbox{$N = \{$\,\begin{tabular}[t]{@{}*{3}{r@{:~}l@{\hspace{1.5em}}}r@{:~}l@{}}
+  {\boldmath$N_{1}$} & \texttt{PROGRAM} & {\boldmath$N_{2}$} & \texttt{PROLOG} & {\boldmath$N_{3}$} & \texttt{FUNC\_LIST} & {\boldmath$N_{4}$} & \texttt{FUNC} \\
+  {\boldmath$N_{5}$} & \texttt{FUNC\_PARAMS} & {\boldmath$N_{6}$} & \texttt{FUNC\_TYPE} & {\boldmath$N_{7}$} & \texttt{FUNC\_BODY} & {\boldmath$N_{8}$} & \texttt{PARAM\_LIST} \\
+  {\boldmath$N_{9}$} & \texttt{PARAM} & {\boldmath$N_{10}$} & \texttt{PARAM\_TAIL} & {\boldmath$N_{11}$} & \texttt{PARAM\_NEXT} & {\boldmath$N_{12}$} & \texttt{TYPE} \\
+  {\boldmath$N_{13}$} & \texttt{MAIN} & {\boldmath$N_{14}$} & \texttt{MAIN\_TAIL} & {\boldmath$N_{15}$} & \texttt{EXPR} & {\boldmath$N_{16}$} & \texttt{EXPR\_TAIL} \\
+  {\boldmath$N_{17}$} & \texttt{BINARY\_TAIL} & {\boldmath$N_{18}$} & \texttt{AND\_EXPR} & {\boldmath$N_{19}$} & \texttt{EQ\_EXPR} & {\boldmath$N_{20}$} & \texttt{REL\_EXPR} \\
+  {\boldmath$N_{21}$} & \texttt{ADD\_EXPR} & {\boldmath$N_{22}$} & \texttt{MUL\_EXPR} & {\boldmath$N_{23}$} & \texttt{OR\_TAIL} & {\boldmath$N_{24}$} & \texttt{AND\_TAIL} \\
+  {\boldmath$N_{25}$} & \texttt{EQ\_TAIL} & {\boldmath$N_{26}$} & \texttt{REL\_TAIL} & {\boldmath$N_{27}$} & \texttt{ADD\_TAIL} & {\boldmath$N_{28}$} & \texttt{MUL\_TAIL} \\
+  {\boldmath$N_{29}$} & \texttt{EQ\_OP} & {\boldmath$N_{30}$} & \texttt{REL\_OP} & {\boldmath$N_{31}$} & \texttt{ADD\_OP} & {\boldmath$N_{32}$} & \texttt{MUL\_OP} \\
+  {\boldmath$N_{33}$} & \texttt{UNARY} & {\boldmath$N_{34}$} & \texttt{POSTFIX\_TAIL} & {\boldmath$N_{35}$} & \texttt{OPERAND} & {\boldmath$N_{36}$} & \texttt{NO\_IDENT\_OPERAND} \\
+  {\boldmath$N_{37}$} & \texttt{LIST\_TAIL} & {\boldmath$N_{38}$} & \texttt{LITERAL} & {\boldmath$N_{39}$} & \texttt{INTERP\_STRING} & {\boldmath$N_{40}$} & \texttt{INTERP\_PARTS} \\
+  {\boldmath$N_{41}$} & \texttt{INTERP\_PART} & {\boldmath$N_{42}$} & \texttt{INLINE\_VALUE} & {\boldmath$N_{43}$} & \texttt{IF\_INLINE} & {\boldmath$N_{44}$} & \texttt{RVALUE} \\
+  {\boldmath$N_{45}$} & \texttt{CALL\_ARGS} & {\boldmath$N_{46}$} & \texttt{ARG\_LIST} & {\boldmath$N_{47}$} & \texttt{ARG\_TAIL} & {\boldmath$N_{48}$} & \texttt{ARG\_NEXT} \\
+  {\boldmath$N_{49}$} & \texttt{BLOCK} & {\boldmath$N_{50}$} & \texttt{STATEMENT} & {\boldmath$N_{51}$} & \texttt{STATEMENT\_TAIL} & {\boldmath$N_{52}$} & \texttt{STATEMENT\_LIST} \\
+  {\boldmath$N_{53}$} & \texttt{STATEMENT\_BASE} & {\boldmath$N_{54}$} & \texttt{STATEMENT\_ID} & {\boldmath$N_{55}$} & \texttt{INLINE\_BODY} & {\boldmath$N_{56}$} & \texttt{INLINE\_ID} \\
+  {\boldmath$N_{57}$} & \texttt{INLINE\_RETURN\_VAL} & {\boldmath$N_{58}$} & \texttt{STATEMENT\_IF} & {\boldmath$N_{59}$} & \texttt{IF\_BODY} & {\boldmath$N_{60}$} & \texttt{ELSE\_PART} \\
+  {\boldmath$N_{61}$} & \texttt{INLINE\_ELSE\_PART} & {\boldmath$N_{62}$} & \texttt{ELSE\_BODY} & {\boldmath$N_{63}$} & \texttt{STATEMENT\_WHILE} & {\boldmath$N_{64}$} & \texttt{STATEMENT\_FOR} \\
+  {\boldmath$N_{65}$} & \texttt{FOR\_HEADER} & {\boldmath$N_{66}$} & \texttt{GENERATOR} & {\boldmath$N_{67}$} & \texttt{RANGE\_TAIL} & {\boldmath$N_{68}$} & \texttt{RANGE\_STEP} \\
+  {\boldmath$N_{69}$} & \texttt{GUARD\_LIST} & {\boldmath$N_{70}$} & \texttt{GUARD\_LINES} & {\boldmath$N_{71}$} & \texttt{LOOP\_BODY} & {\boldmath$N_{72}$} & \texttt{VAR\_TYPE} \\
+  {\boldmath$N_{73}$} & \texttt{RETURN\_VAL}\,$\}$ \\
+\end{tabular}}%
+\sbox\defTbox{$T = \{$\,\begin{tabular}[t]{@{}*{3}{r@{:~}l@{\hspace{1.5em}}}r@{:~}l@{}}
+  {\boldmath$T_{1}$} & \texttt{IDENT} & {\boldmath$T_{2}$} & \texttt{AT\_MAIN} & {\boldmath$T_{3}$} & \texttt{IMPORT} & {\boldmath$T_{4}$} & \texttt{DEF} \\
+  {\boldmath$T_{5}$} & \texttt{VAL} & {\boldmath$T_{6}$} & \texttt{VAR} & {\boldmath$T_{7}$} & \texttt{RETURN} & {\boldmath$T_{8}$} & \texttt{IF} \\
+  {\boldmath$T_{9}$} & \texttt{THEN} & {\boldmath$T_{10}$} & \texttt{ELSE} & {\boldmath$T_{11}$} & \texttt{WHILE} & {\boldmath$T_{12}$} & \texttt{DO} \\
+  {\boldmath$T_{13}$} & \texttt{TYPE\_INT} & {\boldmath$T_{14}$} & \texttt{TYPE\_DOUBLE} & {\boldmath$T_{15}$} & \texttt{TYPE\_STRING} & {\boldmath$T_{16}$} & \texttt{TYPE\_UNIT} \\
+  {\boldmath$T_{17}$} & \texttt{TYPE\_LIST} & {\boldmath$T_{18}$} & \texttt{L\_BRACKET} & {\boldmath$T_{19}$} & \texttt{R\_BRACKET} & {\boldmath$T_{20}$} & \texttt{FOR} \\
+  {\boldmath$T_{21}$} & \texttt{TYPE\_BOOL} & {\boldmath$T_{22}$} & \texttt{BOOL\_TRUE} & {\boldmath$T_{23}$} & \texttt{BOOL\_FALSE} & {\boldmath$T_{24}$} & \texttt{NUMBER\_INT} \\
+  {\boldmath$T_{25}$} & \texttt{NUMBER\_DOUBLE} & {\boldmath$T_{26}$} & \texttt{UNIT} & {\boldmath$T_{27}$} & \texttt{STRING} & {\boldmath$T_{28}$} & \texttt{TRIPLE\_STRING} \\
+  {\boldmath$T_{29}$} & \texttt{S\_STRING\_START} & {\boldmath$T_{30}$} & \texttt{S\_STRING\_END} & {\boldmath$T_{31}$} & \texttt{TRIPLE\_S\_STRING\_START} & {\boldmath$T_{32}$} & \texttt{TRIPLE\_S\_STRING\_END} \\
+  {\boldmath$T_{33}$} & \texttt{DOLLAR\_EXPRESSION\_START} & {\boldmath$T_{34}$} & \texttt{DOLLAR\_EXPRESSION\_END} & {\boldmath$T_{35}$} & \texttt{OPERATOR\_PLUS} & {\boldmath$T_{36}$} & \texttt{OPERATOR\_MINUS} \\
+  {\boldmath$T_{37}$} & \texttt{OPERATOR\_MULTIPLY} & {\boldmath$T_{38}$} & \texttt{OPERATOR\_DIVIDE} & {\boldmath$T_{39}$} & \texttt{OPERATOR\_CONCAT} & {\boldmath$T_{40}$} & \texttt{ASSIGN} \\
+  {\boldmath$T_{41}$} & \texttt{COMPARISON\_EQ} & {\boldmath$T_{42}$} & \texttt{COMPARISON\_NEQ} & {\boldmath$T_{43}$} & \texttt{COMPARISON\_G} & {\boldmath$T_{44}$} & \texttt{COMPARISON\_L} \\
+  {\boldmath$T_{45}$} & \texttt{COMPARISON\_GE} & {\boldmath$T_{46}$} & \texttt{COMPARISON\_LE} & {\boldmath$T_{47}$} & \texttt{BOOL\_AND} & {\boldmath$T_{48}$} & \texttt{BOOL\_OR} \\
+  {\boldmath$T_{49}$} & \texttt{BOOL\_NEG} & {\boldmath$T_{50}$} & \texttt{L\_PAREN} & {\boldmath$T_{51}$} & \texttt{R\_PAREN} & {\boldmath$T_{52}$} & \texttt{COMMA} \\
+  {\boldmath$T_{53}$} & \texttt{PERIOD} & {\boldmath$T_{54}$} & \texttt{COLON} & {\boldmath$T_{55}$} & \texttt{SEMICOLON} & {\boldmath$T_{56}$} & \texttt{CONTROL\_ARROW} \\
+  {\boldmath$T_{57}$} & \texttt{INDENT} & {\boldmath$T_{58}$} & \texttt{EOL\_TOKEN} & {\boldmath$T_{59}$} & \texttt{EOF\_TOKEN}\,$\}$ \\
+\end{tabular}}%
+\setlength\defsetwd{\ifdim\wd\defNbox>\wd\defTbox\wd\defNbox\else\wd\defTbox\fi}%
+\ifdim\defsetwd<\linewidth\setlength\defsetwd{\linewidth}\fi
+\noindent $G = (N, T, P, S)$
+
+\noindent\resizebox{\dimexpr\wd\defNbox*\numexpr\linewidth\relax/\numexpr\defsetwd\relax\relax}{!}{\usebox\defNbox}
+
+\noindent\resizebox{\dimexpr\wd\defTbox*\numexpr\linewidth\relax/\numexpr\defsetwd\relax\relax}{!}{\usebox\defTbox}
+
+\noindent $S = \texttt{PROGRAM}$
+
+% // AI generated by: Codex (gpt-6.2-sol)
+% // Prompt: "Move this there, you can move things in documentation"
+% // Changes: Start the wide page at the productions so the grammar definition fits under its heading.
+\newgeometry{margin=5mm}\thispagestyle{empty}
+\ifdefined\defPbox\else\newsavebox\defPbox\fi
+\ifdefined\defPnum\else\newlength\defPnum\fi
+\ifdefined\defPlhs\else\newlength\defPlhs\fi
+\ifdefined\defPrhs\else\newlength\defPrhs\fi
+\ifdefined\defPtrim\else\newlength\defPtrim\fi
+\ifdefined\defPwd\else\newlength\defPwd\fi
+\ifdefined\defPht\else\newlength\defPht\fi
+\settowidth\defPnum{156.}
+\settowidth\defPlhs{\texttt{INLINE\_RETURN\_VAL}}
+\settowidth\defPrhs{\texttt{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}}
+\settowidth\defPtrim{\texttt{x}}
+\sbox\defPbox{\begin{tabular}[b]{@{}l@{\ }l@{\ $\rightarrow$\ }l@{\hspace{1.5em}}l@{\ }l@{\ $\rightarrow$\ }l@{\hspace{-\defPtrim}}}
+  \makebox[\defPnum][r]{1.} & \makebox[\defPlhs][l]{\texttt{PROGRAM}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{PROLOG} \texttt{FUNC\_LIST} \texttt{EOF\_TOKEN}\strut} & \makebox[\defPnum][r]{2.} & \makebox[\defPlhs][l]{\texttt{PROLOG}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IMPORT} \texttt{IDENT} \texttt{PERIOD} \texttt{OPERATOR\_MULTIPLY} \texttt{EOL\_TOKEN}\strut} \\
+  \makebox[\defPnum][r]{3.} & \makebox[\defPlhs][l]{\texttt{FUNC\_LIST}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{FUNC} \texttt{FUNC\_LIST}\strut} & \makebox[\defPnum][r]{4.} & \makebox[\defPlhs][l]{\texttt{FUNC\_LIST}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{5.} & \makebox[\defPlhs][l]{\texttt{MAIN}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{AT\_MAIN} \texttt{MAIN\_TAIL}\strut} & \makebox[\defPnum][r]{6.} & \makebox[\defPlhs][l]{\texttt{MAIN}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{7.} & \makebox[\defPlhs][l]{\texttt{MAIN\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EOL\_TOKEN}\strut} & \makebox[\defPnum][r]{8.} & \makebox[\defPlhs][l]{\texttt{MAIN\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{9.} & \makebox[\defPlhs][l]{\texttt{TYPE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{TYPE\_INT}\strut} & \makebox[\defPnum][r]{10.} & \makebox[\defPlhs][l]{\texttt{TYPE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{TYPE\_DOUBLE}\strut} \\
+  \makebox[\defPnum][r]{11.} & \makebox[\defPlhs][l]{\texttt{TYPE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{TYPE\_STRING}\strut} & \makebox[\defPnum][r]{12.} & \makebox[\defPlhs][l]{\texttt{TYPE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{TYPE\_UNIT}\strut} \\
+  \makebox[\defPnum][r]{13.} & \makebox[\defPlhs][l]{\texttt{TYPE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{TYPE\_BOOL}\strut} & \makebox[\defPnum][r]{14.} & \makebox[\defPlhs][l]{\texttt{TYPE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{TYPE\_LIST} \texttt{L\_BRACKET} \texttt{TYPE} \texttt{R\_BRACKET}\strut} \\
+  \makebox[\defPnum][r]{15.} & \makebox[\defPlhs][l]{\texttt{FUNC}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{MAIN} \texttt{DEF} \texttt{IDENT} \texttt{FUNC\_PARAMS} \texttt{FUNC\_TYPE} \texttt{ASSIGN} \texttt{FUNC\_BODY}\strut} & \makebox[\defPnum][r]{16.} & \makebox[\defPlhs][l]{\texttt{FUNC\_PARAMS}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{UNIT}\strut} \\
+  \makebox[\defPnum][r]{17.} & \makebox[\defPlhs][l]{\texttt{FUNC\_PARAMS}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{L\_PAREN} \texttt{PARAM\_LIST} \texttt{R\_PAREN}\strut} & \makebox[\defPnum][r]{18.} & \makebox[\defPlhs][l]{\texttt{PARAM\_LIST}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{PARAM} \texttt{PARAM\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{19.} & \makebox[\defPlhs][l]{\texttt{PARAM\_LIST}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} & \makebox[\defPnum][r]{20.} & \makebox[\defPlhs][l]{\texttt{PARAM\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{COMMA} \texttt{PARAM\_NEXT}\strut} \\
+  \makebox[\defPnum][r]{21.} & \makebox[\defPlhs][l]{\texttt{PARAM\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} & \makebox[\defPnum][r]{22.} & \makebox[\defPlhs][l]{\texttt{PARAM\_NEXT}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{PARAM} \texttt{PARAM\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{23.} & \makebox[\defPlhs][l]{\texttt{PARAM\_NEXT}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} & \makebox[\defPnum][r]{24.} & \makebox[\defPlhs][l]{\texttt{PARAM}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IDENT} \texttt{COLON} \texttt{TYPE}\strut} \\
+  \makebox[\defPnum][r]{25.} & \makebox[\defPlhs][l]{\texttt{FUNC\_TYPE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{COLON} \texttt{TYPE}\strut} & \makebox[\defPnum][r]{26.} & \makebox[\defPlhs][l]{\texttt{FUNC\_TYPE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{27.} & \makebox[\defPlhs][l]{\texttt{FUNC\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EXPR} \texttt{EOL\_TOKEN}\strut} & \makebox[\defPnum][r]{28.} & \makebox[\defPlhs][l]{\texttt{FUNC\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STATEMENT\_IF}\strut} \\
+  \makebox[\defPnum][r]{29.} & \makebox[\defPlhs][l]{\texttt{FUNC\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EOL\_TOKEN} \texttt{BLOCK}\strut} & \makebox[\defPnum][r]{30.} & \makebox[\defPlhs][l]{\texttt{EQ\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{COMPARISON\_EQ}\strut} \\
+  \makebox[\defPnum][r]{31.} & \makebox[\defPlhs][l]{\texttt{EQ\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{COMPARISON\_NEQ}\strut} & \makebox[\defPnum][r]{32.} & \makebox[\defPlhs][l]{\texttt{REL\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{COMPARISON\_G}\strut} \\
+  \makebox[\defPnum][r]{33.} & \makebox[\defPlhs][l]{\texttt{REL\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{COMPARISON\_L}\strut} & \makebox[\defPnum][r]{34.} & \makebox[\defPlhs][l]{\texttt{REL\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{COMPARISON\_GE}\strut} \\
+  \makebox[\defPnum][r]{35.} & \makebox[\defPlhs][l]{\texttt{REL\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{COMPARISON\_LE}\strut} & \makebox[\defPnum][r]{36.} & \makebox[\defPlhs][l]{\texttt{ADD\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{OPERATOR\_PLUS}\strut} \\
+  \makebox[\defPnum][r]{37.} & \makebox[\defPlhs][l]{\texttt{ADD\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{OPERATOR\_MINUS}\strut} & \makebox[\defPnum][r]{38.} & \makebox[\defPlhs][l]{\texttt{ADD\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{OPERATOR\_CONCAT}\strut} \\
+  \makebox[\defPnum][r]{39.} & \makebox[\defPlhs][l]{\texttt{MUL\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{OPERATOR\_MULTIPLY}\strut} & \makebox[\defPnum][r]{40.} & \makebox[\defPlhs][l]{\texttt{MUL\_OP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{OPERATOR\_DIVIDE}\strut} \\
+  \makebox[\defPnum][r]{41.} & \makebox[\defPlhs][l]{\texttt{EXPR}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{AND\_EXPR} \texttt{OR\_TAIL}\strut} & \makebox[\defPnum][r]{42.} & \makebox[\defPlhs][l]{\texttt{OR\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{BOOL\_OR} \texttt{AND\_EXPR} \texttt{OR\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{43.} & \makebox[\defPlhs][l]{\texttt{OR\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} & \makebox[\defPnum][r]{44.} & \makebox[\defPlhs][l]{\texttt{AND\_EXPR}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EQ\_EXPR} \texttt{AND\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{45.} & \makebox[\defPlhs][l]{\texttt{AND\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{BOOL\_AND} \texttt{EQ\_EXPR} \texttt{AND\_TAIL}\strut} & \makebox[\defPnum][r]{46.} & \makebox[\defPlhs][l]{\texttt{AND\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{47.} & \makebox[\defPlhs][l]{\texttt{EQ\_EXPR}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{REL\_EXPR} \texttt{EQ\_TAIL}\strut} & \makebox[\defPnum][r]{48.} & \makebox[\defPlhs][l]{\texttt{EQ\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EQ\_OP} \texttt{REL\_EXPR}\strut} \\
+  \makebox[\defPnum][r]{49.} & \makebox[\defPlhs][l]{\texttt{EQ\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} & \makebox[\defPnum][r]{50.} & \makebox[\defPlhs][l]{\texttt{REL\_EXPR}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{ADD\_EXPR} \texttt{REL\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{51.} & \makebox[\defPlhs][l]{\texttt{REL\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{REL\_OP} \texttt{ADD\_EXPR}\strut} & \makebox[\defPnum][r]{52.} & \makebox[\defPlhs][l]{\texttt{REL\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{53.} & \makebox[\defPlhs][l]{\texttt{ADD\_EXPR}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{MUL\_EXPR} \texttt{ADD\_TAIL}\strut} & \makebox[\defPnum][r]{54.} & \makebox[\defPlhs][l]{\texttt{ADD\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{ADD\_OP} \texttt{MUL\_EXPR} \texttt{ADD\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{55.} & \makebox[\defPlhs][l]{\texttt{ADD\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} & \makebox[\defPnum][r]{56.} & \makebox[\defPlhs][l]{\texttt{MUL\_EXPR}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{UNARY} \texttt{MUL\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{57.} & \makebox[\defPlhs][l]{\texttt{MUL\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{MUL\_OP} \texttt{UNARY} \texttt{MUL\_TAIL}\strut} & \makebox[\defPnum][r]{58.} & \makebox[\defPlhs][l]{\texttt{MUL\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{59.} & \makebox[\defPlhs][l]{\texttt{UNARY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{OPERATOR\_MINUS} \texttt{UNARY}\strut} & \makebox[\defPnum][r]{60.} & \makebox[\defPlhs][l]{\texttt{UNARY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{BOOL\_NEG} \texttt{UNARY}\strut} \\
+  \makebox[\defPnum][r]{61.} & \makebox[\defPlhs][l]{\texttt{UNARY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{OPERAND} \texttt{POSTFIX\_TAIL}\strut} & \makebox[\defPnum][r]{62.} & \makebox[\defPlhs][l]{\texttt{POSTFIX\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{PERIOD} \texttt{IDENT} \texttt{POSTFIX\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{63.} & \makebox[\defPlhs][l]{\texttt{POSTFIX\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{CALL\_ARGS} \texttt{POSTFIX\_TAIL}\strut} & \makebox[\defPnum][r]{64.} & \makebox[\defPlhs][l]{\texttt{POSTFIX\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{65.} & \makebox[\defPlhs][l]{\texttt{OPERAND}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IDENT}\strut} & \makebox[\defPnum][r]{66.} & \makebox[\defPlhs][l]{\texttt{OPERAND}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{NO\_IDENT\_OPERAND}\strut} \\
+  \makebox[\defPnum][r]{67.} & \makebox[\defPlhs][l]{\texttt{NO\_IDENT\_OPERAND}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{LITERAL}\strut} & \makebox[\defPnum][r]{68.} & \makebox[\defPlhs][l]{\texttt{NO\_IDENT\_OPERAND}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{L\_PAREN} \texttt{INLINE\_VALUE} \texttt{RANGE\_TAIL} \texttt{R\_PAREN}\strut} \\
+  \makebox[\defPnum][r]{69.} & \makebox[\defPlhs][l]{\texttt{NO\_IDENT\_OPERAND}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{TYPE\_LIST} \texttt{LIST\_TAIL}\strut} & \makebox[\defPnum][r]{70.} & \makebox[\defPlhs][l]{\texttt{LIST\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{CALL\_ARGS}\strut} \\
+  \makebox[\defPnum][r]{71.} & \makebox[\defPlhs][l]{\texttt{LIST\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{PERIOD} \texttt{IDENT}\strut} & \makebox[\defPnum][r]{72.} & \makebox[\defPlhs][l]{\texttt{LITERAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{NUMBER\_INT}\strut} \\
+  \makebox[\defPnum][r]{73.} & \makebox[\defPlhs][l]{\texttt{LITERAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{NUMBER\_DOUBLE}\strut} & \makebox[\defPnum][r]{74.} & \makebox[\defPlhs][l]{\texttt{LITERAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STRING}\strut} \\
+  \makebox[\defPnum][r]{75.} & \makebox[\defPlhs][l]{\texttt{LITERAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{TRIPLE\_STRING}\strut} & \makebox[\defPnum][r]{76.} & \makebox[\defPlhs][l]{\texttt{LITERAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{UNIT}\strut} \\
+  \makebox[\defPnum][r]{77.} & \makebox[\defPlhs][l]{\texttt{LITERAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{BOOL\_TRUE}\strut} & \makebox[\defPnum][r]{78.} & \makebox[\defPlhs][l]{\texttt{LITERAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{BOOL\_FALSE}\strut} \\
+  \makebox[\defPnum][r]{79.} & \makebox[\defPlhs][l]{\texttt{LITERAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{INTERP\_STRING}\strut} & \makebox[\defPnum][r]{80.} & \makebox[\defPlhs][l]{\texttt{EXPR\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{POSTFIX\_TAIL} \texttt{BINARY\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{81.} & \makebox[\defPlhs][l]{\texttt{BINARY\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{MUL\_TAIL} \texttt{ADD\_TAIL} \texttt{REL\_TAIL} \texttt{EQ\_TAIL} \texttt{AND\_TAIL} \texttt{OR\_TAIL}\strut} & \makebox[\defPnum][r]{82.} & \makebox[\defPlhs][l]{\texttt{INTERP\_STRING}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{S\_STRING\_START} \texttt{INTERP\_PARTS} \texttt{S\_STRING\_END}\strut} \\
+  \makebox[\defPnum][r]{83.} & \makebox[\defPlhs][l]{\texttt{INTERP\_STRING}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{TRIPLE\_S\_STRING\_START} \texttt{INTERP\_PARTS} \texttt{TRIPLE\_S\_STRING\_END}\strut} & \makebox[\defPnum][r]{84.} & \makebox[\defPlhs][l]{\texttt{INTERP\_PARTS}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{INTERP\_PART} \texttt{INTERP\_PARTS}\strut} \\
+  \makebox[\defPnum][r]{85.} & \makebox[\defPlhs][l]{\texttt{INTERP\_PARTS}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} & \makebox[\defPnum][r]{86.} & \makebox[\defPlhs][l]{\texttt{INTERP\_PART}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STRING}\strut} \\
+  \makebox[\defPnum][r]{87.} & \makebox[\defPlhs][l]{\texttt{INTERP\_PART}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IDENT}\strut} & \makebox[\defPnum][r]{88.} & \makebox[\defPlhs][l]{\texttt{INTERP\_PART}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{DOLLAR\_EXPRESSION\_START} \texttt{INLINE\_VALUE} \texttt{DOLLAR\_EXPRESSION\_END}\strut} \\
+  \makebox[\defPnum][r]{89.} & \makebox[\defPlhs][l]{\texttt{CALL\_ARGS}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{UNIT}\strut} & \makebox[\defPnum][r]{90.} & \makebox[\defPlhs][l]{\texttt{CALL\_ARGS}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{L\_PAREN} \texttt{ARG\_LIST} \texttt{R\_PAREN}\strut} \\
+  \makebox[\defPnum][r]{91.} & \makebox[\defPlhs][l]{\texttt{ARG\_LIST}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{INLINE\_VALUE} \texttt{ARG\_TAIL}\strut} & \makebox[\defPnum][r]{92.} & \makebox[\defPlhs][l]{\texttt{ARG\_LIST}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{93.} & \makebox[\defPlhs][l]{\texttt{ARG\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{COMMA} \texttt{ARG\_NEXT}\strut} & \makebox[\defPnum][r]{94.} & \makebox[\defPlhs][l]{\texttt{ARG\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{95.} & \makebox[\defPlhs][l]{\texttt{ARG\_NEXT}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{INLINE\_VALUE} \texttt{ARG\_TAIL}\strut} & \makebox[\defPnum][r]{96.} & \makebox[\defPlhs][l]{\texttt{ARG\_NEXT}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{97.} & \makebox[\defPlhs][l]{\texttt{INLINE\_VALUE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EXPR}\strut} & \makebox[\defPnum][r]{98.} & \makebox[\defPlhs][l]{\texttt{INLINE\_VALUE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IF\_INLINE}\strut} \\
+  \makebox[\defPnum][r]{99.} & \makebox[\defPlhs][l]{\texttt{IF\_INLINE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IF} \texttt{EXPR} \texttt{THEN} \texttt{INLINE\_VALUE} \texttt{ELSE} \texttt{INLINE\_VALUE}\strut} & \makebox[\defPnum][r]{100.} & \makebox[\defPlhs][l]{\texttt{RVALUE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EXPR} \texttt{STATEMENT\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{101.} & \makebox[\defPlhs][l]{\texttt{RVALUE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STATEMENT\_IF}\strut} & \makebox[\defPnum][r]{102.} & \makebox[\defPlhs][l]{\texttt{BLOCK}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{INDENT} \texttt{STATEMENT} \texttt{STATEMENT\_LIST} \texttt{INDENT}\strut} \\
+  \makebox[\defPnum][r]{103.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_LIST}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STATEMENT} \texttt{STATEMENT\_LIST}\strut} & \makebox[\defPnum][r]{104.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_LIST}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{105.} & \makebox[\defPlhs][l]{\texttt{STATEMENT}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STATEMENT\_BASE}\strut} & \makebox[\defPnum][r]{106.} & \makebox[\defPlhs][l]{\texttt{STATEMENT}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STATEMENT\_IF}\strut} \\
+  \makebox[\defPnum][r]{107.} & \makebox[\defPlhs][l]{\texttt{STATEMENT}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STATEMENT\_WHILE}\strut} & \makebox[\defPnum][r]{108.} & \makebox[\defPlhs][l]{\texttt{STATEMENT}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STATEMENT\_FOR}\strut} \\
+  \makebox[\defPnum][r]{109.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{SEMICOLON} \texttt{STATEMENT\_BASE}\strut} & \makebox[\defPnum][r]{110.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EOL\_TOKEN}\strut} \\
+  \makebox[\defPnum][r]{111.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_BASE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{VAL} \texttt{IDENT} \texttt{VAR\_TYPE} \texttt{ASSIGN} \texttt{RVALUE}\strut} & \makebox[\defPnum][r]{112.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_BASE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{VAR} \texttt{IDENT} \texttt{VAR\_TYPE} \texttt{ASSIGN} \texttt{RVALUE}\strut} \\
+  \makebox[\defPnum][r]{113.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_BASE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{RETURN} \texttt{RETURN\_VAL}\strut} & \makebox[\defPnum][r]{114.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_BASE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IDENT} \texttt{STATEMENT\_ID}\strut} \\
+  \makebox[\defPnum][r]{115.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_BASE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{NO\_IDENT\_OPERAND} \texttt{EXPR\_TAIL} \texttt{STATEMENT\_TAIL}\strut} & \makebox[\defPnum][r]{116.} & \makebox[\defPlhs][l]{\texttt{VAR\_TYPE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{COLON} \texttt{TYPE}\strut} \\
+  \makebox[\defPnum][r]{117.} & \makebox[\defPlhs][l]{\texttt{VAR\_TYPE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} & \makebox[\defPnum][r]{118.} & \makebox[\defPlhs][l]{\texttt{RETURN\_VAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{RVALUE}\strut} \\
+  \makebox[\defPnum][r]{119.} & \makebox[\defPlhs][l]{\texttt{RETURN\_VAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STATEMENT\_TAIL}\strut} & \makebox[\defPnum][r]{120.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_ID}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{ASSIGN} \texttt{RVALUE}\strut} \\
+  \makebox[\defPnum][r]{121.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_ID}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EXPR\_TAIL} \texttt{STATEMENT\_TAIL}\strut} & \makebox[\defPnum][r]{122.} & \makebox[\defPlhs][l]{\texttt{INLINE\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{RETURN} \texttt{INLINE\_RETURN\_VAL}\strut} \\
+  \makebox[\defPnum][r]{123.} & \makebox[\defPlhs][l]{\texttt{INLINE\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IDENT} \texttt{INLINE\_ID}\strut} & \makebox[\defPnum][r]{124.} & \makebox[\defPlhs][l]{\texttt{INLINE\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{NO\_IDENT\_OPERAND} \texttt{EXPR\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{125.} & \makebox[\defPlhs][l]{\texttt{INLINE\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{OPERATOR\_MINUS} \texttt{UNARY} \texttt{BINARY\_TAIL}\strut} & \makebox[\defPnum][r]{126.} & \makebox[\defPlhs][l]{\texttt{INLINE\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{BOOL\_NEG} \texttt{UNARY} \texttt{BINARY\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{127.} & \makebox[\defPlhs][l]{\texttt{INLINE\_RETURN\_VAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EXPR}\strut} & \makebox[\defPnum][r]{128.} & \makebox[\defPlhs][l]{\texttt{INLINE\_RETURN\_VAL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{129.} & \makebox[\defPlhs][l]{\texttt{INLINE\_ID}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{ASSIGN} \texttt{EXPR}\strut} & \makebox[\defPnum][r]{130.} & \makebox[\defPlhs][l]{\texttt{INLINE\_ID}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EXPR\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{131.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_IF}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IF} \texttt{EXPR} \texttt{THEN} \texttt{IF\_BODY}\strut} & \makebox[\defPnum][r]{132.} & \makebox[\defPlhs][l]{\texttt{IF\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EOL\_TOKEN} \texttt{BLOCK} \texttt{ELSE\_PART}\strut} \\
+  \makebox[\defPnum][r]{133.} & \makebox[\defPlhs][l]{\texttt{IF\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{INLINE\_BODY} \texttt{INLINE\_ELSE\_PART}\strut} & \makebox[\defPnum][r]{134.} & \makebox[\defPlhs][l]{\texttt{ELSE\_PART}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{ELSE} \texttt{ELSE\_BODY}\strut} \\
+  \makebox[\defPnum][r]{135.} & \makebox[\defPlhs][l]{\texttt{ELSE\_PART}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} & \makebox[\defPnum][r]{136.} & \makebox[\defPlhs][l]{\texttt{INLINE\_ELSE\_PART}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{ELSE} \texttt{ELSE\_BODY}\strut} \\
+  \makebox[\defPnum][r]{137.} & \makebox[\defPlhs][l]{\texttt{INLINE\_ELSE\_PART}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{SEMICOLON} \texttt{STATEMENT\_BASE}\strut} & \makebox[\defPnum][r]{138.} & \makebox[\defPlhs][l]{\texttt{INLINE\_ELSE\_PART}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EOL\_TOKEN} \texttt{ELSE\_PART}\strut} \\
+  \makebox[\defPnum][r]{139.} & \makebox[\defPlhs][l]{\texttt{ELSE\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{STATEMENT\_IF}\strut} & \makebox[\defPnum][r]{140.} & \makebox[\defPlhs][l]{\texttt{ELSE\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EOL\_TOKEN} \texttt{BLOCK}\strut} \\
+  \makebox[\defPnum][r]{141.} & \makebox[\defPlhs][l]{\texttt{ELSE\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{INLINE\_BODY} \texttt{STATEMENT\_TAIL}\strut} & \makebox[\defPnum][r]{142.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_WHILE}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{WHILE} \texttt{EXPR} \texttt{DO} \texttt{LOOP\_BODY}\strut} \\
+  \makebox[\defPnum][r]{143.} & \makebox[\defPlhs][l]{\texttt{STATEMENT\_FOR}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{FOR} \texttt{FOR\_HEADER} \texttt{DO} \texttt{LOOP\_BODY}\strut} & \makebox[\defPnum][r]{144.} & \makebox[\defPlhs][l]{\texttt{FOR\_HEADER}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{GENERATOR} \texttt{GUARD\_LIST}\strut} \\
+  \makebox[\defPnum][r]{145.} & \makebox[\defPlhs][l]{\texttt{FOR\_HEADER}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EOL\_TOKEN} \texttt{INDENT} \texttt{GENERATOR} \texttt{EOL\_TOKEN} \texttt{GUARD\_LINES} \texttt{INDENT}\strut} & \makebox[\defPnum][r]{146.} & \makebox[\defPlhs][l]{\texttt{GENERATOR}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IDENT} \texttt{CONTROL\_ARROW} \texttt{EXPR} \texttt{RANGE\_TAIL}\strut} \\
+  \makebox[\defPnum][r]{147.} & \makebox[\defPlhs][l]{\texttt{RANGE\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IDENT} \texttt{EXPR} \texttt{RANGE\_STEP}\strut} & \makebox[\defPnum][r]{148.} & \makebox[\defPlhs][l]{\texttt{RANGE\_TAIL}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{149.} & \makebox[\defPlhs][l]{\texttt{RANGE\_STEP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IDENT} \texttt{EXPR}\strut} & \makebox[\defPnum][r]{150.} & \makebox[\defPlhs][l]{\texttt{RANGE\_STEP}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{151.} & \makebox[\defPlhs][l]{\texttt{GUARD\_LIST}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IF} \texttt{EXPR} \texttt{GUARD\_LIST}\strut} & \makebox[\defPnum][r]{152.} & \makebox[\defPlhs][l]{\texttt{GUARD\_LIST}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{153.} & \makebox[\defPlhs][l]{\texttt{GUARD\_LINES}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{IF} \texttt{EXPR} \texttt{EOL\_TOKEN} \texttt{GUARD\_LINES}\strut} & \makebox[\defPnum][r]{154.} & \makebox[\defPlhs][l]{\texttt{GUARD\_LINES}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut $\varepsilon$\strut} \\
+  \makebox[\defPnum][r]{155.} & \makebox[\defPlhs][l]{\texttt{LOOP\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{EOL\_TOKEN} \texttt{BLOCK}\strut} & \makebox[\defPnum][r]{156.} & \makebox[\defPlhs][l]{\texttt{LOOP\_BODY}} & \parbox[t]{\defPrhs}{\raggedright\hangindent=1em\strut \texttt{INLINE\_BODY} \texttt{STATEMENT\_TAIL}\strut} \\
+\end{tabular}}%
+\setlength\defPwd{\ifdim\wd\defPbox>\linewidth\linewidth\else\wd\defPbox\fi}%
+\setlength\defPht{\dimexpr\ht\defPbox+\dp\defPbox\relax}%
+\ifdim\dimexpr\defPht*\numexpr\defPwd\relax/\numexpr\wd\defPbox\relax\relax>\dimexpr\textheight-20pt\relax
+  \setlength\defPwd{\dimexpr\wd\defPbox*\numexpr\dimexpr\textheight-20pt\relax\relax/\numexpr\defPht\relax\relax}\fi
+\vspace*{\fill}
+{\centering\resizebox{\defPwd}{!}{\usebox\defPbox}\par}
+\vspace*{\fill}
+\restoregeometry
+
+
+% AI generated by: Codex / gpt-6.2-sol
+% Prompt: "This is worse. Try having it oriented normally and split it in half (split on the longer side) and split it on 2 A4 pages"
+% Changes: Split the LL table into two portrait pages and repeat the row labels.
+% AI generated by: Codex / gpt-6.2-sol
+% Prompt: "The pages are missing page numbers"
+% Changes: Reserve space for the page-number footer on both LL table pages.
+\newgeometry{margin=8mm,includefoot,footskip=14pt}
 \subsection{LL tabulka}
+\newsavebox{\lltablebox}
+\begingroup
+\centering
+\fontsize{9}{10.5}\selectfont
+\setlength{\tabcolsep}{1.5pt}
+\setlength{\arrayrulewidth}{0.25pt}
+\renewcommand{\arraystretch}{0.92}
+\begin{lrbox}{\lltablebox}
+\begin{tabular}{|*{31}{c|}}
+\hline
+ & T1 & T2 & T3 & T4 & T5 & T6 & T7 & T8 & T9 & T10 & T11 & T12 & T13 & T14 & T15 & T16 & T17 & T18 & T19 & T20 & T21 & T22 & T23 & T24 & T25 & T26 & T27 & T28 & T29 & T30 \\ \hline
+N1 &  &  & 1 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N2 &  &  & 2 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N3 &  & 3 &  & 3 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N4 &  & 15 &  & 15 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N5 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 16 &  &  &  &  \\ \hline
+N6 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N7 & 27 &  &  &  &  &  &  & 28 &  &  &  &  &  &  &  &  & 27 &  &  &  &  & 27 & 27 & 27 & 27 & 27 & 27 & 27 & 27 &  \\ \hline
+N8 & 18 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N9 & 24 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N10 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N11 & 22 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N12 &  &  &  &  &  &  &  &  &  &  &  &  & 9 & 10 & 11 & 12 & 14 &  &  &  & 13 &  &  &  &  &  &  &  &  &  \\ \hline
+N13 &  & 5 &  & 6 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N14 &  &  &  & 8 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N15 & 41 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 41 &  &  &  &  & 41 & 41 & 41 & 41 & 41 & 41 & 41 & 41 &  \\ \hline
+N16 &  &  &  &  &  &  &  &  &  & 80 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 80 &  &  &  &  \\ \hline
+N17 &  &  &  &  &  &  &  &  &  & 81 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N18 & 44 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 44 &  &  &  &  & 44 & 44 & 44 & 44 & 44 & 44 & 44 & 44 &  \\ \hline
+N19 & 47 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 47 &  &  &  &  & 47 & 47 & 47 & 47 & 47 & 47 & 47 & 47 &  \\ \hline
+N20 & 50 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 50 &  &  &  &  & 50 & 50 & 50 & 50 & 50 & 50 & 50 & 50 &  \\ \hline
+N21 & 53 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 53 &  &  &  &  & 53 & 53 & 53 & 53 & 53 & 53 & 53 & 53 &  \\ \hline
+N22 & 56 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 56 &  &  &  &  & 56 & 56 & 56 & 56 & 56 & 56 & 56 & 56 &  \\ \hline
+N23 & 43 &  &  &  &  &  &  & 43 & 43 & 43 &  & 43 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N24 & 46 &  &  &  &  &  &  & 46 & 46 & 46 &  & 46 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N25 & 49 &  &  &  &  &  &  & 49 & 49 & 49 &  & 49 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N26 & 52 &  &  &  &  &  &  & 52 & 52 & 52 &  & 52 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N27 & 55 &  &  &  &  &  &  & 55 & 55 & 55 &  & 55 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N28 & 58 &  &  &  &  &  &  & 58 & 58 & 58 &  & 58 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N29 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N30 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N31 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N32 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N33 & 61 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 61 &  &  &  &  & 61 & 61 & 61 & 61 & 61 & 61 & 61 & 61 &  \\ \hline
+N34 & 64 &  &  &  &  &  &  & 64 & 64 & 64 &  & 64 &  &  &  &  &  &  &  &  &  &  &  &  &  & 63 &  &  &  &  \\ \hline
+N35 & 65 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 66 &  &  &  &  & 66 & 66 & 66 & 66 & 66 & 66 & 66 & 66 &  \\ \hline
+N36 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 69 &  &  &  &  & 67 & 67 & 67 & 67 & 67 & 67 & 67 & 67 &  \\ \hline
+N37 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 70 &  &  &  &  \\ \hline
+N38 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 77 & 78 & 72 & 73 & 76 & 74 & 75 & 79 &  \\ \hline
+N39 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 82 &  \\ \hline
+N40 & 84 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 84 &  &  & 85 \\ \hline
+N41 & 87 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 86 &  &  &  \\ \hline
+N42 & 97 &  &  &  &  &  &  & 98 &  &  &  &  &  &  &  &  & 97 &  &  &  &  & 97 & 97 & 97 & 97 & 97 & 97 & 97 & 97 &  \\ \hline
+N43 &  &  &  &  &  &  &  & 99 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N44 & 100 &  &  &  &  &  &  & 101 &  &  &  &  &  &  &  &  & 100 &  &  &  &  & 100 & 100 & 100 & 100 & 100 & 100 & 100 & 100 &  \\ \hline
+N45 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 89 &  &  &  &  \\ \hline
+N46 & 91 &  &  &  &  &  &  & 91 &  &  &  &  &  &  &  &  & 91 &  &  &  &  & 91 & 91 & 91 & 91 & 91 & 91 & 91 & 91 &  \\ \hline
+N47 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N48 & 95 &  &  &  &  &  &  & 95 &  &  &  &  &  &  &  &  & 95 &  &  &  &  & 95 & 95 & 95 & 95 & 95 & 95 & 95 & 95 &  \\ \hline
+N49 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N50 & 105 &  &  &  & 105 & 105 & 105 & 106 &  &  & 107 &  &  &  &  &  & 105 &  &  & 108 &  & 105 & 105 & 105 & 105 & 105 & 105 & 105 & 105 &  \\ \hline
+N51 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N52 & 103 &  &  &  & 103 & 103 & 103 & 103 &  &  & 103 &  &  &  &  &  & 103 &  &  & 103 &  & 103 & 103 & 103 & 103 & 103 & 103 & 103 & 103 &  \\ \hline
+N53 & 114 &  &  &  & 111 & 112 & 113 &  &  &  &  &  &  &  &  &  & 115 &  &  &  &  & 115 & 115 & 115 & 115 & 115 & 115 & 115 & 115 &  \\ \hline
+N54 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 121 &  &  &  &  \\ \hline
+N55 & 123 &  &  &  &  &  & 122 &  &  &  &  &  &  &  &  &  & 124 &  &  &  &  & 124 & 124 & 124 & 124 & 124 & 124 & 124 & 124 &  \\ \hline
+N56 &  &  &  &  &  &  &  &  &  & 130 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 130 &  &  &  &  \\ \hline
+N57 & 127 &  &  &  &  &  &  &  &  & 128 &  &  &  &  &  &  & 127 &  &  &  &  & 127 & 127 & 127 & 127 & 127 & 127 & 127 & 127 &  \\ \hline
+N58 &  &  &  &  &  &  &  & 131 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N59 & 133 &  &  &  &  &  & 133 &  &  &  &  &  &  &  &  &  & 133 &  &  &  &  & 133 & 133 & 133 & 133 & 133 & 133 & 133 & 133 &  \\ \hline
+N60 & 135 & 135 &  & 135 & 135 & 135 & 135 & 135 &  & 134 & 135 &  &  &  &  &  & 135 &  &  & 135 &  & 135 & 135 & 135 & 135 & 135 & 135 & 135 & 135 &  \\ \hline
+N61 &  &  &  &  &  &  &  &  &  & 136 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N62 & 141 &  &  &  &  &  & 141 & 139 &  &  &  &  &  &  &  &  & 141 &  &  &  &  & 141 & 141 & 141 & 141 & 141 & 141 & 141 & 141 &  \\ \hline
+N63 &  &  &  &  &  &  &  &  &  &  & 142 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N64 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 143 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N65 & 144 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N66 & 146 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N67 & 147 &  &  &  &  &  &  & 148 &  &  &  & 148 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N68 & 149 &  &  &  &  &  &  & 150 &  &  &  & 150 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N69 &  &  &  &  &  &  &  & 151 &  &  &  & 152 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N70 &  &  &  &  &  &  &  & 153 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N71 & 156 &  &  &  &  &  & 156 &  &  &  &  &  &  &  &  &  & 156 &  &  &  &  & 156 & 156 & 156 & 156 & 156 & 156 & 156 & 156 &  \\ \hline
+N72 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N73 & 118 &  &  &  &  &  &  & 118 &  &  &  &  &  &  &  &  & 118 &  &  &  &  & 118 & 118 & 118 & 118 & 118 & 118 & 118 & 118 &  \\ \hline
+\end{tabular}
+\end{lrbox}
+\noindent
+\ifdim\wd\lltablebox>\linewidth
+  \resizebox{\linewidth}{!}{\usebox{\lltablebox}}%
+\else
+  \usebox{\lltablebox}%
+\fi\par
+\clearpage
 
-\begin{table}[htbp]
-  \centering
-  \caption{LL tabulka syntaktického analyzátoru}
-  \label{tab:ll-tabulka}
-  \TODO{LL tabulka}
-\end{table}
+\begin{lrbox}{\lltablebox}
+\begin{tabular}{|*{31}{c|}}
+\hline
+ & T31 & T32 & T33 & T34 & T35 & T36 & T37 & T38 & T39 & T40 & T41 & T42 & T43 & T44 & T45 & T46 & T47 & T48 & T49 & T50 & T51 & T52 & T53 & T54 & T55 & T56 & T57 & T58 & T59 & \$ \\ \hline
+N1 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N2 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N3 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 4 &  \\ \hline
+N4 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N5 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 17 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N6 &  &  &  &  &  &  &  &  &  & 26 &  &  &  &  &  &  &  &  &  &  &  &  &  & 25 &  &  &  &  &  &  \\ \hline
+N7 & 27 &  &  &  &  & 27 &  &  &  &  &  &  &  &  &  &  &  &  & 27 & 27 &  &  &  &  &  &  &  & 29 &  &  \\ \hline
+N8 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 19 &  &  &  &  &  &  &  &  &  \\ \hline
+N9 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N10 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 21 & 20 &  &  &  &  &  &  &  &  \\ \hline
+N11 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 23 &  &  &  &  &  &  &  &  &  \\ \hline
+N12 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N13 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N14 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 7 &  &  \\ \hline
+N15 & 41 &  &  &  &  & 41 &  &  &  &  &  &  &  &  &  &  &  &  & 41 & 41 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N16 &  &  &  &  & 80 & 80 & 80 & 80 & 80 &  & 80 & 80 & 80 & 80 & 80 & 80 & 80 & 80 &  & 80 &  &  & 80 &  & 80 &  &  & 80 &  &  \\ \hline
+N17 &  &  &  &  & 81 & 81 & 81 & 81 & 81 &  & 81 & 81 & 81 & 81 & 81 & 81 & 81 & 81 &  &  &  &  &  &  & 81 &  &  & 81 &  &  \\ \hline
+N18 & 44 &  &  &  &  & 44 &  &  &  &  &  &  &  &  &  &  &  &  & 44 & 44 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N19 & 47 &  &  &  &  & 47 &  &  &  &  &  &  &  &  &  &  &  &  & 47 & 47 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N20 & 50 &  &  &  &  & 50 &  &  &  &  &  &  &  &  &  &  &  &  & 50 & 50 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N21 & 53 &  &  &  &  & 53 &  &  &  &  &  &  &  &  &  &  &  &  & 53 & 53 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N22 & 56 &  &  &  &  & 56 &  &  &  &  &  &  &  &  &  &  &  &  & 56 & 56 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N23 &  &  &  & 43 &  &  &  &  &  &  &  &  &  &  &  &  &  & 42 &  &  & 43 & 43 &  &  & 43 &  &  & 43 &  &  \\ \hline
+N24 &  &  &  & 46 &  &  &  &  &  &  &  &  &  &  &  &  & 45 & 46 &  &  & 46 & 46 &  &  & 46 &  &  & 46 &  &  \\ \hline
+N25 &  &  &  & 49 &  &  &  &  &  &  & 48 & 48 &  &  &  &  & 49 & 49 &  &  & 49 & 49 &  &  & 49 &  &  & 49 &  &  \\ \hline
+N26 &  &  &  & 52 &  &  &  &  &  &  & 52 & 52 & 51 & 51 & 51 & 51 & 52 & 52 &  &  & 52 & 52 &  &  & 52 &  &  & 52 &  &  \\ \hline
+N27 &  &  &  & 55 & 54 & 54 &  &  & 54 &  & 55 & 55 & 55 & 55 & 55 & 55 & 55 & 55 &  &  & 55 & 55 &  &  & 55 &  &  & 55 &  &  \\ \hline
+N28 &  &  &  & 58 & 58 & 58 & 57 & 57 & 58 &  & 58 & 58 & 58 & 58 & 58 & 58 & 58 & 58 &  &  & 58 & 58 &  &  & 58 &  &  & 58 &  &  \\ \hline
+N29 &  &  &  &  &  &  &  &  &  &  & 30 & 31 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N30 &  &  &  &  &  &  &  &  &  &  &  &  & 32 & 33 & 34 & 35 &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N31 &  &  &  &  & 36 & 37 &  &  & 38 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N32 &  &  &  &  &  &  & 39 & 40 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N33 & 61 &  &  &  &  & 59 &  &  &  &  &  &  &  &  &  &  &  &  & 60 & 61 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N34 &  &  &  & 64 & 64 & 64 & 64 & 64 & 64 &  & 64 & 64 & 64 & 64 & 64 & 64 & 64 & 64 &  & 63 & 64 & 64 & 62 &  & 64 &  &  & 64 &  &  \\ \hline
+N35 & 66 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 66 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N36 & 67 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 68 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N37 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 70 &  &  & 71 &  &  &  &  &  &  &  \\ \hline
+N38 & 79 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N39 & 83 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N40 &  & 85 & 84 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N41 &  &  & 88 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N42 & 97 &  &  &  &  & 97 &  &  &  &  &  &  &  &  &  &  &  &  & 97 & 97 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N43 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N44 & 100 &  &  &  &  & 100 &  &  &  &  &  &  &  &  &  &  &  &  & 100 & 100 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N45 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 90 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N46 & 91 &  &  &  &  & 91 &  &  &  &  &  &  &  &  &  &  &  &  & 91 & 91 & 92 &  &  &  &  &  &  &  &  &  \\ \hline
+N47 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 94 & 93 &  &  &  &  &  &  &  &  \\ \hline
+N48 & 95 &  &  &  &  & 95 &  &  &  &  &  &  &  &  &  &  &  &  & 95 & 95 & 96 &  &  &  &  &  &  &  &  &  \\ \hline
+N49 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 102 &  &  &  \\ \hline
+N50 & 105 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 105 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N51 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 109 &  &  & 110 &  &  \\ \hline
+N52 & 103 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 103 &  &  &  &  &  &  & 104 &  &  &  \\ \hline
+N53 & 115 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 115 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N54 &  &  &  &  & 121 & 121 & 121 & 121 & 121 & 120 & 121 & 121 & 121 & 121 & 121 & 121 & 121 & 121 &  & 121 &  &  & 121 &  & 121 &  &  & 121 &  &  \\ \hline
+N55 & 124 &  &  &  &  & 125 &  &  &  &  &  &  &  &  &  &  &  &  & 126 & 124 &  &  &  &  &  &  &  &  &  &  \\ \hline
+N56 &  &  &  &  & 130 & 130 & 130 & 130 & 130 & 129 & 130 & 130 & 130 & 130 & 130 & 130 & 130 & 130 &  & 130 &  &  & 130 &  & 130 &  &  & 130 &  &  \\ \hline
+N57 & 127 &  &  &  &  & 127 &  &  &  &  &  &  &  &  &  &  &  &  & 127 & 127 &  &  &  &  & 128 &  &  & 128 &  &  \\ \hline
+N58 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N59 & 133 &  &  &  &  & 133 &  &  &  &  &  &  &  &  &  &  &  &  & 133 & 133 &  &  &  &  &  &  &  & 132 &  &  \\ \hline
+N60 & 135 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 135 &  &  &  &  &  &  & 135 &  & 135 &  \\ \hline
+N61 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 137 &  &  & 138 &  &  \\ \hline
+N62 & 141 &  &  &  &  & 141 &  &  &  &  &  &  &  &  &  &  &  &  & 141 & 141 &  &  &  &  &  &  &  & 140 &  &  \\ \hline
+N63 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N64 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N65 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 145 &  &  \\ \hline
+N66 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N67 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 148 &  &  &  &  &  &  & 148 &  &  \\ \hline
+N68 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 150 &  &  &  &  &  &  & 150 &  &  \\ \hline
+N69 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+N70 &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & 154 &  &  &  \\ \hline
+N71 & 156 &  &  &  &  & 156 &  &  &  &  &  &  &  &  &  &  &  &  & 156 & 156 &  &  &  &  &  &  &  & 155 &  &  \\ \hline
+N72 &  &  &  &  &  &  &  &  &  & 117 &  &  &  &  &  &  &  &  &  &  &  &  &  & 116 &  &  &  &  &  &  \\ \hline
+N73 & 118 &  &  &  &  & 118 &  &  &  &  &  &  &  &  &  &  &  &  & 118 & 118 &  &  &  &  & 119 &  &  & 119 &  &  \\ \hline
+\end{tabular}
+\end{lrbox}
+\noindent
+\ifdim\wd\lltablebox>\linewidth
+  \resizebox{\linewidth}{!}{\usebox{\lltablebox}}%
+\else
+  \usebox{\lltablebox}%
+\fi\par
+\endgroup
+\restoregeometry
 
 \subsection{Precedenční tabulka}
 
-\begin{table}[htbp]
-  \centering
-  \caption{Precedenční tabulka pro zpracování výrazů}
-  \label{tab:precedencni-tabulka}
-  \TODO{precedenční tabulka}
-\end{table}
+
+% Generated by tools/table-maker
+\begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|c|c|c|c|}
+\hline
+ & .m & call & pre & mul & add & rel & eq & and & or & rng & by & ( & ) & i & \$ \\ \hline
+.m & $>$ & $>$ &  & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ &  & $>$ &  & $>$ \\ \hline
+call & $>$ & $>$ &  & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ &  & $>$ &  & $>$ \\ \hline
+pre & $<$ & $<$ & $<$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $<$ & $>$ & $<$ & $>$ \\ \hline
+mul & $<$ & $<$ & $<$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $<$ & $>$ & $<$ & $>$ \\ \hline
+add & $<$ & $<$ & $<$ & $<$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $<$ & $>$ & $<$ & $>$ \\ \hline
+rel & $<$ & $<$ & $<$ & $<$ & $<$ &  &  & $>$ & $>$ & $>$ & $>$ & $<$ & $>$ & $<$ & $>$ \\ \hline
+eq & $<$ & $<$ & $<$ & $<$ & $<$ &  &  & $>$ & $>$ & $>$ & $>$ & $<$ & $>$ & $<$ & $>$ \\ \hline
+and & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $>$ & $>$ & $>$ & $>$ & $<$ & $>$ & $<$ & $>$ \\ \hline
+or & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $>$ & $>$ & $>$ & $<$ & $>$ & $<$ & $>$ \\ \hline
+rng & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ &  & $=$ & $<$ & $>$ & $<$ &  \\ \hline
+by & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ &  &  & $<$ & $>$ & $<$ &  \\ \hline
+( & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $=$ & $<$ &  \\ \hline
+) & $>$ & $>$ &  & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ &  & $>$ &  & $>$ \\ \hline
+i & $>$ & $>$ &  & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ & $>$ &  & $>$ &  & $>$ \\ \hline
+\$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ & $<$ &  &  & $<$ &  & $<$ &  \\ \hline
+\end{tabular}
+
 
 % ============================================================================
 % POPIS MODULŮ
@@ -243,19 +799,45 @@
 \section{Popis modulů}
 
 % Pro každý pár .c/.h přidejte jednu položku:
-\begin{description}[style=nextline]
-  \item[\ttfamily \TODO{soubor.c\,/\,soubor.h}] \TODO{stručný popis modulu}
-  \item[\ttfamily \TODO{soubor.c\,/\,soubor.h}] \TODO{stručný popis modulu}
-\end{description}
-
-% ============================================================================
-% POUŽITÉ ZDROJE
-% Zadání: bibliografické citace všech převzatých zdrojů (vč. kódu
-% a algoritmů).
-% ============================================================================
-\begin{thebibliography}{9}
-  \bibitem{zdroj1} \TODO{bibliografická citace převzatého zdroje}
-\end{thebibliography}
+\begin{itemize}
+    \item \texttt{array.c\,/\,array.h} Dynamické pole obecných typů
+    \item \texttt{ast.c\,/\,ast.h} Abstraktní syntaktický strom a operace nad ním
+    \item \texttt{bst.c\,/\,bst.h} Generický výškově vyvážený binární strom AVL
+    \item \texttt{codegen.c\,/\,codegen.h} Generátor kódu a vestavěných IFJ26Code funkcí
+    \item \texttt{ctx.c\,/\,ctx.h} Sdílený kontext, makra pro práci s pamětí, řešení chybových stavů
+    \item \texttt{expr\_parser.c\,/\,expr\_parser.h} Parsing výrazů precedenční syntaktickou analýzou
+    \item \texttt{ifj26.c} Vstupní bod programu
+    \item \texttt{ir.c\,/\,ir.h} Vnitřní reprezentace překládaného kódu
+    \item \texttt{ir\_free\_helpers.c\,/\,ir\_free\_helpers.h} Pomocné funkce pro uvolnění IR
+    \item \texttt{ir\_helpers.c\,/\,ir\_helpers.h} Pomocné funkce pro práci s IR
+    \item \texttt{lexer.c\,/\,lexer.h} Lexer jazyka IFJ26
+    \item \texttt{lexer\_diagnostics.c} Zajišťuje vzhled lexikálních chybových hlášek
+    \item \texttt{lexer\_helpers.c} Hlavní funkcí je přiřazení dat do struktury Token
+    \item \texttt{lexer\_internal.h} Vnitřní výčtové typy pro lexer
+    \item \texttt{lexer\_transitions.c} Přechody konečného zásobníkového automatu
+    \item \texttt{lowering.c\,/\,lowering.h} Funkce pro převod AST na IR
+    \item \texttt{lowering\_control\_flow.c\,/\,lowering\_control\_flow.h} Převod konstrukcí \verb|if, while| a zkrácené vyhodnocování logických operátorů (vyhodnocování jen nutných operandů)
+    \item \texttt{lowering\_expression.c\,/\,lowering\_expression.h} Pomocné funkce pro převod výrazů
+    \item \texttt{lowering\_helpers.c\,/\,lowering\_helpers.h} Pomocné funkce pro převod AST na IR
+    \item \texttt{lowering\_range.c\,/\,lowering\_range.h} Převod cyklů \verb|for| nad rozsahy včetně kroku a filtrovacích podmínek
+    \item \texttt{lowering\_statement.c\,/\,lowering\_statement.h} Převod příkazů a bloků a přidělování slotů pro lokální proměnné
+    \item \texttt{optimizer.c\,/\,optimizer.h} Vnější rozhraní optimalizátoru
+    \item \texttt{optimizer\_constant\_folding.c\,/\,optimizer\_constant\_folding.h} Pomocné funkce pro optimalizování konstantních výrazů (\texttt{1 + 2})
+    \item \texttt{optimizer\_constant\_propagation.c\,/\,optimizer\_constant\_propagation.h} Pomocné funkce pro šíření konstantních hodnot
+    \item \texttt{optimizer\_control\_flow.c\,/\,optimizer\_control\_flow.h} Pomocné funkce pro odstraňování nedosažitelných funkcí/bloků kódu
+    \item \texttt{optimizer\_dead\_code\_elimination.c\,/\,optimizer\_dead\_code\_elimination.h} Pomocné funkce pro odstraňování instrukcí, jejichž výsledek není nikde používaný
+    \item \texttt{optimizer\_fold\_branches.c\,/\,optimizer\_fold\_branches.h} Pomocné funkce pro zjednodušování podmíněných skoků
+    \item \texttt{optimizer\_fold\_identities.c\,/\,optimizer\_fold\_identities.h} Pomocné funkce pro odstraňování algebraických identit (\texttt{x + 0})
+    \item \texttt{optimizer\_forwarding.c\,/\,optimizer\_forwarding.h} Pomocné funkce pro odstraňování zbytečných store instrukcí
+    \item \texttt{optimizer\_helpers.c\,/\,optimizer\_helpers.h} Pomocné funkce pro optimalizaci
+    \item \texttt{optimizer\_jump\_threading.c\,/\,optimizer\_jump\_threading.h} Pomocné funkce pro zjednodušování sekvencí skoků
+    \item \texttt{parser.c\,/\,parser.h} Parsing struktury programu rekurzivním sestupem
+    \item \texttt{parser\_internal.h} Pomocné funkce pro parser
+    \item \texttt{semantics.c\,/\,semantics.h} Sémantická analýza
+    \item \texttt{symtable.c\,/\,symtable.h} Wrapper pro vv-BVS poskytující rozhraní tabulky symbolů
+    \item \texttt{symtable\_builtins.c\,/\,symtable\_builtins.h} Helper pro vložení vestavěných funkcí IFJ26 do tabulky symbolů
+    \item \texttt{token\_layer.c\,/\,token\_layer.h} Pomocné funkce pro manipulaci tokenů z lexeru pro parser
+\end{itemize}
 
 % ============================================================================
 % VYUŽITÍ PROSTŘEDKŮ AI
@@ -267,9 +849,87 @@
 \section{Využití prostředků AI}
 
 \subsection{Použité nástroje a pracovní postup}
-\TODO{konkrétní použité AI nástroje a modely + typický pracovní postup}
+Každý člen týmu používal prakticky jiné AI nástroje a ještě se navíc v průběhu semestru neustále měnily. Dohromady byly použity následující aplikace:
+\begin{itemize}
+  \item Antigravity
+  \item ChatGPT App
+  \item Claude Code
+  \item OpenCode Desktop
+  \item T3 Code
+  \item ZCode
+  \item Zed
+\end{itemize}
+a tyto modely:
+\begin{itemize}
+  \item GLM 5.3
+  \item GLM 5.3 Flash
+  \item GPT 6.1 Astra
+  \item GPT 6.1 Luna
+  \item GPT 6.1 Sol
+  \item GPT 6.2 Astra
+  \item GPT 6.2 Luna
+  \item GPT 6.2 Sol
+  \item Gemini 3.8 Flash
+  \item Gemini 4 Hydrogen
+  \item Gemini 4 Neon
+  \item Muse 1.3 Spark
+  \item Fable 5.2
+  \item Opus 5.5
+  \item Sonnet 5.5
+  \item Haiku 5.5
+\end{itemize}
+Ne všechny modely byly použity pro psaní kódu aplikace, některé byly použity pro pomoc s pochopením problematiky, když jsme byli napřed oproti přednáškám.
+
+\subsection{Individuální využití AI}
+Dodržování pravidel deklarace použití AI jsme vyřešili přes soubor \verb|AGENTS.md|. Z testování víme, že agenti pravidla v tomto souboru dodržují tak pečlivě, že je potřeba je přesvědčovat, aby pomohli jen posunout graf v dokumentaci.\\\\
+\textbf{David Alois Bureš}: AI jsem používal na vývoj nástroje na výrobu zásobníkových automatů,
+samotný automat jsem ale implementoval sám. Dále jsem AI využil pro generaci skriptu v Pythonu,
+který převedl \texttt{lexer.txt} do C tabulky, ve které se dají hledat přechody.
+Pro samotnou implementaci jsem první návrh konzultoval a poté implementoval
+samostatně, podle návodu, který AI vytvořila,
+nebo jsem (po specifikaci všech podrobností) nechal implementaci na agentovi.\\\\
+\textbf{Lukáš Pollák}: Při práci s AI jsem využíval sbírku skillů od Matta Pococka,
+především \texttt{grill-me} a \texttt{implement}. Vždy jsem začal sepsáním
+specifikace změny, kterou jsem chtěl provést. Tuto specifikaci jsem si poté
+ověřil pomocí skillu \texttt{grill-me}, a když jsem usoudil, že je adekvátní,
+nechal jsem si vygenerovat plán implementace.
+Na základě složitosti změny jsem se pak rozhodl, zda implementaci provedu sám,
+nebo pomocí agenta. Každý nový kód následně prošel několika koly code review,
+a to jak ode mě samotného, tak od agenta.
 
 \subsection{Problémy a nevyužité návrhy}
-\TODO{problémy při využití AI; situace, kdy návrhy nebyly využity nebo byly značně upraveny}
+Při využívání AI jsme na žádné větší problémy nenarazili. Naopak se velmi dobře osvědčilo ve vytváření pomocných vedlejších prográmků:
+\begin{itemize}
+  \item Lexica -- nástroj na tvorbu stavových automatů a jejich debugování (pro upřesnění, specificky neobsahuje žádné nástroje pro generování automatů, ať už algoritmicky nebo s pomocí AI)
+  \item OptimizerDebugger -- nástroj na vizuální debugování optimalizátoru s hot-reload apod.
+  \item Table Maker -- nástroj na návrh LL gramatiky, LL tabulky a precedenční tabulky.
+\end{itemize}
+
+U generovaného kódu bylo potřeba dávat pozor na čitelnost, srozumitelnost, a hlavně aby v něm člověk neztratil přehled. Jeden neúspěšný pokus je ve větvi \verb|feat/improve-optimizer|. Kvůli časovému skluzu jsem (Jan Kostka) při vylepšování optimalizátoru začal více a více spoléhat na AI. Podařilo se mi ho takto neskutečně vylepšit (z průměrného zlepšení -20\,\% ceny interpretace napříč našimi e2e testy jsem se dostal až na -82\,\% -- tuto statistiku navíc ještě silně zkresluje veliké množství malých, prakticky neoptimalizovatelných krátkých testů). Optimalizátor byl schopen optimalizovat například celý program na rekurentní výpočet 13. Fibonacciho čísla na jednoduchý \texttt{write 233}. Navíc se mi podařilo opravit některá nešťastná architektonická řešení (vestavěné funkce jsem posunul do loweringu z codegenu). Následně jsem strávil celý den, kdy jsem se jen snažil celý kód rozmotat a pochopit. Dostal jsem se do fáze, kdy jsem rozuměl cca 80\,\%, kód byl nicméně stále čitelný jen s obtížemi. V \verb|feat/improve-optimizer| je už hodně učesaná verze. Původní plán byl použít tuto verzi jako benchmark a postupně ručně implementovat verzi, která bude mít stejné schopnosti. Na to ale nezbyl čas. Nakonec jsme se vzhledem k neuspokojivé kvalitě, původu a porozumění kódu rozhodli odevzdat verzi, která je sice mnohem slabší, ale je celá psaná ručně.
+
+% ============================================================================
+% POUŽITÉ ZDROJE
+% Zadání: bibliografické citace všech převzatých zdrojů (vč. kódu
+% a algoritmů).
+% ============================================================================
+\vfill
+\begin{thebibliography}{9}
+  \bibitem{ifj}
+  MEDUNA, Alexander. \textit{Formální jazyky a překladače (IFJ): přednášky a studijní opora}. Brno: Fakulta informačních technologií, Vysoké učení technické v~Brně, 2026.
+
+  \bibitem{ial}
+  BURGETOVÁ, Ivana. \textit{Algoritmy (IAL): přednášky} [online]. Brno: Fakulta informačních technologií, Vysoké učení technické v~Brně, 2026 [cit. 2026-11-26].
+
+  \bibitem{ifj-demo}
+  ONDRYÁŠ, Ondřej. \textit{IFJ 2026/27: Projekt -- překladač jazyka IFJ26: demonstrační cvičení} [online]. Brno: Fakulta informačních technologií, Vysoké učení technické v~Brně, 21.~října 2026 [cit. 2026-11-26].
+
+  \bibitem{snow}
+  MORTIE (Dørum, Martin). \textit{Snow: A unit testing library for C} [online]. GitHub [cit. 2026-11-26]. Dostupné z: \url{https://github.com/mortie/snow}
+
+  \bibitem{premature-abstraction}
+  \textit{Premature Abstraction} [online]. YouTube [cit. 2026-11-26]. Dostupné z:\\
+  \url{https://www.youtube.com/@PrematureAbstraction},\\
+  \url{https://youtube.com/playlist?list=PL6whQ6CW68oe3tcmFcBLYFQChqwYEaG7_}
+\end{thebibliography}
 
 \end{document}
