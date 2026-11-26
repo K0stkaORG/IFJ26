@@ -187,8 +187,9 @@ typedef struct {
 /**
  * @brief One row of an error table, the tokens of a whole program
  */
-#define ROW(...) \
-  {(const Token[]){__VA_ARGS__}, sizeof((const Token[]){__VA_ARGS__}) / sizeof(Token)}
+#define ROW(...)                 \
+  {(const Token[]){__VA_ARGS__}, \
+   sizeof((const Token[]){__VA_ARGS__}) / sizeof(Token)}
 
 /// A row of a def with a single-expression body: PROLOG, def f() = <expression>
 #define ONE(...) ROW(BODY(__VA_ARGS__))
@@ -205,15 +206,15 @@ ExitCode fake_parse_exit(FakeRow row);
  * @brief Asserts that parsing every ROW(...) ends with the exit code, the
  * failure names the row
  */
-#define ASSERT_ERRORS(code, ...)                                           \
-  do {                                                                     \
-    const FakeRow rows_[] = {__VA_ARGS__};                                 \
-    for (size_t row_ = 0; row_ < sizeof(rows_) / sizeof(*rows_); row_++) { \
-      ExitCode got_ = fake_parse_exit(rows_[row_]);                        \
-      if (got_ != (code))                                                  \
-        fail("row %zu ended with exit code %d, expected %d", row_,         \
-             (int)got_, (int)(code));                                      \
-    }                                                                      \
+#define ASSERT_ERRORS(code, ...)                                              \
+  do {                                                                        \
+    const FakeRow rows_[] = {__VA_ARGS__};                                    \
+    for (size_t row_ = 0; row_ < sizeof(rows_) / sizeof(*rows_); row_++) {    \
+      ExitCode got_ = fake_parse_exit(rows_[row_]);                           \
+      if (got_ != (code))                                                     \
+        fail("row %zu ended with exit code %d, expected %d", row_, (int)got_, \
+             (int)(code));                                                    \
+    }                                                                         \
   } while (0)
 
 /**
