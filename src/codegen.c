@@ -1965,28 +1965,73 @@ static void cg_generate_block(Ctx* ctx,
  * @param fn function
  */
 static void cg_generate_function(Ctx* ctx, FILE* out, IrFunction* fn) {
-  fputs("LABEL $$", out);
-  fputs(fn->name, out);
-  cg_print_nl(out);
-  fputs("PUSHFRAME", out);
-  cg_print_nl(out);
+  // Allocate space for buffer holding whether each buffer and slot is used
+  bool* values =
+      TRY_MALLOC((fn->value_count + fn->slots.count + 1) * sizeof(bool));
+  bool* slots = values + fn->value_count;
 
-  if (fn->return_type != IR_UNIT) {
-    fputs("DEFVAR LF@%ret", out);
+  // Initialize it to false
+  memset(values, 0, (fn->value_count + fn->slots.count) * sizeof(bool));
+
+  // Wrap the codegen in a try-catch block as to not leak memory on error
+  TRY {
+    // Go through each instruction in the function
+    for (size_t i = 0; i < fn->blocks.count; i++) {
+      IrBlock* block = &fn->blocks.data[i];
+      for (size_t j = 0; j < block->instructions.count; j++) {
+        IrInstruction* inst = &block->instructions.data[j];
+
+        // Mark used values/stack slots
+        if (inst->result != IR_INVALID_ID)
+          values[inst->result] = true;
+        if (inst->type == IR_INST_LOAD && inst->result != IR_INVALID_ID)
+          slots[inst->operands.load.source] = true;
+        if (inst->type == IR_INST_STORE)
+          slots[inst->operands.store.target] = true;
+      }
+    }
+
+    fputs("LABEL $$", out);
+    fputs(fn->name, out);
     cg_print_nl(out);
+    fputs("PUSHFRAME", out);
+    cg_print_nl(out);
+
+    if (fn->return_type != IR_UNIT) {
+      fputs("DEFVAR LF@%ret", out);
+      cg_print_nl(out);
+    }
+
+    for (size_t i = 0; i < fn->value_count; i++) {
+      // Skip values that arent being used
+      if (!values[i])
+        continue;
+
+      fputs("DEFVAR ", out);
+      cg_print_localframe_val(out, i);
+      cg_print_nl(out);
+    }
+
+    for (size_t i = fn->parameter_count; i < fn->slots.count; i++) {
+      // Skip slots that arent being used
+      if (!slots[i])
+        continue;
+
+      fputs("DEFVAR ", out);
+      cg_print_localframe_slot(out, i);
+      cg_print_nl(out);
+    }
+  }
+  CATCH {
+    // Free dynamic memory in case of an error
+    free(values);
+
+    // Continue handling the error
+    RETHROW();
   }
 
-  for (size_t i = 0; i < fn->value_count; i++) {
-    fputs("DEFVAR ", out);
-    cg_print_localframe_val(out, i);
-    cg_print_nl(out);
-  }
-
-  for (size_t i = fn->parameter_count; i < fn->slots.count; i++) {
-    fputs("DEFVAR ", out);
-    cg_print_localframe_slot(out, i);
-    cg_print_nl(out);
-  }
+  // Free dynamic memory
+  free(values);
 
   if (fn->entrypoint != IR_INVALID_ID && fn->entrypoint != 0) {
     fputs("JUMP ", out);
