@@ -2,6 +2,9 @@
  * @file lowering_statement.h
  * Project: IFJ26
  *
+ * @author Jan Kostka (xkostkj00)
+ * @date 19. 11. 2026
+ *
  * @brief Lowering of AST statements and blocks
  */
 
