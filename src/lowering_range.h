@@ -2,6 +2,9 @@
  * @file lowering_range.h
  * Project: IFJ26
  *
+ * @author Jan Kostka (xkostkj00)
+ * @date 19. 11. 2026
+ *
  * @brief Lowering of range-based for loops
  */
 

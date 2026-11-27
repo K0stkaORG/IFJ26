@@ -2,6 +2,9 @@
  * @file lowering_control_flow.c
  * Project: IFJ26
  *
+ * @author Jan Kostka (xkostkj00)
+ * @date 19. 11. 2026
+ *
  * @brief Lowering of AST control flow to IR blocks
  */
 

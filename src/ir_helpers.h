@@ -2,6 +2,9 @@
  * @file ir_helpers.h
  * Project: IFJ26
  *
+ * @author Jan Kostka (xkostkj00)
+ * @date 3. 11. 2026
+ *
  * @brief Intermediate representation construction helpers
  */
 

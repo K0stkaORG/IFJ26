@@ -93,6 +93,10 @@ describe(codegen) {
           .result = 0,
       };
       ir_add_instruction(ctx, fid, bid, add_inst);
+
+      ir_add_instruction(ctx, fid, bid, add_inst);
+      array_remove(
+          ctx, &ctx->ir.functions.data[fid].blocks.data[bid].instructions, 1);
       ir_set_terminator(ctx, fid, bid,
                         (IrBlockTerminator){
                             .type = IR_TERMINATOR_RETURN,
@@ -495,7 +499,8 @@ describe(codegen) {
 
       assert(strstr(result, "DEFVAR LF@slot_0") == NULL);
       assert(strstr(result, "DEFVAR LF@slot_1") == NULL);
-      assert(strstr(result, "DEFVAR LF@slot_2") != NULL);
+
+      assert(strstr(result, "DEFVAR LF@slot_2") == NULL);
     }
 
     it("generates jump to entrypoint if entrypoint is not block 0") {
